@@ -6,9 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `.jbc` bytecode inspector with human-readable disassembly and JSON output.
+- Inspector validation for instruction bounds, UTF-8 operands, termination, and trailing data.
+- Formal JIMP v1 source-syntax specifications in English and Portuguese.
+- Compiler conformance tests for valid and excluded v1 syntax.
+
+### Fixed
+
+- Runtime now rejects bytecode whose declared instruction count continues after `HALT`.
+
 ### Planned
 
-- Formalize the v1 language syntax.
 - Separate bytecode verification from runtime execution.
 - Add automated compiler-to-runtime integration tests.
 

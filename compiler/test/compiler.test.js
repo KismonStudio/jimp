@@ -12,3 +12,27 @@ test("compiles print statements into versioned bytecode", () => {
 test("reports the source line for unsupported syntax", () => {
   assert.throws(() => compile("let answer = 42;"), /line 1/);
 });
+
+test("accepts the complete v1 surface syntax", () => {
+  const bytecode = compile(`
+    // Standalone comments and blank lines are valid.
+    print "Semicolon";
+    print "Optional semicolon and escapes: \\\\ \\" \\n \\r \\t"
+  `);
+
+  assert.equal(bytecode.readUInt32LE(6), 3);
+});
+
+test("rejects syntax excluded from v1", () => {
+  const invalidSources = [
+    'PRINT "Case-sensitive";',
+    'print"Whitespace is required";',
+    'print "Inline comment"; // invalid',
+    'print "Unsupported escape: \\u0041";',
+    'print "One"; print "Two";',
+  ];
+
+  for (const source of invalidSources) {
+    assert.throws(() => compile(source), /Syntax error at line 1/);
+  }
+});

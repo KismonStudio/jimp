@@ -1,6 +1,6 @@
 # JIMP Implementation Status
 
-**Last updated:** July 17, 2026  
+**Last updated:** July 18, 2026
 **Prototype version:** 0.1.0
 
 This document tracks the JIMP implementation. The conceptual project definition lives under `docs/specs`; this file records only executable work and the subsequent delivery plan.
@@ -42,6 +42,7 @@ print "Hello, JIMP!";
 - [x] String escapes: `\\`, `\"`, `\n`, `\r`, and `\t`.
 - [x] Syntax diagnostics with source line numbers.
 - [x] v1 binary bytecode emission.
+- [x] `.jbc` inspection in readable and JSON formats.
 
 ### Bytecode v1
 
@@ -50,6 +51,7 @@ print "Hello, JIMP!";
 - [x] `PRINT` opcode (`1`) carrying UTF-8 text.
 - [x] `HALT` opcode (`255`).
 - [x] Contract published in English and Portuguese under `docs/specs/EN` and `docs/specs/PT`.
+- [x] Formal v1 source syntax published in English and Portuguese.
 
 ### Runtime
 
@@ -66,12 +68,13 @@ print "Hello, JIMP!";
 - [x] Compiler unit tests for bytecode emission and syntax errors.
 - [x] Runtime unit tests for valid bytecode and invalid magic numbers.
 - [x] Manual end-to-end test compiling and executing `examples/hello.jimp`.
+- [x] Bytecode inspector tests for decoding, formatting, count mismatches, and trailing data.
 
 ## Next tasks
 
 ### P0 — consolidate the v1 contract
 
-1. [ ] Write a formal v1 language-syntax specification.
+1. [x] Write a formal v1 language-syntax specification.
    - Acceptance criterion: grammar, lexical rules, comments, and escapes are unambiguous.
 2. [ ] Separate decoding/verification from the runtime execution loop.
    - Acceptance criterion: malformed bytecode is fully rejected before it can create an observable host effect.
@@ -120,6 +123,7 @@ Acceptance criterion: a program can declare values, calculate an expression, and
 npm test
 cargo test --manifest-path runtime/Cargo.toml
 node compiler/src/cli.js compile examples/hello.jimp -o hello.jbc
+node compiler/src/cli.js inspect hello.jbc
 cargo run --manifest-path runtime/Cargo.toml -- hello.jbc
 ```
 
