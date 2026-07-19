@@ -1,0 +1,9 @@
+let minimum = -9223372036854775808;
+minimum;
+
+var current = 1;
+current = 3.5;
+current = null;
+current;
+
+print "Variable declarations and assignments executed successfully.";

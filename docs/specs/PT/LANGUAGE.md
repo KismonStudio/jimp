@@ -4,127 +4,204 @@
 
 ## Status
 
-Este documento define a sintaxe aceita pelo compilador protótipo do JIMP v1. Ela é intencionalmente mínima e não especifica a futura linguagem principal.
+Este documento define a sintaxe e a semântica de expressões aceitas atualmente pelo compilador JIMP até o P2.3. A linguagem permanece pré-estável.
 
-As palavras-chave, a gramática e os exemplos deste documento são normativos. O texto explicativo é informativo, exceto quando utiliza os termos **deve**, **não deve**, **obrigatório** ou **inválido**.
+As palavras reservadas, a gramática, as regras de operadores e os exemplos são normativos. O texto explicativo é informativo, exceto quando utiliza **deve**, **não deve**, **obrigatório** ou **inválido**.
 
-## Codificação do código-fonte e linhas
+## Codificação e linhas
 
-- Um arquivo de código-fonte utiliza a extensão `.jimp` e deve ser codificado em UTF-8.
-- Um programa consiste em zero ou mais linhas lógicas.
-- São aceitas terminações de linha LF (`U+000A`) e CRLF (`U+000D U+000A`).
-- Espaços em branco no início e no final de cada linha lógica são ignorados.
-- Um programa vazio é válido e produz um programa contendo apenas a instrução de encerramento do bytecode.
-- Cada linha lógica que não esteja vazia nem seja um comentário deve conter exatamente uma instrução completa.
+- Arquivos de código-fonte utilizam a extensão `.jimp` e codificação UTF-8.
+- Terminações de linha LF e CRLF são aceitas.
+- Cada linha lógica não vazia e que não seja comentário contém exatamente uma instrução completa.
+- Espaços em branco no início e no final são ignorados.
+- O ponto e vírgula no final de uma instrução é opcional.
+- Um programa vazio é válido.
 
-## Elementos léxicos
+Comentários começam com `//` após espaços em branco opcionais e ocupam o restante da linha lógica. Comentários inline ainda não são aceitos. Marcadores de comentário dentro de strings são conteúdo comum.
 
-O JIMP v1 possui uma palavra-chave case-sensitive:
+## Palavras reservadas e identificadores
+
+As palavras reservadas diferenciam maiúsculas de minúsculas:
 
 ```text
-print
+print true false null let var
 ```
 
-`PRINT`, `Print` e outras variações de maiúsculas e minúsculas não são palavras-chave.
+Identificadores começam com uma letra ASCII ou sublinhado e continuam com letras ASCII, dígitos ou sublinhados. Eles diferenciam maiúsculas de minúsculas, e palavras reservadas não podem nomear variáveis.
 
-Espaços em branco separam `print` de seu literal de string. Eles também podem aparecer antes da instrução, depois do literal e ao redor do ponto e vírgula opcional.
+## Literais
 
-## Comentários
+### Strings
 
-Um comentário começa com `//` após espaços em branco opcionais e continua até o final de sua linha lógica.
+Strings são delimitadas por aspas duplas. Elas aceitam `\\`, `\"`, `\n`, `\r` e `\t`. Aspas sem escape, barra invertida sem escape, terminação de linha literal, escape não aceito ou ausência das aspas finais são inválidos.
+
+### Inteiros
+
+Literais inteiros utilizam dígitos decimais com um sinal de menos inicial opcional. Zeros à esquerda são proibidos, exceto em `0`. Os valores devem caber em `i64` com sinal, de `-9223372036854775808` até `9223372036854775807`.
+
+### Ponto flutuante
+
+Literais de ponto flutuante possuem uma parte inteira seguida por uma parte fracionária, um expoente ou ambos. Uma parte fracionária exige dígitos após o ponto. Um expoente começa com `e` ou `E`, pode ter sinal e exige dígitos. Literais no código-fonte são arredondados para binary64 IEEE 754 e devem ser finitos.
+
+### Booleano e nulo
+
+Os literais booleanos são `true` e `false`. O literal nulo é `null`.
+
+Separadores numéricos, notação hexadecimal, sinal de mais inicial, `NaN` e literais infinitos não são aceitos.
+
+## Variáveis
+
+As variáveis utilizam atualmente o escopo do programa. Nomes devem ser declarados antes do uso e não podem ser declarados mais de uma vez. As duas formas de declaração exigem inicializador:
 
 ```jimp
-// Isto é um comentário.
-    // Espaços em branco no início são permitidos.
+let immutableValue = 42;
+var mutableValue = immutableValue + 1;
+mutableValue = mutableValue * 2;
 ```
 
-Comentários devem ocupar sua própria linha lógica. Comentários inline não são aceitos na v1:
+- `let` cria uma variável imutável que não pode receber nova atribuição.
+- `var` cria uma variável mutável.
+- Inicializadores e atribuições aceitam expressões.
+- O tipo atual de uma variável mutável é acompanhado na ordem do código-fonte e pode mudar após uma atribuição durante a base pré-estável do P2.
+- Declarações não utilizadas são válidas.
 
-```jimp
-print "Olá"; // Inválido na v1.
-```
+## Expressões
 
-Marcadores de comentário dentro de um literal de string são conteúdo comum da string.
+Expressões primárias são literais, referências a variáveis e expressões entre parênteses. Operadores são associativos à esquerda dentro do mesmo nível de precedência.
 
-## Literais de string
+Da maior para a menor precedência:
 
-Um literal de string começa e termina com aspas duplas (`"`). Ele pode conter texto UTF-8, exceto aspas duplas sem escape, barras invertidas sem escape ou uma terminação de linha literal.
+| Precedência | Operadores | Tipos dos operandos | Resultado |
+| ---: | --- | --- | --- |
+| 7 | `-` unário | `I64` ou `F64` | tipo do operando |
+| 7 | `!` unário | `BOOL` | `BOOL` |
+| 6 | `*`, `/`, `%` | mesmo tipo numérico | tipo dos operandos |
+| 5 | `+`, `-` | mesmo tipo numérico | tipo dos operandos |
+| 4 | `<`, `<=`, `>`, `>=` | mesmo tipo numérico | `BOOL` |
+| 3 | `==`, `!=` | mesmo tipo de valor | `BOOL` |
+| 2 | `&&` | `BOOL`, `BOOL` | `BOOL` |
+| 1 | `||` | `BOOL`, `BOOL` | `BOOL` |
 
-As seguintes sequências de escape são aceitas:
+Não existem conversões implícitas. Em particular, aritmética mista entre `I64` e `F64` é inválida, e strings não aceitam aritmética nem comparação ordenada.
 
-| Escape | Valor                           |
-| ------ | ------------------------------- |
-| `\\`   | Barra invertida                 |
-| `\"`   | Aspas duplas                    |
-| `\n`   | Quebra de linha (`U+000A`)      |
-| `\r`   | Retorno de carro (`U+000D`)     |
-| `\t`   | Tabulação horizontal (`U+0009`) |
+Soma, subtração, multiplicação, divisão, resto e negação de `I64` são verificadas. Overflow, divisão por zero e resto por zero são erros de runtime. A divisão de `I64` trunca em direção a zero. Operações `F64` seguem o comportamento binary64 IEEE 754; portanto, a execução pode produzir resultados não finitos, embora literais no código-fonte devam ser finitos.
 
-Todas as demais sequências de escape são inválidas. Literais de string multilinha não são aceitos.
+A igualdade aceita valores `NULL`, `BOOL`, `I64`, `F64` e `STRING` quando os dois operandos possuem o mesmo tipo. As regras de igualdade IEEE 754 se aplicam a `F64`, incluindo `NaN != NaN` e `-0.0 == 0.0`.
+
+Os operandos são avaliados da esquerda para a direita. `&&` e `||` são imediatos no P2.3: os dois operandos são avaliados. A avaliação com curto-circuito exige a base de desvios planejada para o P2.4.
 
 ## Instruções
 
 ### `print`
 
-A instrução `print` escreve o valor decodificado da string seguido por uma quebra de linha através do host de console.
+`print` exige uma expressão `STRING` e escreve seu valor seguido por uma quebra de linha através do host de console.
 
 ```jimp
-print "Olá, JIMP!";
-print "O ponto e vírgula é opcional"
-print "Escapes: \\"texto entre aspas\\" e uma quebra de linha\n";
+let message = "Olá, JIMP!";
+print message;
 ```
 
-É obrigatório haver ao menos um espaço em branco entre `print` e as aspas duplas iniciais.
+### Declaração e atribuição
+
+`let` e `var` declaram variáveis inicializadas. Uma atribuição substitui o valor atual de uma `var` existente.
+
+### Instrução de expressão
+
+Qualquer expressão pode ser utilizada como instrução. Ela é avaliada e seu resultado é descartado.
 
 ## Gramática
 
-A gramática utiliza EBNF no estilo ISO/IEC 14977. `source-character` representa um caractere Unicode decodificado do código-fonte UTF-8. `line-ending` e o final do arquivo delimitam linhas lógicas e são processados antes do reconhecimento das instruções.
+A gramática utiliza EBNF no estilo ISO/IEC 14977. Espaços em branco léxicos podem aparecer ao redor de operadores e pontuação.
 
 ```ebnf
 program          = { logical-line } ;
 
 logical-line     = whitespace,
-                   [ comment | print-statement ],
+                   [ comment | print-statement | variable-declaration
+                   | variable-assignment | expression-statement ],
                    whitespace,
                    ( line-ending | end-of-file ) ;
 
 comment          = "//", { comment-character } ;
 
 print-statement  = "print", required-whitespace,
-                   string-literal, whitespace,
-                   [ ";" ] ;
+                   expression, whitespace, [ ";" ] ;
+
+variable-declaration = ( "let" | "var" ), required-whitespace,
+                       identifier, whitespace, "=", whitespace,
+                       expression, whitespace, [ ";" ] ;
+
+variable-assignment = identifier, whitespace, "=", whitespace,
+                      expression, whitespace, [ ";" ] ;
+
+expression-statement = expression, whitespace, [ ";" ] ;
+
+expression       = logical-or-expression ;
+logical-or-expression = logical-and-expression,
+                        { whitespace, "||", whitespace, logical-and-expression } ;
+logical-and-expression = equality-expression,
+                         { whitespace, "&&", whitespace, equality-expression } ;
+equality-expression = comparison-expression,
+                      { whitespace, ( "==" | "!=" ), whitespace, comparison-expression } ;
+comparison-expression = additive-expression,
+                        { whitespace, ( "<" | "<=" | ">" | ">=" ),
+                          whitespace, additive-expression } ;
+additive-expression = multiplicative-expression,
+                      { whitespace, ( "+" | "-" ), whitespace,
+                        multiplicative-expression } ;
+multiplicative-expression = unary-expression,
+                            { whitespace, ( "*" | "/" | "%" ),
+                              whitespace, unary-expression } ;
+unary-expression = { ( "!" | "-" ), whitespace }, primary-expression ;
+primary-expression = value-literal | identifier
+                     | "(", whitespace, expression, whitespace, ")" ;
+
+value-literal    = string-literal | integer-literal | float-literal
+                   | "true" | "false" | "null" ;
+integer-literal  = [ "-" ], unsigned-integer ;
+float-literal    = [ "-" ], unsigned-integer,
+                   ( fractional-part, [ exponent-part ] | exponent-part ) ;
+unsigned-integer = "0" | nonzero-digit, { digit } ;
+fractional-part  = ".", digit, { digit } ;
+exponent-part    = ( "e" | "E" ), [ "+" | "-" ], digit, { digit } ;
+
+identifier       = identifier-start, { identifier-start | digit } ;
+identifier-start = ASCII-letter | "_" ;
+digit            = "0" | "1" | "2" | "3" | "4"
+                   | "5" | "6" | "7" | "8" | "9" ;
+nonzero-digit    = "1" | "2" | "3" | "4" | "5"
+                   | "6" | "7" | "8" | "9" ;
 
 string-literal   = '"', { string-character | escape-sequence }, '"' ;
-
 escape-sequence  = "\\", ( "\\" | '"' | "n" | "r" | "t" ) ;
-
 whitespace       = { whitespace-character } ;
 required-whitespace = whitespace-character, whitespace ;
-
-string-character = source-character
-                   - ( '"' | "\\" | "\r" | "\n" ) ;
-
 comment-character = source-character - ( "\r" | "\n" ) ;
 line-ending      = "\n" | "\r", "\n" ;
 ```
 
-`whitespace-character` é qualquer caractere de espaço em branco que não seja uma terminação de linha e seja reconhecido pela implementação do compilador.
+`ASCII-letter` significa `A` até `Z` ou `a` até `z`. `source-character` representa um caractere Unicode decodificado de UTF-8. `whitespace-character` é qualquer caractere de espaço em branco que não encerre linha e seja reconhecido pelo compilador. `end-of-file` é o limite terminal do código-fonte.
 
-## Programas inválidos
-
-As entradas a seguir são inválidas na v1:
+## Exemplos inválidos
 
 ```jimp
-PRINT "Palavras-chave diferenciam maiúsculas e minúsculas";
-print"O espaço em branco é obrigatório";
-print "Aspas finais ausentes;
-print "Escape não aceito: \u0041";
-print "Um"; print "Dois";
-let value = "Ainda não faz parte da v1";
+let missingInitializer;
+let duplicate = 1;
+let duplicate = 2;
+duplicate = 3;
+unknown + 1;
+1 + true;
+1 + 1.0;
+"a" < "b";
+print 42;
+01;
+.5;
+9223372036854775808;
+1e309;
 ```
 
-O compilador deve informar a linha lógica que contém a sintaxe inválida e não deve emitir bytecode para esse arquivo-fonte.
+O compilador deve informar a linha lógica que contém sintaxe ou semântica inválida e não deve emitir bytecode.
 
 ## Fora do escopo
 
-O JIMP v1 ainda não define identificadores, variáveis, valores numéricos ou booleanos, expressões, blocos, controle de fluxo, funções, módulos, imports ou uma Host ABI geral. Esses recursos exigem especificações separadas antes de serem implementados.
+O JIMP ainda não define escopos léxicos de bloco, controle de fluxo condicional, avaliação booleana com curto-circuito, funções, módulos, imports no código-fonte ou uma biblioteca padrão geral.

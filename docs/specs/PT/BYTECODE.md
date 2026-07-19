@@ -4,7 +4,7 @@
 
 Este documento preserva o contrato histórico do bytecode protótipo implementado no JIMP 0.1.0.
 
-O formato 1 não é mais gerado nem aceito. O contrato interoperável ativo é a [VM Portátil JIMP v1](VM.md), codificada como formato `.jbc` `2.0`.
+O formato 1 não é mais gerado nem aceito. O contrato interoperável ativo é a [VM Portátil JIMP v1](VM.md), codificada como formato `.jbc` `2.1`.
 
 Todos os inteiros com mais de um byte são representados como **unsigned little-endian**. Um programa começa com um cabeçalho de dez bytes:
 

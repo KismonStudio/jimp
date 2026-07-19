@@ -22,6 +22,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Cross-language JavaScript-to-Rust validation for portable `.jbc` 2.0 modules.
 - ISA-driven portable instruction verification in JavaScript and Rust, including register, constant, import, type, operand-boundary, and termination checks.
 - Generic Rust register-machine execution for `LOAD_CONST`, `MOVE`, `HOST_CALL`, and `HALT`.
+- Source-language scalar literals for signed `i64`, finite `f64`, boolean, and `null` values.
+- Exact signed-i64 range validation and finite IEEE 754 binary64 parsing diagnostics.
+- A dedicated source parser that produces typed statements before portable bytecode lowering.
+- Program-scoped immutable `let` and mutable `var` declarations with required literal initializers.
+- Semantic analysis for declaration-before-use, duplicate names, reserved names, and immutable reassignment.
+- Persistent VM register allocation for variables plus an isolated temporary register for discarded values and host calls.
+- Precedence-aware arithmetic, comparison, equality, unary, and eager boolean expressions.
+- Generic typed expression opcodes generated for JavaScript and Rust from the machine-readable ISA.
+- Flow-sensitive expression type analysis with same-type numeric rules and no implicit conversions.
+- Checked `I64` arithmetic, IEEE 754 `F64` operations, and runtime diagnostics for overflow and zero divisors.
+- Temporary-register reuse while lowering expression trees.
 
 ### Fixed
 
@@ -32,10 +43,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Runtime decoding and verification now complete before VM execution begins.
 - Console effects are isolated behind a host interface and are unavailable to the bytecode decoder.
 - Runtime code is separated into portable decoding, VM, and host modules.
-- The active compiler and runtime now use portable `.jbc` format `2.0`; legacy format `1` is no longer accepted.
+- The active compiler and runtime now use portable `.jbc` format `2.1`; legacy format `1` and portable `2.0` are no longer accepted.
 - Source-level `print` is lowered to `LOAD_CONST` plus the typed `std.console.write` host import instead of a hardcoded VM opcode.
 - Host effects are dispatched through resolved numeric capability handles and runtime-checked value arrays.
 - The bytecode inspector now disassembles the portable module structure and generic ISA instructions.
+- `print` now accepts any expression statically resolved as `STRING` while remaining a compiler lowering to host calls.
 
 ## [0.1.0] - 2026-07-17
 

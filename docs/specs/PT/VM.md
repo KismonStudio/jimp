@@ -4,9 +4,9 @@
 
 ## Status
 
-Este documento especifica a base implementada da VM portátil JIMP v1. Ela utiliza o formato de contêiner `.jbc` `2.0` para que os runtimes possam distingui-lo sem ambiguidade do formato protótipo `1`, que foi descontinuado.
+Este documento especifica a base implementada da VM portátil JIMP v1. O P2.3 utiliza o formato de contêiner `.jbc` `2.1`, ampliando a ISA genérica com operações tipadas de expressão.
 
-O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.0` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
+O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.1` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -62,7 +62,7 @@ Um arquivo `.jbc` portátil consiste em um cabeçalho, um diretório de seções
 | --- | --- | --- |
 | magic | 4 bytes | ASCII `JIMP` |
 | versão principal do formato | `u16` | `2` |
-| versão secundária do formato | `u16` | `0` para esta arquitetura |
+| versão secundária do formato | `u16` | `1` |
 | flags do módulo | `u32` | `0`; demais bits são reservados |
 | função de entrada | `u32` | Índice na seção de funções |
 | quantidade de seções | `u16` | Quantidade de entradas do diretório |
@@ -173,6 +173,22 @@ O conjunto inicial de instruções genéricas possui as seguintes operações se
 - `source`: índice do registrador (`u16`).
 - Copia o valor da origem para o registrador de destino.
 
+### Operações unárias tipadas
+
+`NEGATE` e `BOOL_NOT` utilizam os operandos de registrador `destination, operand`. `NEGATE` aceita `I64` ou `F64` e preserva o tipo do operando. `BOOL_NOT` aceita `BOOL` e produz `BOOL`. Negar o menor `I64` é um erro de overflow em runtime.
+
+### Aritmética binária tipada
+
+`ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE` e `REMAINDER` utilizam os operandos de registrador `destination, left, right`. As duas entradas devem possuir o mesmo tipo numérico, e o resultado possui esse tipo. A aritmética `I64` é verificada; overflow, divisão por zero e resto por zero são erros de runtime. A divisão `I64` trunca em direção a zero. A aritmética `F64` segue o comportamento binary64 IEEE 754.
+
+### Comparações tipadas
+
+`EQUAL` e `NOT_EQUAL` aceitam dois valores de runtime do mesmo tipo e produzem `BOOL`. `LESS_THAN`, `LESS_EQUAL`, `GREATER_THAN` e `GREATER_EQUAL` aceitam dois valores do mesmo tipo numérico e produzem `BOOL`.
+
+### Operações booleanas tipadas
+
+`BOOL_AND` e `BOOL_OR` aceitam dois operandos `BOOL` e produzem `BOOL`. Elas são instruções imediatas: os dois registradores de entrada já devem conter valores calculados. O comportamento de curto-circuito baseado em controle de fluxo está fora do formato 2.1.
+
 ### `HOST_CALL import, argument_start, argument_count, result`
 
 - `import`: índice do import do host (`u32`).
@@ -204,7 +220,8 @@ print "Olá";
 constants:
   0: string "std.console"
   1: string "write"
-  2: string "Olá\n"
+  2: string "Olá"
+  3: string "\n"
 
 imports:
   0: std.console.write(string) -> void
@@ -212,6 +229,8 @@ imports:
 entry function:
   registers: 1
   LOAD_CONST r0, constant[2]
+  HOST_CALL import[0], r0, 1, NO_REGISTER
+  LOAD_CONST r0, constant[3]
   HOST_CALL import[0], r0, 1, NO_REGISTER
   HALT
 ```
@@ -240,4 +259,4 @@ O módulo nunca deve conter endereços nativos considerados confiáveis. Dados d
 
 ## Decisões adiadas
 
-Os seguintes itens exigem especificações posteriores: semântica aritmética, regras de comparação, desvios, chamadas e retornos, valores de heap, coleções, buffers binários, operações assíncronas do host, exceções, imports e exports de módulos, codificação de debug e execução AOT/JIT.
+Os seguintes itens exigem especificações posteriores: desvios, redução com curto-circuito, chamadas e retornos, valores de heap, coleções, buffers binários, operações assíncronas do host, exceções, imports e exports de módulos, codificação de debug e execução AOT/JIT.

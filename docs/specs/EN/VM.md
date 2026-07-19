@@ -4,9 +4,9 @@
 
 ## Status
 
-This document specifies the implemented foundation of the portable JIMP VM v1. It uses `.jbc` container format `2.0` so runtimes can distinguish it unambiguously from the retired prototype format `1`.
+This document specifies the implemented foundation of the portable JIMP VM v1. P2.3 uses `.jbc` container format `2.1`, extending the generic ISA with typed expression operations.
 
-The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.0` remains pre-stable while the language and VM continue to evolve.
+The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.1` remains pre-stable while the language and VM continue to evolve.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -62,7 +62,7 @@ A portable `.jbc` file consists of a header, a section directory, and section pa
 | --- | --- | --- |
 | magic | 4 bytes | ASCII `JIMP` |
 | format major | `u16` | `2` |
-| format minor | `u16` | `0` for this design |
+| format minor | `u16` | `1` |
 | module flags | `u32` | `0`; other bits are reserved |
 | entry function | `u32` | Index in the function section |
 | section count | `u16` | Number of directory entries |
@@ -173,6 +173,22 @@ The initial generic instruction set has these semantic operations. Numeric opcod
 - `source`: register index (`u16`).
 - Copies the source value into the destination register.
 
+### Typed unary operations
+
+`NEGATE` and `BOOL_NOT` use `destination, operand` register operands. `NEGATE` accepts `I64` or `F64` and preserves the operand type. `BOOL_NOT` accepts `BOOL` and produces `BOOL`. Negating the minimum `I64` is a runtime overflow error.
+
+### Typed binary arithmetic
+
+`ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, and `REMAINDER` use `destination, left, right` register operands. Both inputs must have the same numeric type, and the result has that type. `I64` arithmetic is checked; overflow, division by zero, and remainder by zero are runtime errors. `I64` division truncates toward zero. `F64` arithmetic follows IEEE 754 binary64 behavior.
+
+### Typed comparisons
+
+`EQUAL` and `NOT_EQUAL` accept two same-typed runtime values and produce `BOOL`. `LESS_THAN`, `LESS_EQUAL`, `GREATER_THAN`, and `GREATER_EQUAL` accept two values of the same numeric type and produce `BOOL`.
+
+### Typed boolean operations
+
+`BOOL_AND` and `BOOL_OR` accept two `BOOL` operands and produce `BOOL`. They are eager instructions: both input registers must already contain computed values. Control-flow-based short-circuit behavior is outside format 2.1.
+
 ### `HOST_CALL import, argument_start, argument_count, result`
 
 - `import`: host-import index (`u32`).
@@ -204,7 +220,8 @@ is represented conceptually as:
 constants:
   0: string "std.console"
   1: string "write"
-  2: string "Hello\n"
+  2: string "Hello"
+  3: string "\n"
 
 imports:
   0: std.console.write(string) -> void
@@ -212,6 +229,8 @@ imports:
 entry function:
   registers: 1
   LOAD_CONST r0, constant[2]
+  HOST_CALL import[0], r0, 1, NO_REGISTER
+  LOAD_CONST r0, constant[3]
   HOST_CALL import[0], r0, 1, NO_REGISTER
   HALT
 ```
@@ -240,4 +259,4 @@ The module must never contain trusted native addresses. Debug data is non-author
 
 ## Deferred decisions
 
-The following items require later specifications: arithmetic semantics, comparison rules, branching, calls and returns, heap values, collections, binary buffers, asynchronous host operations, exceptions, module imports and exports, debug encoding, and AOT/JIT execution.
+The following items require later specifications: branching, short-circuit lowering, calls and returns, heap values, collections, binary buffers, asynchronous host operations, exceptions, module imports and exports, debug encoding, and AOT/JIT execution.

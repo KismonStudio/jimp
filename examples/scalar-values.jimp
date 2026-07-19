@@ -1,0 +1,10 @@
+// Scalar literal statements are loaded as typed VM values and then discarded.
+-9223372036854775808;
+9223372036854775807;
+3.1415;
+6.02e23;
+true;
+false;
+null;
+
+print "Scalar values loaded successfully.";

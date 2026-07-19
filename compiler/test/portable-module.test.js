@@ -52,7 +52,7 @@ test("round-trips portable constants and typed host imports", () => {
 
   assert.deepEqual(module.header, {
     major: 2,
-    minor: 0,
+    minor: 1,
     entryFunction: 0,
     sectionCount: 4,
   });
@@ -106,4 +106,29 @@ test("encodes operands from generated ISA metadata", () => {
     () => encodeInstruction("MOVE", { destination: NO_REGISTER, source: 0 }),
     /cannot use NO_REGISTER/,
   );
+});
+
+test("rejects invalid typed arithmetic during portable verification", () => {
+  const code = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+    encodeInstruction("LOAD_CONST", { destination: 1, constant: 1 }),
+    encodeInstruction("ADD", { destination: 0, left: 0, right: 1 }),
+    encodeInstruction("HALT"),
+  ]);
+  const bytecode = encodePortableModule({
+    constants: [
+      { type: "BOOL", value: true },
+      { type: "BOOL", value: false },
+    ],
+    imports: [],
+    functions: [{
+      name: null,
+      code,
+      registerCount: 2,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+
+  assert.throws(() => decodePortableModule(bytecode), /ADD operands must be I64 or F64/);
 });

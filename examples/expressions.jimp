@@ -1,0 +1,10 @@
+let base = 2 + 3 * 4;
+var result = (base - 4) / 2;
+result = result % 4;
+
+let comparison = result == 1 && base >= 14;
+let valid = comparison || !false;
+valid;
+
+let message = "Arithmetic, comparison, and boolean expressions executed successfully.";
+print message;

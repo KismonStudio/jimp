@@ -92,6 +92,29 @@ function createPortableModule({
   });
 }
 
+function createInvalidBooleanAddModule() {
+  const code = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+    encodeInstruction("LOAD_CONST", { destination: 1, constant: 1 }),
+    encodeInstruction("ADD", { destination: 0, left: 0, right: 1 }),
+    encodeInstruction("HALT"),
+  ]);
+  return encodePortableModule({
+    constants: [
+      { type: "BOOL", value: true },
+      { type: "BOOL", value: false },
+    ],
+    imports: [],
+    functions: [{
+      name: null,
+      code,
+      registerCount: 2,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+}
+
 function findSection(bytecode, expectedKind) {
   const sectionCount = bytecode.readUInt16LE(16);
   for (let index = 0; index < sectionCount; index += 1) {
@@ -120,6 +143,61 @@ test("executes compiler output in the Rust runtime", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.replaceAll("\r\n", "\n"), "First\nSecond\n");
   assert.equal(result.stderr, "");
+});
+
+test("executes portable scalar literal statements without host output", () => {
+  const bytecode = compile("-9223372036854775808;\n3.5;\ntrue;\nfalse;\nnull;");
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+test("executes analyzed immutable and mutable variables", () => {
+  const bytecode = compile(`
+    let minimum = -9223372036854775808;
+    minimum;
+    var current = 1;
+    current = 3.5;
+    current = null;
+    current;
+    print "Variables executed";
+  `);
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Variables executed\n");
+  assert.equal(result.stderr, "");
+});
+
+test("executes arithmetic, comparison, and boolean expressions", () => {
+  const bytecode = compile(`
+    var value = 2;
+    value = ((value + 3) * 4 / 2) % 7;
+    let comparison = value == 3 && value >= 0;
+    !comparison || false;
+    let message = "Expressions executed";
+    print message;
+  `);
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Expressions executed\n");
+  assert.equal(result.stderr, "");
+});
+
+test("reports eager boolean right-hand runtime failures before host output", () => {
+  const bytecode = compile(`
+    false && (1 / 0 == 0);
+    print "must not be written";
+  `);
+
+  assertRejectedWithoutOutput(bytecode, /I64 division by zero/);
+});
+
+test("rejects invalid expression operand types during Rust verification", () => {
+  assertRejectedWithoutOutput(createInvalidBooleanAddModule(), /ADD operands must be I64 or F64/);
 });
 
 test("rejects trailing data before producing host output", () => {

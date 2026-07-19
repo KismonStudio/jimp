@@ -78,6 +78,17 @@ pub(crate) enum Instruction {
         destination: usize,
         source: usize,
     },
+    Unary {
+        opcode: Opcode,
+        destination: usize,
+        operand: usize,
+    },
+    Binary {
+        opcode: Opcode,
+        destination: usize,
+        left: usize,
+        right: usize,
+    },
     HostCall {
         import: usize,
         argument_start: usize,
@@ -419,6 +430,18 @@ fn register_index(value: u32, register_count: usize, context: &str) -> Result<us
     Ok(index)
 }
 
+fn is_numeric(value_type: ValueType) -> bool {
+    matches!(value_type, ValueType::I64 | ValueType::F64)
+}
+
+fn opcode_name(opcode: Opcode) -> &'static str {
+    INSTRUCTIONS
+        .iter()
+        .find(|instruction| instruction.opcode == opcode)
+        .expect("generated opcode must have an instruction definition")
+        .name
+}
+
 fn verify_function(
     module: &PortableModule,
     function: &Function,
@@ -484,6 +507,107 @@ fn verify_function(
                 Instruction::Move {
                     destination,
                     source,
+                }
+            }
+            Opcode::Negate | Opcode::BoolNot => {
+                let name = opcode_name(opcode);
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    &format!("{name} destination register"),
+                )?;
+                let operand = register_index(
+                    operands[1],
+                    register_count,
+                    &format!("{name} operand register"),
+                )?;
+                let operand_type = register_types[operand];
+                if opcode == Opcode::Negate {
+                    if !is_numeric(operand_type) {
+                        return Err("NEGATE operand must be I64 or F64.".into());
+                    }
+                    register_types[destination] = operand_type;
+                } else {
+                    if operand_type != ValueType::Bool {
+                        return Err("BOOL_NOT operand must be BOOL.".into());
+                    }
+                    register_types[destination] = ValueType::Bool;
+                }
+                Instruction::Unary {
+                    opcode,
+                    destination,
+                    operand,
+                }
+            }
+            Opcode::Add
+            | Opcode::Subtract
+            | Opcode::Multiply
+            | Opcode::Divide
+            | Opcode::Remainder
+            | Opcode::Equal
+            | Opcode::NotEqual
+            | Opcode::LessThan
+            | Opcode::LessEqual
+            | Opcode::GreaterThan
+            | Opcode::GreaterEqual
+            | Opcode::BoolAnd
+            | Opcode::BoolOr => {
+                let name = opcode_name(opcode);
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    &format!("{name} destination register"),
+                )?;
+                let left = register_index(
+                    operands[1],
+                    register_count,
+                    &format!("{name} left register"),
+                )?;
+                let right = register_index(
+                    operands[2],
+                    register_count,
+                    &format!("{name} right register"),
+                )?;
+                let left_type = register_types[left];
+                let right_type = register_types[right];
+                if left_type != right_type {
+                    return Err(format!("{name} operands must have the same type."));
+                }
+                let result_type = match opcode {
+                    Opcode::Add
+                    | Opcode::Subtract
+                    | Opcode::Multiply
+                    | Opcode::Divide
+                    | Opcode::Remainder => {
+                        if !is_numeric(left_type) {
+                            return Err(format!("{name} operands must be I64 or F64."));
+                        }
+                        left_type
+                    }
+                    Opcode::Equal | Opcode::NotEqual => ValueType::Bool,
+                    Opcode::LessThan
+                    | Opcode::LessEqual
+                    | Opcode::GreaterThan
+                    | Opcode::GreaterEqual => {
+                        if !is_numeric(left_type) {
+                            return Err(format!("{name} operands must be I64 or F64."));
+                        }
+                        ValueType::Bool
+                    }
+                    Opcode::BoolAnd | Opcode::BoolOr => {
+                        if left_type != ValueType::Bool {
+                            return Err(format!("{name} operands must be BOOL."));
+                        }
+                        ValueType::Bool
+                    }
+                    _ => unreachable!("grouped binary opcodes are exhaustive"),
+                };
+                register_types[destination] = result_type;
+                Instruction::Binary {
+                    opcode,
+                    destination,
+                    left,
+                    right,
                 }
             }
             Opcode::HostCall => {

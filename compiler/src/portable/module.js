@@ -29,6 +29,15 @@ const instructionByName = new Map(INSTRUCTIONS.map((instruction) => [instruction
 const instructionByOpcode = new Map(INSTRUCTIONS.map((instruction) => [instruction.opcode, instruction]));
 const operandTypeByName = new Map(OPERAND_TYPES.map((operand) => [operand.name, operand]));
 const valueTypeByTag = new Map(Object.entries(VALUE_TYPES).map(([name, tag]) => [tag, name]));
+const NUMERIC_TYPES = new Set(["I64", "F64"]);
+const NUMERIC_BINARY_INSTRUCTIONS = new Set([
+  "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "REMAINDER",
+]);
+const EQUALITY_INSTRUCTIONS = new Set(["EQUAL", "NOT_EQUAL"]);
+const ORDERED_COMPARISON_INSTRUCTIONS = new Set([
+  "LESS_THAN", "LESS_EQUAL", "GREATER_THAN", "GREATER_EQUAL",
+]);
+const BOOLEAN_BINARY_INSTRUCTIONS = new Set(["BOOL_AND", "BOOL_OR"]);
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -417,6 +426,46 @@ function decodeFunctionInstructions(code, func, functionIndex, constants, import
       invariant(operands.destination < func.registerCount, "MOVE destination register is out of range.");
       invariant(operands.source < func.registerCount, "MOVE source register is out of range.");
       registerTypes[operands.destination] = registerTypes[operands.source];
+    } else if (definition.name === "NEGATE" || definition.name === "BOOL_NOT") {
+      invariant(operands.destination < func.registerCount,
+        `${definition.name} destination register is out of range.`);
+      invariant(operands.operand < func.registerCount,
+        `${definition.name} operand register is out of range.`);
+      const operandType = registerTypes[operands.operand];
+      if (definition.name === "NEGATE") {
+        invariant(NUMERIC_TYPES.has(operandType), "NEGATE operand must be I64 or F64.");
+        registerTypes[operands.destination] = operandType;
+      } else {
+        invariant(operandType === "BOOL", "BOOL_NOT operand must be BOOL.");
+        registerTypes[operands.destination] = "BOOL";
+      }
+    } else if (
+      NUMERIC_BINARY_INSTRUCTIONS.has(definition.name)
+      || EQUALITY_INSTRUCTIONS.has(definition.name)
+      || ORDERED_COMPARISON_INSTRUCTIONS.has(definition.name)
+      || BOOLEAN_BINARY_INSTRUCTIONS.has(definition.name)
+    ) {
+      invariant(operands.destination < func.registerCount,
+        `${definition.name} destination register is out of range.`);
+      invariant(operands.left < func.registerCount,
+        `${definition.name} left register is out of range.`);
+      invariant(operands.right < func.registerCount,
+        `${definition.name} right register is out of range.`);
+      const leftType = registerTypes[operands.left];
+      const rightType = registerTypes[operands.right];
+      invariant(leftType === rightType, `${definition.name} operands must have the same type.`);
+      if (NUMERIC_BINARY_INSTRUCTIONS.has(definition.name)) {
+        invariant(NUMERIC_TYPES.has(leftType), `${definition.name} operands must be I64 or F64.`);
+        registerTypes[operands.destination] = leftType;
+      } else if (EQUALITY_INSTRUCTIONS.has(definition.name)) {
+        registerTypes[operands.destination] = "BOOL";
+      } else if (ORDERED_COMPARISON_INSTRUCTIONS.has(definition.name)) {
+        invariant(NUMERIC_TYPES.has(leftType), `${definition.name} operands must be I64 or F64.`);
+        registerTypes[operands.destination] = "BOOL";
+      } else {
+        invariant(leftType === "BOOL", `${definition.name} operands must be BOOL.`);
+        registerTypes[operands.destination] = "BOOL";
+      }
     } else if (definition.name === "HOST_CALL") {
       const hostImport = imports[operands.import];
       invariant(hostImport, "HOST_CALL import index is out of range.");

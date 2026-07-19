@@ -1,8 +1,96 @@
 use crate::{
-    generated::isa::ValueType,
+    generated::isa::{Opcode, ValueType},
     host::{Host, ResolvedHostImport},
     portable::{Instruction, Value, VerifiedPortableModule},
 };
+
+fn execute_unary(opcode: Opcode, operand: &Value) -> Result<Value, String> {
+    match (opcode, operand) {
+        (Opcode::Negate, Value::I64(value)) => value
+            .checked_neg()
+            .map(Value::I64)
+            .ok_or_else(|| "I64 negation overflow.".into()),
+        (Opcode::Negate, Value::F64(value)) => Ok(Value::F64(-value)),
+        (Opcode::BoolNot, Value::Bool(value)) => Ok(Value::Bool(!value)),
+        _ => Err("Unary instruction received an invalid runtime value type.".into()),
+    }
+}
+
+fn checked_i64_binary(opcode: Opcode, left: i64, right: i64) -> Result<Value, String> {
+    let result = match opcode {
+        Opcode::Add => left.checked_add(right),
+        Opcode::Subtract => left.checked_sub(right),
+        Opcode::Multiply => left.checked_mul(right),
+        Opcode::Divide if right == 0 => return Err("I64 division by zero.".into()),
+        Opcode::Divide => left.checked_div(right),
+        Opcode::Remainder if right == 0 => return Err("I64 remainder by zero.".into()),
+        Opcode::Remainder => left.checked_rem(right),
+        _ => return Err("Invalid I64 arithmetic instruction.".into()),
+    };
+    result
+        .map(Value::I64)
+        .ok_or_else(|| format!("I64 {:?} overflow.", opcode))
+}
+
+fn values_equal(left: &Value, right: &Value) -> Result<bool, String> {
+    match (left, right) {
+        (Value::Null, Value::Null) => Ok(true),
+        (Value::Bool(left), Value::Bool(right)) => Ok(left == right),
+        (Value::I64(left), Value::I64(right)) => Ok(left == right),
+        (Value::F64(left), Value::F64(right)) => Ok(left == right),
+        (Value::String(left), Value::String(right)) => Ok(left == right),
+        _ => Err("Equality instruction received different runtime value types.".into()),
+    }
+}
+
+fn execute_binary(opcode: Opcode, left: &Value, right: &Value) -> Result<Value, String> {
+    match (left, right) {
+        (Value::I64(left), Value::I64(right)) => match opcode {
+            Opcode::Add
+            | Opcode::Subtract
+            | Opcode::Multiply
+            | Opcode::Divide
+            | Opcode::Remainder => checked_i64_binary(opcode, *left, *right),
+            Opcode::Equal => Ok(Value::Bool(left == right)),
+            Opcode::NotEqual => Ok(Value::Bool(left != right)),
+            Opcode::LessThan => Ok(Value::Bool(left < right)),
+            Opcode::LessEqual => Ok(Value::Bool(left <= right)),
+            Opcode::GreaterThan => Ok(Value::Bool(left > right)),
+            Opcode::GreaterEqual => Ok(Value::Bool(left >= right)),
+            _ => Err("I64 operands received an invalid binary instruction.".into()),
+        },
+        (Value::F64(left), Value::F64(right)) => match opcode {
+            Opcode::Add => Ok(Value::F64(left + right)),
+            Opcode::Subtract => Ok(Value::F64(left - right)),
+            Opcode::Multiply => Ok(Value::F64(left * right)),
+            Opcode::Divide => Ok(Value::F64(left / right)),
+            Opcode::Remainder => Ok(Value::F64(left % right)),
+            Opcode::Equal => Ok(Value::Bool(left == right)),
+            Opcode::NotEqual => Ok(Value::Bool(left != right)),
+            Opcode::LessThan => Ok(Value::Bool(left < right)),
+            Opcode::LessEqual => Ok(Value::Bool(left <= right)),
+            Opcode::GreaterThan => Ok(Value::Bool(left > right)),
+            Opcode::GreaterEqual => Ok(Value::Bool(left >= right)),
+            _ => Err("F64 operands received an invalid binary instruction.".into()),
+        },
+        (Value::Bool(left), Value::Bool(right)) => match opcode {
+            Opcode::Equal => Ok(Value::Bool(left == right)),
+            Opcode::NotEqual => Ok(Value::Bool(left != right)),
+            Opcode::BoolAnd => Ok(Value::Bool(*left && *right)),
+            Opcode::BoolOr => Ok(Value::Bool(*left || *right)),
+            _ => Err("BOOL operands received an invalid binary instruction.".into()),
+        },
+        _ if matches!(opcode, Opcode::Equal | Opcode::NotEqual) => {
+            let equal = values_equal(left, right)?;
+            Ok(Value::Bool(if opcode == Opcode::Equal {
+                equal
+            } else {
+                !equal
+            }))
+        }
+        _ => Err("Binary instruction received invalid runtime value types.".into()),
+    }
+}
 
 pub(crate) fn execute<H: Host>(
     module: &VerifiedPortableModule,
@@ -31,6 +119,22 @@ pub(crate) fn execute<H: Host>(
                 source,
             } => {
                 registers[destination] = registers[source].clone();
+            }
+            Instruction::Unary {
+                opcode,
+                destination,
+                operand,
+            } => {
+                registers[destination] = execute_unary(opcode, &registers[operand])?;
+            }
+            Instruction::Binary {
+                opcode,
+                destination,
+                left,
+                right,
+            } => {
+                let result = execute_binary(opcode, &registers[left], &registers[right])?;
+                registers[destination] = result;
             }
             Instruction::HostCall {
                 import,
@@ -159,6 +263,67 @@ mod tests {
         assert_eq!(
             host.arguments,
             [Value::String("Hello from the VM\n".into())]
+        );
+    }
+
+    #[test]
+    fn executes_checked_numeric_and_comparison_operations() {
+        assert_eq!(
+            execute_binary(Opcode::Add, &Value::I64(20), &Value::I64(22)),
+            Ok(Value::I64(42))
+        );
+        assert_eq!(
+            execute_binary(Opcode::Divide, &Value::F64(7.5), &Value::F64(2.5)),
+            Ok(Value::F64(3.0))
+        );
+        assert_eq!(
+            execute_binary(Opcode::GreaterEqual, &Value::I64(5), &Value::I64(5)),
+            Ok(Value::Bool(true))
+        );
+        assert_eq!(
+            execute_binary(
+                Opcode::Equal,
+                &Value::String("same".into()),
+                &Value::String("same".into())
+            ),
+            Ok(Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn executes_boolean_and_unary_operations() {
+        assert_eq!(
+            execute_binary(Opcode::BoolAnd, &Value::Bool(true), &Value::Bool(false)),
+            Ok(Value::Bool(false))
+        );
+        assert_eq!(
+            execute_binary(Opcode::BoolOr, &Value::Bool(true), &Value::Bool(false)),
+            Ok(Value::Bool(true))
+        );
+        assert_eq!(
+            execute_unary(Opcode::BoolNot, &Value::Bool(false)),
+            Ok(Value::Bool(true))
+        );
+        assert_eq!(
+            execute_unary(Opcode::Negate, &Value::I64(7)),
+            Ok(Value::I64(-7))
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_i64_arithmetic_at_runtime() {
+        assert!(
+            execute_binary(Opcode::Add, &Value::I64(i64::MAX), &Value::I64(1))
+                .expect_err("addition must overflow")
+                .contains("overflow")
+        );
+        assert_eq!(
+            execute_binary(Opcode::Divide, &Value::I64(1), &Value::I64(0)),
+            Err("I64 division by zero.".into())
+        );
+        assert_eq!(
+            execute_unary(Opcode::Negate, &Value::I64(i64::MIN)),
+            Err("I64 negation overflow.".into())
         );
     }
 }

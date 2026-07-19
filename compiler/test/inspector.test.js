@@ -18,7 +18,7 @@ test("decodes portable headers, imports, and instructions", () => {
   const module = decodeBytecode(compile('print "Hello!";'));
 
   assert.equal(module.header.magic, "JIMP");
-  assert.equal(module.header.format, "2.0");
+  assert.equal(module.header.format, "2.1");
   assert.equal(module.header.sectionCount, 4);
   assert.equal(module.imports[0].symbol, "std.console.write");
   assert.deepEqual(module.functions[0].instructions[0], {
@@ -33,11 +33,30 @@ test("decodes portable headers, imports, and instructions", () => {
 
 test("formats a readable portable disassembly", () => {
   const output = formatInspection(decodeBytecode(compile('print "Hello!";')));
-  assert.match(output, /Format: 2\.0/);
+  assert.match(output, /Format: 2\.1/);
   assert.match(output, /std\.console\.write\(STRING\) -> VOID/);
   assert.match(output, /\[0000\] @code\+0x00000000 LOAD_CONST destination=0 constant=2/);
   assert.match(output, /HOST_CALL import=0 argument_start=0 argument_count=1 result=65535/);
   assert.match(output, /HALT/);
+});
+
+test("formats typed scalar constants", () => {
+  const output = formatInspection(decodeBytecode(compile("42;\n-3.5;\ntrue;\nnull;")));
+
+  assert.match(output, /\[0\] I64 42/);
+  assert.match(output, /\[1\] F64 -3\.5/);
+  assert.match(output, /\[2\] BOOL true/);
+  assert.match(output, /\[3\] NULL null/);
+});
+
+test("disassembles expression instructions", () => {
+  const output = formatInspection(decodeBytecode(compile("(2 + 3) * 4 >= 20 && !false;")));
+
+  assert.match(output, /ADD destination=/);
+  assert.match(output, /MULTIPLY destination=/);
+  assert.match(output, /GREATER_EQUAL destination=/);
+  assert.match(output, /BOOL_NOT destination=/);
+  assert.match(output, /BOOL_AND destination=/);
 });
 
 test("rejects a constant index outside the pool", () => {

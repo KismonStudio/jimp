@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 pub(crate) const FORMAT_MAJOR: u16 = 2;
-pub(crate) const FORMAT_MINOR: u16 = 0;
+pub(crate) const FORMAT_MINOR: u16 = 1;
 pub(crate) const NO_REGISTER: u16 = 65535;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -38,6 +38,21 @@ pub(crate) enum Opcode {
     LoadConst = 1,
     Move = 2,
     HostCall = 3,
+    Negate = 10,
+    Add = 11,
+    Subtract = 12,
+    Multiply = 13,
+    Divide = 14,
+    Remainder = 15,
+    Equal = 20,
+    NotEqual = 21,
+    LessThan = 22,
+    LessEqual = 23,
+    GreaterThan = 24,
+    GreaterEqual = 25,
+    BoolNot = 30,
+    BoolAnd = 31,
+    BoolOr = 32,
     Halt = 255,
 }
 
@@ -49,6 +64,21 @@ impl TryFrom<u8> for Opcode {
             1 => Ok(Self::LoadConst),
             2 => Ok(Self::Move),
             3 => Ok(Self::HostCall),
+            10 => Ok(Self::Negate),
+            11 => Ok(Self::Add),
+            12 => Ok(Self::Subtract),
+            13 => Ok(Self::Multiply),
+            14 => Ok(Self::Divide),
+            15 => Ok(Self::Remainder),
+            20 => Ok(Self::Equal),
+            21 => Ok(Self::NotEqual),
+            22 => Ok(Self::LessThan),
+            23 => Ok(Self::LessEqual),
+            24 => Ok(Self::GreaterThan),
+            25 => Ok(Self::GreaterEqual),
+            30 => Ok(Self::BoolNot),
+            31 => Ok(Self::BoolAnd),
+            32 => Ok(Self::BoolOr),
             255 => Ok(Self::Halt),
             _ => Err(()),
         }
@@ -169,6 +199,268 @@ pub(crate) const INSTRUCTIONS: &[InstructionDefinition] = &[
             OperandDefinition {
                 name: "result",
                 kind: OperandKind::OptionalRegister,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "NEGATE",
+        opcode: Opcode::Negate,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "operand",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "ADD",
+        opcode: Opcode::Add,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "SUBTRACT",
+        opcode: Opcode::Subtract,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "MULTIPLY",
+        opcode: Opcode::Multiply,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "DIVIDE",
+        opcode: Opcode::Divide,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "REMAINDER",
+        opcode: Opcode::Remainder,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "EQUAL",
+        opcode: Opcode::Equal,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "NOT_EQUAL",
+        opcode: Opcode::NotEqual,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "LESS_THAN",
+        opcode: Opcode::LessThan,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "LESS_EQUAL",
+        opcode: Opcode::LessEqual,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "GREATER_THAN",
+        opcode: Opcode::GreaterThan,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "GREATER_EQUAL",
+        opcode: Opcode::GreaterEqual,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "BOOL_NOT",
+        opcode: Opcode::BoolNot,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "operand",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "BOOL_AND",
+        opcode: Opcode::BoolAnd,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "BOOL_OR",
+        opcode: Opcode::BoolOr,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
             },
         ],
     },

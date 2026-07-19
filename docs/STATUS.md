@@ -1,18 +1,18 @@
 # JIMP Implementation Status
 
-**Last updated:** July 18, 2026
+**Last updated:** July 19, 2026
 **Development version:** 0.1.0
 
 This document tracks the JIMP implementation. The conceptual project definition lives under `docs/specs`; this file records only executable work and the subsequent delivery plan.
 
-## Current milestone: portable VM foundation complete
+## Current milestone: P2 core language in progress
 
 The project has a complete, tested path from source code to execution:
 
 ```text
 .jimp source file
   -> JavaScript compiler
-  -> portable .jbc 2.0 module
+  -> portable .jbc 2.1 module
   -> complete verification and host-import resolution
   -> Rust runtime
   -> host console
@@ -21,7 +21,11 @@ The project has a complete, tested path from source code to execution:
 Supported example:
 
 ```jimp
-print "Hello, JIMP!";
+let base = 2 + 3 * 4;
+var valid = base == 14;
+valid = valid && !false;
+let message = "Hello, JIMP!";
+print message;
 ```
 
 ## Implemented
@@ -40,17 +44,26 @@ print "Hello, JIMP!";
 - [x] UTF-8 source-file reading.
 - [x] `//` line comments.
 - [x] `print` statement with a string literal.
+- [x] Typed `i64`, `f64`, boolean, and `null` literal statements.
+- [x] Exact signed-i64 parsing and finite-f64 validation.
+- [x] Parser separated from portable bytecode lowering.
+- [x] Program-scoped immutable `let` and mutable `var` declarations.
+- [x] Declaration-before-use, duplicate-declaration, and immutability analysis.
+- [x] Persistent variable-register allocation with an isolated temporary register.
+- [x] Precedence-aware arithmetic, comparison, equality, unary, and boolean expressions.
+- [x] Flow-sensitive expression type analysis with no implicit conversions.
+- [x] Reusable temporary-register allocation for expression trees.
 - [x] String escapes: `\\`, `\"`, `\n`, `\r`, and `\t`.
 - [x] Syntax diagnostics with source line numbers.
-- [x] Portable `.jbc` 2.0 emission.
+- [x] Portable `.jbc` 2.1 emission.
 - [x] `.jbc` inspection in readable and JSON formats.
 
-### Portable bytecode 2.0
+### Portable bytecode 2.1
 
 - [x] Header with `JIMP` magic number, format version, entry function, and section directory.
 - [x] Little-endian multibyte integer encoding.
 - [x] Scalar constant pool, typed host imports, function metadata, and code sections.
-- [x] Generic `LOAD_CONST`, `MOVE`, `HOST_CALL`, and `HALT` instructions.
+- [x] Generic data movement, arithmetic, comparison, boolean, host-call, and termination instructions.
 - [x] Contract published in English and Portuguese under `docs/specs/EN` and `docs/specs/PT`.
 - [x] Formal v1 source syntax published in English and Portuguese.
 - [x] Machine-readable ISA source with generated JavaScript, Rust, and bilingual references.
@@ -67,10 +80,12 @@ print "Hello, JIMP!";
 - [x] Console host implementation for the typed `std.console.write` capability.
 - [x] Complete decode-and-verify phase before VM execution.
 - [x] Host interface isolated from bytecode decoding.
-- [x] Portable 2.0 container decoding in Rust.
+- [x] Portable 2.1 container decoding in Rust.
 - [x] Typed host-import resolution to numeric handles with explicit capability policy.
 - [x] ISA-driven operand decoding and generic register-machine execution.
 - [x] Runtime type checks before every host invocation.
+- [x] Checked `I64` arithmetic and IEEE 754 `F64` execution.
+- [x] Independent Rust verification of typed expression operands.
 
 ### Quality
 
@@ -104,11 +119,11 @@ Acceptance criterion: the same `.jbc` invokes a named console capability without
 
 ### P2 — core language
 
-1. [ ] Implement numeric, boolean, and `null` values.
-2. [ ] Implement immutable and mutable variables with declaration-and-use analysis.
-3. [ ] Implement arithmetic, comparison, and boolean expressions.
+1. [x] Implement numeric, boolean, and `null` values.
+2. [x] Implement immutable and mutable variables with declaration-and-use analysis.
+3. [x] Implement arithmetic, comparison, and boolean expressions.
 4. [ ] Implement conditional branches and blocks (`if` / `else`).
-5. [ ] Implement semantic type checks and lower the core language to the generic VM instructions.
+5. [ ] Complete semantic type checks across control-flow joins and lower the complete P2 language to generic VM instructions.
 
 Acceptance criterion: a program can declare values, calculate an expression, and select a conditional path; the compiler rejects undeclared identifiers and type incompatibilities defined by the specification.
 
@@ -133,11 +148,11 @@ Acceptance criterion: a program can declare values, calculate an expression, and
 | --- | --- |
 | Official compiler | JavaScript (Node.js 20 or later for development) |
 | Official runtime | Rust, with no Node.js dependency during execution |
-| Active format | Portable binary `.jbc` 2.0, little-endian |
+| Active format | Portable binary `.jbc` 2.1, little-endian |
 | External interface | Named, typed Host ABI imports authorized by capability policy |
 | Execution architecture | Generic register ISA generated from `isa/v1.json` |
 | Portable VM specification | Implemented P1 foundation |
-| Compatibility | Legacy format 1 is not accepted; format 2.0 is still pre-stable |
+| Compatibility | Legacy format 1 and portable 2.0 are not accepted; format 2.1 is pre-stable |
 
 ## Validating the current milestone
 

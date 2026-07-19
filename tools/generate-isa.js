@@ -69,7 +69,12 @@ function validateDefinition(definition) {
   for (const requiredType of ["NULL", "BOOL", "I64", "F64", "STRING", "VOID"]) {
     invariant(definition.valueTypes.some(({ name }) => name === requiredType), `missing ${requiredType} value type`);
   }
-  for (const requiredInstruction of ["LOAD_CONST", "MOVE", "HOST_CALL", "HALT"]) {
+  for (const requiredInstruction of [
+    "LOAD_CONST", "MOVE", "HOST_CALL",
+    "NEGATE", "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "REMAINDER",
+    "EQUAL", "NOT_EQUAL", "LESS_THAN", "LESS_EQUAL", "GREATER_THAN", "GREATER_EQUAL",
+    "BOOL_NOT", "BOOL_AND", "BOOL_OR", "HALT",
+  ]) {
     invariant(definition.instructions.some(({ name }) => name === requiredInstruction), `missing ${requiredInstruction} instruction`);
   }
 }
