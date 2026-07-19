@@ -1,8 +1,10 @@
-# JIMP Bytecode v1
+# Legacy JIMP Bytecode Format 1
 
 [Portuguese version](../PT/BYTECODE.md)
 
-This document defines the initial interoperable JIMP bytecode contract.
+This document preserves the historical prototype bytecode contract implemented in JIMP 0.1.0.
+
+Format 1 is no longer emitted or accepted. The active interoperable contract is [JIMP Portable VM v1](VM.md), encoded as `.jbc` format `2.0`.
 
 All multi-byte integers are unsigned little-endian. A program starts with a ten-byte header:
 
@@ -20,3 +22,7 @@ Instructions follow immediately. The last instruction must be `HALT`, and no byt
 | `255` | `HALT` | opcode | Stops execution successfully. |
 
 Runtimes must reject malformed headers, unsupported versions and opcodes, incomplete operands, invalid UTF-8, missing `HALT`, and trailing data.
+
+## Validation before execution
+
+A runtime must decode and validate the complete module before executing its first instruction or invoking any host capability. Validation failure must not produce partial program output or any other program-requested host effect.

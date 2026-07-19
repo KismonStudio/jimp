@@ -1,0 +1,107 @@
+{
+  "$schema": "./schema.json",
+  "name": "jimp-portable-vm",
+  "formatVersion": {
+    "major": 2,
+    "minor": 0
+  },
+  "endianness": "little",
+  "opcodeWidth": 1,
+  "reservedValues": {
+    "noRegister": 65535
+  },
+  "operandTypes": [
+    { "name": "register", "encoding": "u16", "allowsNoRegister": false },
+    { "name": "optional_register", "encoding": "u16", "allowsNoRegister": true },
+    { "name": "constant_index", "encoding": "u32", "allowsNoRegister": false },
+    { "name": "import_index", "encoding": "u32", "allowsNoRegister": false },
+    { "name": "register_count", "encoding": "u16", "allowsNoRegister": false }
+  ],
+  "valueTypes": [
+    {
+      "name": "NULL",
+      "tag": 0,
+      "runtimeValue": true,
+      "description": { "en": "Absence of a value.", "pt": "Ausência de valor." }
+    },
+    {
+      "name": "BOOL",
+      "tag": 1,
+      "runtimeValue": true,
+      "description": { "en": "Boolean false or true.", "pt": "Valor booleano falso ou verdadeiro." }
+    },
+    {
+      "name": "I64",
+      "tag": 2,
+      "runtimeValue": true,
+      "description": { "en": "Signed 64-bit two's-complement integer.", "pt": "Inteiro de 64 bits com sinal em complemento de dois." }
+    },
+    {
+      "name": "F64",
+      "tag": 3,
+      "runtimeValue": true,
+      "description": { "en": "IEEE 754 binary64 value.", "pt": "Valor binary64 IEEE 754." }
+    },
+    {
+      "name": "STRING",
+      "tag": 4,
+      "runtimeValue": true,
+      "description": { "en": "Immutable valid UTF-8 string.", "pt": "String UTF-8 válida e imutável." }
+    },
+    {
+      "name": "VOID",
+      "tag": 255,
+      "runtimeValue": false,
+      "description": { "en": "Signature-only marker for no return value.", "pt": "Marcador de assinatura para ausência de retorno." }
+    }
+  ],
+  "instructions": [
+    {
+      "name": "LOAD_CONST",
+      "opcode": 1,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "constant", "type": "constant_index" }
+      ],
+      "description": {
+        "en": "Loads an immutable constant into a virtual register.",
+        "pt": "Carrega uma constante imutável em um registrador virtual."
+      }
+    },
+    {
+      "name": "MOVE",
+      "opcode": 2,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "source", "type": "register" }
+      ],
+      "description": {
+        "en": "Copies a value between virtual registers.",
+        "pt": "Copia um valor entre registradores virtuais."
+      }
+    },
+    {
+      "name": "HOST_CALL",
+      "opcode": 3,
+      "operands": [
+        { "name": "import", "type": "import_index" },
+        { "name": "argument_start", "type": "register" },
+        { "name": "argument_count", "type": "register_count" },
+        { "name": "result", "type": "optional_register" }
+      ],
+      "description": {
+        "en": "Invokes a resolved, typed host import.",
+        "pt": "Invoca um import do host resolvido e tipado."
+      }
+    },
+    {
+      "name": "HALT",
+      "opcode": 255,
+      "operands": [],
+      "description": {
+        "en": "Terminates the entry function successfully.",
+        "pt": "Encerra a função de entrada com sucesso."
+      }
+    }
+  ]
+}

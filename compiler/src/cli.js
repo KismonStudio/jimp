@@ -21,7 +21,7 @@ async function main(args) {
 
     const program = decodeBytecode(await readFile(resolve(input)));
     const output = args.includes("--json")
-      ? `${JSON.stringify(program, null, 2)}\n`
+      ? `${JSON.stringify(program, (_, value) => typeof value === "bigint" ? value.toString() : value, 2)}\n`
       : formatInspection(program);
     process.stdout.write(output);
     return;

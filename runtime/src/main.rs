@@ -1,112 +1,107 @@
 use std::{env, fs, process};
 
-const MAGIC: &[u8; 4] = b"JIMP";
-const VERSION: u16 = 1;
-const PRINT: u8 = 1;
-const HALT: u8 = 255;
+use crate::{
+    host::{CapabilityPolicy, ConsoleHost, Host, ResolvedHostImport, resolve_host_imports},
+    portable::{VerifiedPortableModule, decode_portable_module, verify_portable_module},
+    vm::execute,
+};
 
-fn read_u16(bytes: &[u8], offset: &mut usize) -> Result<u16, String> {
-    let value = bytes
-        .get(*offset..*offset + 2)
-        .ok_or("Unexpected end of bytecode.")?;
-    *offset += 2;
-    Ok(u16::from_le_bytes([value[0], value[1]]))
+mod generated;
+mod host;
+mod portable;
+mod vm;
+
+const PORTABLE_CAPABILITY_POLICY: &[&str] = &["std.console.write"];
+
+fn prepare_module<H: Host>(
+    bytes: &[u8],
+    host: &H,
+) -> Result<(VerifiedPortableModule, Vec<ResolvedHostImport>), String> {
+    let module = verify_portable_module(decode_portable_module(bytes)?)?;
+    let resolved = resolve_host_imports(
+        &module.imports,
+        host.capabilities(),
+        &CapabilityPolicy::new(PORTABLE_CAPABILITY_POLICY),
+    )?;
+    Ok((module, resolved))
 }
 
-fn read_u32(bytes: &[u8], offset: &mut usize) -> Result<u32, String> {
-    let value = bytes
-        .get(*offset..*offset + 4)
-        .ok_or("Unexpected end of bytecode.")?;
-    *offset += 4;
-    Ok(u32::from_le_bytes([value[0], value[1], value[2], value[3]]))
+fn run<H: Host>(bytes: &[u8], host: &mut H) -> Result<(), String> {
+    let (module, resolved) = prepare_module(bytes, host)?;
+    execute(&module, &resolved, host)
 }
 
-fn execute(bytes: &[u8]) -> Result<(), String> {
-    if bytes.len() < 10 || bytes.get(0..4) != Some(MAGIC) {
-        return Err("Invalid JIMP bytecode magic.".into());
-    }
-    let mut offset = 4;
-    if read_u16(bytes, &mut offset)? != VERSION {
-        return Err("Unsupported JIMP bytecode version.".into());
-    }
-    let instruction_count = read_u32(bytes, &mut offset)?;
-    let mut halted = false;
-
-    for instruction_index in 0..instruction_count {
-        let opcode = *bytes.get(offset).ok_or("Unexpected end of bytecode.")?;
-        offset += 1;
-        match opcode {
-            PRINT => {
-                let length = read_u16(bytes, &mut offset)? as usize;
-                let value = bytes
-                    .get(offset..offset + length)
-                    .ok_or("Unexpected end of bytecode.")?;
-                offset += length;
-                println!(
-                    "{}",
-                    std::str::from_utf8(value).map_err(|_| "Invalid UTF-8 string constant.")?
-                );
-            }
-            HALT => {
-                if instruction_index != instruction_count - 1 {
-                    return Err("HALT must be the final instruction.".into());
-                }
-                halted = true;
-            }
-            _ => return Err(format!("Unsupported opcode {opcode}.")),
-        }
-    }
-
-    if !halted {
-        return Err("Program must terminate with HALT.".into());
-    }
-    if offset != bytes.len() {
-        return Err("Trailing bytes after program termination.".into());
-    }
-    Ok(())
+fn validate_portable<H: Host>(bytes: &[u8], host: &H) -> Result<usize, String> {
+    let (_, resolved) = prepare_module(bytes, host)?;
+    Ok(resolved.len())
 }
 
 fn main() {
-    let Some(path) = env::args().nth(1) else {
-        eprintln!("Usage: jimp-runtime <program.jbc>");
+    let mut args = env::args().skip(1);
+    let Some(first_argument) = args.next() else {
+        eprintln!("Usage: jimp-runtime <program.jbc> | --validate-portable <program.jbc>");
         process::exit(2);
     };
-    match fs::read(path)
+    let (validate_only, path) = if first_argument == "--validate-portable" {
+        let Some(path) = args.next() else {
+            eprintln!("Usage: jimp-runtime --validate-portable <program.jbc>");
+            process::exit(2);
+        };
+        (true, path)
+    } else {
+        (false, first_argument)
+    };
+    if args.next().is_some() {
+        eprintln!("Runtime error: unexpected command-line argument.");
+        process::exit(2);
+    }
+
+    let result = fs::read(path)
         .map_err(|error| error.to_string())
-        .and_then(|bytes| execute(&bytes))
-    {
-        Ok(()) => {}
-        Err(error) => {
-            eprintln!("Runtime error: {error}");
-            process::exit(1);
-        }
+        .and_then(|bytes| {
+            if validate_only {
+                validate_portable(&bytes, &ConsoleHost).map(|import_count| {
+                    println!(
+                        "Portable module valid and execution-ready: {import_count} host import(s) resolved."
+                    );
+                })
+            } else {
+                run(&bytes, &mut ConsoleHost)
+            }
+        });
+
+    if let Err(error) = result {
+        eprintln!("Runtime error: {error}");
+        process::exit(1);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{host::HostHandle, portable::Value};
 
-    #[test]
-    fn rejects_invalid_magic() {
-        assert!(execute(b"NOPE").is_err());
+    #[derive(Default)]
+    struct RecordingHost {
+        invocations: usize,
+    }
+
+    impl Host for RecordingHost {
+        fn invoke(
+            &mut self,
+            _handle: HostHandle,
+            _arguments: &[Value],
+        ) -> Result<Option<Value>, String> {
+            self.invocations += 1;
+            Ok(None)
+        }
     }
 
     #[test]
-    fn accepts_empty_program() {
-        let mut bytes = b"JIMP".to_vec();
-        bytes.extend(VERSION.to_le_bytes());
-        bytes.extend(1_u32.to_le_bytes());
-        bytes.push(HALT);
-        assert!(execute(&bytes).is_ok());
-    }
+    fn performs_no_host_effect_when_verification_fails() {
+        let mut host = RecordingHost::default();
 
-    #[test]
-    fn rejects_instruction_count_mismatch() {
-        let mut bytes = b"JIMP".to_vec();
-        bytes.extend(VERSION.to_le_bytes());
-        bytes.extend(2_u32.to_le_bytes());
-        bytes.push(HALT);
-        assert!(execute(&bytes).is_err());
+        assert!(run(b"not portable bytecode", &mut host).is_err());
+        assert_eq!(host.invocations, 0);
     }
 }

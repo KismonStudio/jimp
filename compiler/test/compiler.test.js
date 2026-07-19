@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { compile } from "../src/compiler.js";
+import { decodePortableModule } from "../src/portable/module.js";
 
-test("compiles print statements into versioned bytecode", () => {
+test("compiles print statements into portable bytecode", () => {
   const bytecode = compile('// greeting\nprint "Hello, JIMP!";\n');
+  const module = decodePortableModule(bytecode);
   assert.equal(bytecode.subarray(0, 4).toString(), "JIMP");
-  assert.equal(bytecode.readUInt16LE(4), 1);
-  assert.equal(bytecode.readUInt32LE(6), 2);
+  assert.equal(bytecode.readUInt16LE(4), 2);
+  assert.equal(bytecode.readUInt16LE(6), 0);
+  assert.equal(module.imports[0].symbol, "std.console.write");
+  assert.deepEqual(
+    module.functions[0].instructions.map(({ name }) => name),
+    ["LOAD_CONST", "HOST_CALL", "HALT"],
+  );
 });
 
 test("reports the source line for unsupported syntax", () => {
@@ -20,7 +27,11 @@ test("accepts the complete v1 surface syntax", () => {
     print "Optional semicolon and escapes: \\\\ \\" \\n \\r \\t"
   `);
 
-  assert.equal(bytecode.readUInt32LE(6), 3);
+  const module = decodePortableModule(bytecode);
+  assert.deepEqual(
+    module.functions[0].instructions.map(({ name }) => name),
+    ["LOAD_CONST", "HOST_CALL", "LOAD_CONST", "HOST_CALL", "HALT"],
+  );
 });
 
 test("rejects syntax excluded from v1", () => {

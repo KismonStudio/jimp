@@ -12,15 +12,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Inspector validation for instruction bounds, UTF-8 operands, termination, and trailing data.
 - Formal JIMP v1 source-syntax specifications in English and Portuguese.
 - Compiler conformance tests for valid and excluded v1 syntax.
+- Automated compiler-to-runtime integration tests for valid and corrupted bytecode.
+- Cross-platform `npm run check` command for all local quality gates.
+- English and Portuguese target specifications for portable VM values, registers, module sections, typed host imports, and generic instructions.
+- Schema-defined and generator-validated portable ISA source with deterministic JavaScript, Rust, and bilingual documentation generation.
+- Portable `.jbc` 2.0 module encoder and decoder with a section directory, scalar constant pool, typed host-import table, function metadata, and ISA-driven code encoding.
+- Portable-container validation for bounds, section overlap, required sections, string references, signatures, and entry functions.
+- Rust portable-container decoder and typed host-import resolver with numeric handles, capability allowlists, availability checks, and signature validation.
+- Cross-language JavaScript-to-Rust validation for portable `.jbc` 2.0 modules.
+- ISA-driven portable instruction verification in JavaScript and Rust, including register, constant, import, type, operand-boundary, and termination checks.
+- Generic Rust register-machine execution for `LOAD_CONST`, `MOVE`, `HOST_CALL`, and `HALT`.
 
 ### Fixed
 
 - Runtime now rejects bytecode whose declared instruction count continues after `HALT`.
 
-### Planned
+### Changed
 
-- Separate bytecode verification from runtime execution.
-- Add automated compiler-to-runtime integration tests.
+- Runtime decoding and verification now complete before VM execution begins.
+- Console effects are isolated behind a host interface and are unavailable to the bytecode decoder.
+- Runtime code is separated into portable decoding, VM, and host modules.
+- The active compiler and runtime now use portable `.jbc` format `2.0`; legacy format `1` is no longer accepted.
+- Source-level `print` is lowered to `LOAD_CONST` plus the typed `std.console.write` host import instead of a hardcoded VM opcode.
+- Host effects are dispatched through resolved numeric capability handles and runtime-checked value arrays.
+- The bytecode inspector now disassembles the portable module structure and generic ISA instructions.
 
 ## [0.1.0] - 2026-07-17
 
