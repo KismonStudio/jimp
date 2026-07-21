@@ -1,0 +1,5 @@
+function divide(left: I64, right: I64): I64 {
+  return left / right;
+}
+
+divide(1, 0);

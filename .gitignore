@@ -145,3 +145,5 @@ vite.config.ts.timestamp-*
 # JIMP and Rust build artifacts
 *.jbc
 runtime/target/
+runtime/bin/
+release-artifacts/

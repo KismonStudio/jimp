@@ -1,0 +1,98 @@
+{
+  "schema": "jimp-conformance-v1",
+  "suiteVersion": 1,
+  "compatibility": {
+    "toolchain": "0.1.0",
+    "runtimeProtocol": 1,
+    "bytecode": "2.6",
+    "standardLibraryMajor": 1,
+    "hostAbi": 1,
+    "targetProfiles": ["portable", "reference-native-i64"],
+    "diagnostics": "jimp-error-v1"
+  },
+  "cases": [
+    {
+      "id": "language-positive",
+      "contract": "language",
+      "command": "run",
+      "fixture": "language/positive.jimp",
+      "repeat": 2,
+      "expected": { "status": 0, "stdout": "42\n" }
+    },
+    {
+      "id": "language-rejection",
+      "contract": "language",
+      "command": "compile",
+      "fixture": "language/rejection.jimp",
+      "expected": { "status": 1, "error": { "code": "JIMP-1001", "phase": "compile" } }
+    },
+    {
+      "id": "bytecode-invalid-magic",
+      "contract": "bytecode",
+      "command": "check",
+      "base64": "bm90IGJ5dGVjb2Rl",
+      "expected": { "status": 1, "error": { "code": "JIMP-2001", "phase": "decode" } }
+    },
+    {
+      "id": "bytecode-malformed-metadata",
+      "contract": "bytecode",
+      "command": "check",
+      "fixture": "bytecode/minimal.jimp",
+      "prepare": "unsupported-format-version",
+      "expected": { "status": 1, "error": { "code": "JIMP-2001", "phase": "decode" } }
+    },
+    {
+      "id": "host-abi-capability-denial",
+      "contract": "host-abi",
+      "command": "check",
+      "fixture": "host-abi/denied.jimp",
+      "prepare": "denied-host-capability",
+      "expected": { "status": 1, "error": { "code": "JIMP-3001", "phase": "resolve" } }
+    },
+    {
+      "id": "standard-library-portable",
+      "contract": "standard-library",
+      "command": "run",
+      "fixture": "standard-library/portable.jimp",
+      "expected": { "status": 0, "stdout": "stdlib ready\n" }
+    },
+    {
+      "id": "target-profile-native",
+      "contract": "target-profile",
+      "command": "run",
+      "fixture": "target-profile/native.jimp",
+      "arguments": ["--target-profile=reference-native-i64"],
+      "expected": { "status": 0, "stdout": "native ready\n" }
+    },
+    {
+      "id": "target-profile-mismatch",
+      "contract": "target-profile",
+      "command": "check",
+      "fixture": "target-profile/native.jimp",
+      "prepare": "native-profile-bytecode",
+      "expected": { "status": 1, "error": { "code": "JIMP-3001", "phase": "resolve" } }
+    },
+    {
+      "id": "diagnostic-source-location",
+      "contract": "diagnostics",
+      "command": "run",
+      "fixture": "diagnostics/division-by-zero.jimp",
+      "expected": { "status": 1, "error": { "code": "JIMP-4001", "phase": "execute", "source": true } }
+    },
+    {
+      "id": "sandbox-call-stack",
+      "contract": "sandbox",
+      "command": "run",
+      "fixture": "sandbox/recursion.jimp",
+      "expected": { "status": 1, "error": { "code": "JIMP-4001", "phase": "execute", "messageIncludes": "Call stack limit" } }
+    },
+    {
+      "id": "runtime-version-mismatch",
+      "contract": "compatibility",
+      "command": "run",
+      "fixture": "bytecode/minimal.jimp",
+      "prepare": "incompatible-runtime",
+      "expected": { "status": 2, "error": { "code": "JIMP-0001", "phase": "usage" } }
+    }
+  ]
+}

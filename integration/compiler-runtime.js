@@ -17,6 +17,7 @@ import {
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const runtimeManifest = join(repositoryRoot, "runtime", "Cargo.toml");
 const compilerCli = join(repositoryRoot, "compiler", "src", "cli.js");
+const publicCli = join(repositoryRoot, "bin", "jimp.js");
 const portableMathSource = readFileSync(
   join(repositoryRoot, "stdlib", "src", "math", "i64.jimp"),
   "utf8",
@@ -55,6 +56,15 @@ function runBytecode(bytecode, runtimeArguments = []) {
   return spawnSync(runtimeBinary, [...runtimeArguments, bytecodePath], {
     cwd: repositoryRoot,
     encoding: "utf8",
+    windowsHide: true,
+  });
+}
+
+function runPublicCli(argumentsList, cwd = repositoryRoot, input) {
+  return spawnSync(process.execPath, [publicCli, ...argumentsList], {
+    cwd,
+    encoding: "utf8",
+    input,
     windowsHide: true,
   });
 }
@@ -225,6 +235,162 @@ test("reports compiler failures through the standard JSON error contract", () =>
     { cwd: repositoryRoot, encoding: "utf8", windowsHide: true },
   );
   assertStandardError(usageResult, "JIMP-0001", "usage", 2);
+});
+
+test("exposes the unified public command surface", () => {
+  const version = runPublicCli(["--version"], temporaryDirectory);
+  assert.equal(version.status, 0, version.stderr);
+  assert.equal(version.stdout.trim(), "jimp 0.1.0 runtime-protocol 1");
+
+  const help = runPublicCli(["--help"], temporaryDirectory);
+  assert.equal(help.status, 0, help.stderr);
+  for (const command of ["run", "compile", "check", "inspect", "init"]) {
+    assert.match(help.stdout, new RegExp(`jimp ${command}`));
+  }
+
+  const runtimeVersion = spawnSync(runtimeBinary, ["--version"], {
+    cwd: temporaryDirectory,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.equal(runtimeVersion.status, 0, runtimeVersion.stderr);
+  assert.equal(runtimeVersion.stdout.trim(), "jimp-runtime 0.1.0 protocol 1");
+});
+
+test("runs, checks, compiles, and inspects through public commands", () => {
+  const helloPath = join(repositoryRoot, "examples", "hello.jimp");
+  const runResult = runPublicCli(["run", helloPath], temporaryDirectory);
+  assert.equal(runResult.status, 0, runResult.stderr);
+  assert.equal(runResult.stdout.replaceAll("\r\n", "\n"), "Hello, JIMP!\n");
+
+  const checkResult = runPublicCli(["check", helloPath, `--runtime=${runtimeBinary}`], temporaryDirectory);
+  assert.equal(checkResult.status, 0, checkResult.stderr);
+  assert.match(checkResult.stdout, /Portable module valid and execution-ready/);
+  assert.doesNotMatch(checkResult.stdout, /Hello, JIMP!/);
+
+  const bytecodePath = join(temporaryDirectory, "public-command.jbc");
+  const compileResult = runPublicCli(["compile", helloPath, "-o", bytecodePath], temporaryDirectory);
+  assert.equal(compileResult.status, 0, compileResult.stderr);
+  const inspectResult = runPublicCli(["inspect", bytecodePath], temporaryDirectory);
+  assert.equal(inspectResult.status, 0, inspectResult.stderr);
+  assert.match(inspectResult.stdout, /JIMP Portable Bytecode/);
+  assert.match(inspectResult.stdout, /Build target: portable/);
+
+  const bytecodeCheck = runPublicCli([
+    "check",
+    bytecodePath,
+    "--target-profile=portable",
+    `--runtime=${runtimeBinary}`,
+  ], temporaryDirectory);
+  assert.equal(bytecodeCheck.status, 0, bytecodeCheck.stderr);
+});
+
+test("does not start runtime discovery when source compilation fails", () => {
+  const invalidPath = join(temporaryDirectory, "invalid-before-runtime.jimp");
+  writeFileSync(invalidPath, "var value = ;");
+  const result = runPublicCli([
+    "run",
+    invalidPath,
+    `--runtime=${join(temporaryDirectory, "missing-runtime")}`,
+    "--error-format=json",
+  ], temporaryDirectory);
+  const error = assertStandardError(result, "JIMP-1001", "compile");
+  assert.match(error.message, /invalid-before-runtime\.jimp/);
+});
+
+test("initializes a project without overwriting an existing directory", () => {
+  const projectPath = join(temporaryDirectory, "initialized-project");
+  const initialized = runPublicCli(["init", projectPath], temporaryDirectory);
+  assert.equal(initialized.status, 0, initialized.stderr);
+  assert.match(initialized.stdout, /Initialized JIMP project/);
+  const originalSource = readFileSync(join(projectPath, "main.jimp"), "utf8");
+
+  const executed = runPublicCli([
+    "run",
+    "main.jimp",
+    `--runtime=${runtimeBinary}`,
+  ], projectPath);
+  assert.equal(executed.status, 0, executed.stderr);
+  assert.equal(executed.stdout.replaceAll("\r\n", "\n"), "Hello from JIMP!\n");
+
+  const repeated = runPublicCli(["init", projectPath, "--error-format=json"], temporaryDirectory);
+  assertStandardError(repeated, "JIMP-0002", "io");
+  assert.equal(readFileSync(join(projectPath, "main.jimp"), "utf8"), originalSource);
+});
+
+test("executes every reviewed public example", () => {
+  const positiveExamples = [
+    "conditionals.jimp",
+    "expressions.jimp",
+    "functions.jimp",
+    "hello.jimp",
+    "loops.jimp",
+    "scalar-values.jimp",
+    "variables.jimp",
+    "modules/main.jimp",
+    "standard-library.jimp",
+  ];
+  for (const example of positiveExamples) {
+    const argumentsList = [
+      "run",
+      join(repositoryRoot, "examples", ...example.split("/")),
+      `--runtime=${runtimeBinary}`,
+    ];
+    if (example === "modules/main.jimp") {
+      argumentsList.push(`--project-root=${join(repositoryRoot, "examples", "modules")}`);
+    }
+    const result = runPublicCli(argumentsList, temporaryDirectory);
+    assert.equal(result.status, 0, `${example}: ${result.stderr}`);
+  }
+
+  const nativeResult = runPublicCli([
+    "run",
+    join(repositoryRoot, "examples", "standard-library.jimp"),
+    "--target-profile=reference-native-i64",
+    `--runtime=${runtimeBinary}`,
+  ], temporaryDirectory);
+  assert.equal(nativeResult.status, 0, nativeResult.stderr);
+  assert.equal(nativeResult.stdout.replaceAll("\r\n", "\n"), "Standard library: ready\n");
+
+  const errorResult = runPublicCli([
+    "run",
+    join(repositoryRoot, "examples", "errors", "division-by-zero.jimp"),
+    `--runtime=${runtimeBinary}`,
+    "--error-format=json",
+  ], temporaryDirectory);
+  const error = assertStandardError(errorResult, "JIMP-4001", "execute");
+  assert.match(error.message, /division by zero/i);
+});
+
+test("runs a source-buffer REPL through the public compiler and runtime pipeline", () => {
+  const session = [
+    'import { writeLine } from "std:console";',
+    'writeLine("discarded");',
+    ":undo",
+    'writeLine("REPL ready");',
+    ":show",
+    ":run",
+    ":clear",
+    ":show",
+    ":quit",
+    "",
+  ].join("\n");
+  const result = runPublicCli([
+    "repl",
+    `--project-root=${temporaryDirectory}`,
+    `--runtime=${runtimeBinary}`,
+  ], temporaryDirectory, session);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), [
+    "JIMP REPL 0.1 - source-buffer session. Type :help for commands.",
+    '1: import { writeLine } from "std:console";',
+    '2: writeLine("REPL ready");',
+    "REPL ready",
+    "Source buffer is empty.",
+    "",
+  ].join("\n"));
 });
 
 test("classifies runtime decode, verify, resolve, and execute failures", () => {

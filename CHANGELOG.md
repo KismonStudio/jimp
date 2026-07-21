@@ -84,6 +84,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Optional `.jbc` 2.6 build metadata for the target profile, standard-library major, entry module, and sorted target guarantees.
 - Independent Rust validation that build metadata matches the selected runtime target and cannot grant host authority.
 - Native `std.math.i64.*` reference capabilities with portable/native semantic and checked-overflow parity coverage.
+- Unified installable `jimp` CLI with `run`, `compile`, `check`, `inspect`, `init`, help, and version commands.
+- Deterministic compile-before-run temporary lifecycle with target and structured-error forwarding to the independently validating Rust runtime.
+- Package-controlled runtime discovery, explicit path/environment overrides, and an exact compiler/runtime version-protocol handshake.
+- Source-distributed npm package contents, optimized runtime build command, and isolated pack/install/build/run compatibility coverage.
+- Reviewed public examples for project modules, standard-library portable/native targets, structured failures, inspection, validation, and safe project initialization.
+- English P6 toolchain guide documenting installation, command behavior, runtime discovery, compatibility, and the no-overwrite initialization policy.
+- Windows and Linux quality/release workflows with locked runtime builds, platform-specific npm archives, SHA-256 checksums, artifact manifests, and generated release notes.
+- Pinned Rust 1.94.1 toolchain for reproducible CI and release-candidate inputs.
+- Public `jimp-conformance-v1` suite covering language, bytecode, Host ABI, standard-library, target-profile, diagnostics, sandbox, and compatibility contracts without compiler-internal imports.
+- Published compatibility matrix for bytecode 2.6, runtime protocol 1, Host ABI and standard-library major 1, target profiles, and structured diagnostics.
+- Source-buffer `jimp repl` sessions with explicit edit/run commands and fresh-VM execution through the normal compiler and runtime trust boundary.
 
 ### Fixed
 

@@ -1,8 +1,35 @@
 {
   "name": "jimp-language",
   "version": "0.1.0",
-  "private": true,
+  "description": "JIMP language compiler, bytecode inspector, and unified toolchain CLI",
+  "license": "MIT",
   "type": "module",
+  "bin": {
+    "jimp": "bin/jimp.js"
+  },
+  "files": [
+    "bin/",
+    "compiler/src/",
+    "conformance/",
+    "docs/COMPATIBILITY.md",
+    "docs/RELEASING.md",
+    "docs/REPL.md",
+    "docs/TOOLCHAIN.md",
+    "errors/",
+    "examples/",
+    "isa/",
+    "runtime/Cargo.lock",
+    "runtime/Cargo.toml",
+    "runtime/bin/",
+    "runtime/src/",
+    "sandbox/",
+    "stdlib/",
+    "targets/",
+    "tools/run-conformance.js",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "generate:isa": "node tools/generate-isa.js",
     "generate:sandbox": "node tools/generate-sandbox.js",
@@ -16,8 +43,13 @@
     "check:targets": "node tools/generate-targets.js --check",
     "test": "node --test",
     "test:integration": "node --test integration/compiler-runtime.js",
-    "check": "npm run check:isa && npm run check:sandbox && npm run check:errors && npm run check:stdlib && npm run check:targets && npm test && npm run test:integration && cargo fmt --manifest-path runtime/Cargo.toml -- --check && cargo clippy --manifest-path runtime/Cargo.toml -- -D warnings && cargo test --manifest-path runtime/Cargo.toml",
-    "compile": "node compiler/src/cli.js"
+    "test:package": "node --test integration/package-install.js",
+    "test:conformance": "node tools/run-conformance.js",
+    "build:runtime": "cargo build --release --manifest-path runtime/Cargo.toml",
+    "package:release": "node tools/package-release.js",
+    "check": "npm run check:isa && npm run check:sandbox && npm run check:errors && npm run check:stdlib && npm run check:targets && npm test && npm run test:integration && npm run test:conformance && npm run test:package && cargo fmt --manifest-path runtime/Cargo.toml -- --check && cargo clippy --manifest-path runtime/Cargo.toml -- -D warnings && cargo test --manifest-path runtime/Cargo.toml",
+    "compile": "node bin/jimp.js compile",
+    "jimp": "node bin/jimp.js"
   },
   "engines": {
     "node": ">=20"

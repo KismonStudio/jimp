@@ -1,0 +1,5 @@
+recurse();
+
+function recurse(): VOID {
+  recurse();
+}

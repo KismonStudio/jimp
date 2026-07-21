@@ -1,0 +1,9 @@
+import { writeLine } from "std:console";
+
+function double(value: I64): I64 {
+  return value * 2;
+}
+
+if double(21) == 42 {
+  writeLine("42");
+}

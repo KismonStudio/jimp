@@ -16,6 +16,8 @@ mod host;
 mod portable;
 mod vm;
 
+const RUNTIME_PROTOCOL_VERSION: u32 = 1;
+
 #[derive(Clone, Copy)]
 enum ErrorFormat {
     Human,
@@ -178,6 +180,13 @@ fn report_and_exit(error: JimpError, format: ErrorFormat) -> ! {
 
 fn main() {
     let raw_arguments: Vec<String> = env::args().skip(1).collect();
+    if raw_arguments.as_slice() == ["--version"] {
+        println!(
+            "jimp-runtime {} protocol {RUNTIME_PROTOCOL_VERSION}",
+            env!("CARGO_PKG_VERSION")
+        );
+        return;
+    }
     let json_option_count = raw_arguments
         .iter()
         .filter(|argument| argument.as_str() == "--error-format=json")

@@ -1,0 +1,7 @@
+import { write, writeLine } from "std:console";
+import { absolute, maximum, minimum, sign } from "std:math/i64";
+
+write("Standard library: ");
+if absolute(-7) == 7 && maximum(3, 9) == 9 && minimum(3, 9) == 3 && sign(-4) == -1 {
+  writeLine("ready");
+}

@@ -1,0 +1,6 @@
+import { double } from "./math.jimp";
+import { writeLine } from "std:console";
+
+if double(21) == 42 {
+  writeLine("Project modules executed");
+}

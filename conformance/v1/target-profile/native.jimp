@@ -1,0 +1,6 @@
+import { writeLine } from "std:console";
+import { absolute } from "std:math/i64";
+
+if absolute(-7) == 7 {
+  writeLine("native ready");
+}

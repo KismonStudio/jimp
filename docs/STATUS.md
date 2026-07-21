@@ -5,7 +5,7 @@
 
 This document tracks the JIMP implementation. The conceptual project definition lives under `docs/specs`; this file records only executable work and the subsequent delivery plan.
 
-## Current milestone: P5 complete; P6 developer toolchain planned
+## Current milestone: P6 developer toolchain complete; P7 planned
 
 The project has a complete, tested path from source code to execution:
 
@@ -56,6 +56,13 @@ factorial(count);
 - [x] Independent Cargo manifest for the runtime.
 - [x] Minimal example at `examples/hello.jimp`.
 - [x] Generated artifacts (`*.jbc` and `runtime/target/`) ignored by Git.
+- [x] Installable `jimp` binary entry with unified run, compile, check, inspect, init, help, and version commands.
+- [x] Source-distributed reference runtime with an optimized build command and controlled discovery.
+- [x] Reviewed, publicly executable examples and a non-overwriting project template.
+- [x] Windows and Linux quality/release workflows with a pinned Rust toolchain and locked dependencies.
+- [x] Versioned platform archives with bundled runtimes, checksums, manifests, and generated release notes.
+- [x] Public versioned conformance suite and exact compatibility matrix.
+- [x] Source-buffer REPL that reuses the normal compiler/runtime pipeline.
 
 ### Compiler
 
@@ -147,6 +154,10 @@ factorial(count);
 - [x] Generated cross-language error-code contract with English and Portuguese specifications.
 - [x] End-to-end JSON error coverage for compiler, decode, verification, and execution failures.
 - [x] Cross-language module-and-line coverage from compiler lowering through Rust runtime diagnostics.
+- [x] Public-command coverage for compilation-before-runtime, temporary cleanup, runtime discovery, project initialization, every reviewed example, and structured failures.
+- [x] Isolated npm pack/install/runtime-build/run coverage outside the repository, including version-handshake rejection.
+- [x] Release-package installation and public conformance execution with no compiler-internal imports.
+- [x] REPL integration coverage through the independent Rust runtime.
 
 ## Next tasks
 
@@ -228,29 +239,35 @@ P5 acceptance criterion: a multi-file entry program can import project functions
 
 P6 turns the validated compiler/runtime foundation into a toolchain that can be installed and used through one consistent command surface. It does not expand the language semantics or weaken the existing compiler/runtime trust boundary.
 
-1. [ ] Add a unified `jimp` command surface.
+1. [x] Add a unified `jimp` command surface.
    - Provide `jimp run`, `jimp compile`, `jimp inspect`, and `jimp check` with consistent option parsing, exit codes, human diagnostics, and `--error-format=json` behavior.
    - `jimp run` must compile through the existing project resolver, execute the selected Rust runtime, forward standard-library and target-profile options explicitly, and clean up temporary output deterministically.
    - Acceptance criterion: a source project can be compiled, inspected, validated, or executed without invoking Node.js and Cargo commands separately; compilation failures never start the runtime.
-2. [ ] Package the CLI and define runtime discovery.
+   - Implemented with public `run`, `compile`, `check`, `inspect`, `init`, `--help`, and `--version` commands; deterministic temporary cleanup; runtime option forwarding; and end-to-end structured-error tests.
+2. [x] Package the CLI and define runtime discovery.
    - Expose an installable CLI entry point, define the supported compiler/runtime version handshake, support an explicit runtime-path override, and reject missing or incompatible runtimes with an actionable diagnostic.
    - Installation must not perform an undeclared network download or silently select an arbitrary executable from the working directory.
    - Acceptance criterion: a clean supported environment can install the toolchain and run `jimp --version` and `jimp run examples/hello.jimp` from outside the repository.
-3. [ ] Build a practical examples and project-start workflow.
+   - Implemented with an npm `bin` entry, source-package allowlist, explicit runtime override, controlled discovery order, exact version/protocol handshake, release-runtime build script, and an isolated package/install/build/run integration test.
+3. [x] Build a practical examples and project-start workflow.
    - Add reviewed examples for functions, loops, project modules, `std:console`, portable `std:math/i64`, native target selection, structured errors, and bytecode inspection.
    - Add a minimal project template or `jimp init` only after its generated layout and overwrite policy are specified.
    - Acceptance criterion: every documented example is executed by automated tests and uses only public commands and supported source syntax.
-4. [ ] Add cross-platform CI and release artifacts.
+   - Implemented with reviewed scalar, control-flow, module, standard-library, native-target, inspection, validation, and structured-error examples plus a non-overwriting `jimp init` template whose partial output is rolled back on failure.
+4. [x] Add cross-platform CI and release artifacts.
    - Run the complete quality gate on supported Windows and Linux versions, build runtime artifacts reproducibly, and publish versioned checksums and release notes.
    - Define which components require Node.js at development time and which artifacts are sufficient for execution.
    - Acceptance criterion: release candidates pass the same compiler, integration, generated-artifact, Rust format, lint, and runtime tests on every supported platform.
-5. [ ] Establish a versioned conformance suite and compatibility matrix.
+   - Implemented with Windows/Linux quality and tag-release workflows, locked release builds, platform npm archives bundling the matching runtime, SHA-256 checksums, machine-readable manifests, generated release notes, and explicit compiler/runtime artifact documentation.
+5. [x] Establish a versioned conformance suite and compatibility matrix.
    - Separate language, bytecode, Host ABI, standard-library, target-profile, and diagnostic fixtures so alternate implementations can validate one contract at a time.
    - Include positive programs, required rejection cases, deterministic output, sandbox limits, malformed metadata, capability denial, and compiler/runtime version mismatches.
    - Acceptance criterion: a release artifact can run the conformance suite without repository-internal APIs, and the supported `.jbc`, standard-library, and target-profile versions are published explicitly.
-6. [ ] Evaluate an interactive REPL after the unified runner is stable.
+   - Implemented with a public-CLI-only `jimp-conformance-v1` runner, contract-separated fixtures, deterministic repetitions, negative pre-effect checks, published exact compatibility versions, and packaged execution support.
+6. [x] Evaluate an interactive REPL after the unified runner is stable.
    - Specify whether state persists as source declarations, linked modules, or runtime values before implementing the REPL.
    - Acceptance criterion: if approved, the REPL must use the same parser, analyzer, linker, runtime validation, capability policy, and error contracts as file execution.
+   - Implemented as an explicit source-buffer session with `:run`, `:show`, `:undo`, `:clear`, `:help`, and exit commands; every run recompiles and executes through the existing project and runtime pipeline in a fresh VM, with no hidden runtime-value persistence.
 
 P6 acceptance criterion: a user can install a versioned JIMP toolchain, execute a documented project with one command, inspect or validate its `.jbc`, receive consistent diagnostics, and reproduce the same behavior on every supported platform.
 
@@ -301,7 +318,7 @@ P7 acceptance criterion: JIMP can safely represent and manipulate typed aggregat
 | Error contract            | Generated `jimp-error-v1` codes with human and one-line JSON CLI output          |
 | Source modules            | Acyclic relative imports and named function exports, statically linked           |
 | Standard library          | Versioned `std:` catalog with validated portable fallbacks and target-only native replacements |
-| Planned distribution      | Unified versioned CLI with explicit runtime discovery and no silent downloads       |
+| Distribution              | Platform archives with unified CLI, bundled runtime, checksums, and conformance suite |
 | Planned aggregate model   | Must be specified bilingually before choosing representation, ownership, or syntax  |
 | Future domain APIs        | Standard-library and Host ABI capabilities, never source keywords or domain opcodes  |
 | Security boundary         | VM-level validation and capability confinement; OS/process isolation remains external |
@@ -311,9 +328,11 @@ P7 acceptance criterion: JIMP can safely represent and manipulate typed aggregat
 
 ```powershell
 npm run check
-node compiler/src/cli.js compile examples/functions.jimp -o functions.jbc
-node compiler/src/cli.js inspect functions.jbc
-cargo run --manifest-path runtime/Cargo.toml -- functions.jbc
+npm run build:runtime
+npm run jimp -- run examples/functions.jimp
+npm run jimp -- compile examples/functions.jimp -o functions.jbc
+npm run jimp -- inspect functions.jbc
+npm run jimp -- check functions.jbc
 ```
 
-The final command must print `factorial(5) == 120`.
+The run command must print `factorial(5) == 120`; the check command must validate without executing it.

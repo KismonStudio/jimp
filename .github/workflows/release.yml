@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            runtime: runtime/target/release/jimp-runtime
+          - os: windows-latest
+            platform: windows-x64
+            runtime: runtime/target/release/jimp-runtime.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: rustup toolchain install 1.94.1 --profile minimal --component rustfmt,clippy
+      - run: rustup default 1.94.1
+      - run: npm ci
+      - name: Verify release tag
+        run: node -e "const p=require('./package.json'); if (process.env.GITHUB_REF_NAME !== 'v'+p.version) process.exit(1)"
+      - run: npm run check
+      - run: cargo build --locked --release --manifest-path runtime/Cargo.toml
+      - run: node tools/package-release.js --platform=${{ matrix.platform }} --runtime=${{ matrix.runtime }} --output=release-artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jimp-${{ matrix.platform }}
+          path: release-artifacts/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: jimp-*
+          path: release-artifacts
+          merge-multiple: true
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" release-artifacts/* --generate-notes --verify-tag
