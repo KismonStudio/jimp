@@ -34,11 +34,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Checked `I64` arithmetic, IEEE 754 `F64` operations, and runtime diagnostics for overflow and zero divisors.
 - Temporary-register reuse while lowering expression trees.
 - Braced, nestable `if`/`else` blocks with mandatory `BOOL` conditions and block-local declarations.
-- Generic forward `JUMP`, `JUMP_IF_FALSE`, and `JUMP_IF_TRUE` instructions with function-relative targets.
-- Control-flow verification for instruction boundaries, forward-only targets, reachability, and register types on every incoming path.
+- Generic `JUMP`, `JUMP_IF_FALSE`, and `JUMP_IF_TRUE` instructions with function-relative targets.
+- Control-flow verification for instruction boundaries, reachability, and register types on every incoming path.
 - Conditional execution and short-circuit coverage across the JavaScript compiler and Rust runtime.
 - Flow-sensitive conditional type joins that allow mutable variables to converge to a new type when all paths agree.
 - Compiler and integration coverage for convergent, divergent, and implicit no-`else` type paths.
+- Top-level functions with explicit parameter and return types, forward calls, recursion, isolated scopes, and exact call-contract analysis.
+- `return` statements with complete-path validation for value-returning functions and implicit returns for `VOID` functions.
+- Generic typed `CALL` and `RETURN` instructions with independently verified call contracts in JavaScript and Rust.
+- Rust VM call frames with argument transfer, return destinations, and recursive execution.
+- `while` loops with nested `break` and `continue` support lowered to generic backward branches.
+- Fixed-point control-flow type verification for cyclic instruction graphs.
+- Runtime safeguards of 1,000,000 execution steps and 1024 simultaneous call frames.
+- Function and loop examples plus end-to-end coverage for recursion, loop control, and limit failures.
+- Machine-readable `jimp-reference-sandbox` v1 limits with generated JavaScript, Rust, English, and Portuguese artifacts.
+- Pre-allocation limits for module size, sections, constants, UTF-8 strings, symbols, host imports, functions, parameters, code, decoded instructions, registers, and type-flow analysis.
+- Runtime accounting for active registers and logical value memory across frames, string values, calls, and returns.
+- Independent JavaScript and Rust tests for load, verification, stack, memory, and execution-step budgets.
+- Machine-readable `jimp-error-v1` definitions with generated JavaScript, Rust, English, and Portuguese artifacts.
+- Stable error codes for CLI usage, I/O, compilation, bytecode decoding and verification, host-import resolution, execution, and unexpected internal failures.
+- Optional source-line and bytecode-offset locations in standard diagnostics.
+- One-line JSON diagnostics through `--error-format=json` in the compiler, inspector, and runtime CLIs.
+- End-to-end structured-error coverage across compiler and runtime phases.
+- Optional `.jbc` debug section mapping global instruction offsets to one-based source lines.
+- Compiler emission and inspector display of source-line mappings for every generated instruction.
+- Independent JavaScript and Rust validation for debug-section flags, versions, ordering, source lines, and instruction boundaries.
+- Runtime execution diagnostics enriched with the mapped source line of the failing instruction.
+- End-to-end coverage carrying source locations from `.jimp` compilation into Rust JSON errors.
 
 ### Fixed
 
@@ -49,12 +71,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Runtime decoding and verification now complete before VM execution begins.
 - Console effects are isolated behind a host interface and are unavailable to the bytecode decoder.
 - Runtime code is separated into portable decoding, VM, and host modules.
-- The active compiler and runtime now use portable `.jbc` format `2.2`; legacy format `1` and portable formats `2.0` and `2.1` are no longer accepted.
+- The active compiler and runtime now use portable `.jbc` format `2.5`; legacy format `1` and portable formats `2.0` through `2.4` are no longer accepted.
 - Source-level `print` is lowered to `LOAD_CONST` plus the typed `std.console.write` host import instead of a hardcoded VM opcode.
 - Host effects are dispatched through resolved numeric capability handles and runtime-checked value arrays.
 - The bytecode inspector now disassembles the portable module structure and generic ISA instructions.
 - `print` now accepts any expression statically resolved as `STRING` while remaining a compiler lowering to host calls.
 - Rust portable verification now separates structural instruction decoding from control-flow type propagation, avoiding dependence on physical branch layout.
+- Jump targets may now point backward, while every encoded instruction must remain reachable and type-safe on all incoming paths.
+- Host-call arguments are borrowed directly and function returns move values between frames, avoiding redundant VM-side string copies.
+- Compiler, inspector, and runtime CLI failures now share one human-readable error layout and consistent usage/error exit codes.
 
 ## [0.1.0] - 2026-07-17
 

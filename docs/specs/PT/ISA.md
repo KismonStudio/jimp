@@ -1,10 +1,10 @@
 # VM Portátil JIMP v1 — Referência Gerada da ISA
 
-[English version](../EN/ISA.md)
+[Versão em inglês](../EN/ISA.md)
 
 > Este arquivo é gerado a partir de [`isa/v1.json`](../../../isa/v1.json). Não o edite manualmente.
 
-- Versão do formato: `2.2`
+- Versão do formato: `2.5`
 - Ordem dos bytes: `little-endian`
 - Tamanho do opcode: `1 byte`
 - `NO_REGISTER`: `65535` (`0xffff`)
@@ -42,7 +42,9 @@
 | `30` | `BOOL_NOT` | `destination: register (u16)`<br>`operand: register (u16)` | Calcula a negação booleana. |
 | `31` | `BOOL_AND` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Calcula a conjunção booleana com avaliação imediata. |
 | `32` | `BOOL_OR` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Calcula a disjunção booleana com avaliação imediata. |
-| `40` | `JUMP` | `target: code_offset (u32)` | Continua a execucao em um offset de instrucao posterior na funcao atual. |
-| `41` | `JUMP_IF_FALSE` | `condition: register (u16)`<br>`target: code_offset (u32)` | Desvia para frente quando uma condicao booleana e falsa. |
-| `42` | `JUMP_IF_TRUE` | `condition: register (u16)`<br>`target: code_offset (u32)` | Desvia para frente quando uma condicao booleana e verdadeira. |
+| `40` | `JUMP` | `target: code_offset (u32)` | Continua a execucao em um offset de instrucao na funcao atual. |
+| `41` | `JUMP_IF_FALSE` | `condition: register (u16)`<br>`target: code_offset (u32)` | Desvia quando uma condicao booleana e falsa. |
+| `42` | `JUMP_IF_TRUE` | `condition: register (u16)`<br>`target: code_offset (u32)` | Desvia quando uma condicao booleana e verdadeira. |
+| `50` | `CALL` | `function: function_index (u32)`<br>`argument_start: register (u16)`<br>`argument_count: register_count (u16)`<br>`result: optional_register (u16)` | Invoca uma funcao tipada usando registradores de argumento consecutivos. |
+| `51` | `RETURN` | `result: optional_register (u16)` | Retorna da funcao atual com um valor opcional. |
 | `255` | `HALT` | — | Encerra a função de entrada com sucesso. |

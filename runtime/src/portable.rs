@@ -1,8 +1,16 @@
-use crate::generated::isa::{
-    FORMAT_MAJOR, FORMAT_MINOR, INSTRUCTIONS, NO_REGISTER, OPERAND_TYPES, Opcode, OperandEncoding,
-    ValueType,
+use crate::generated::{
+    isa::{
+        FORMAT_MAJOR, FORMAT_MINOR, INSTRUCTIONS, NO_REGISTER, OPERAND_TYPES, Opcode,
+        OperandEncoding, ValueType,
+    },
+    sandbox::{
+        MAX_CODE_BYTES, MAX_CONSTANT_STRING_BYTES, MAX_CONSTANTS, MAX_FUNCTIONS, MAX_HOST_IMPORTS,
+        MAX_MODULE_BYTES, MAX_PARAMETERS, MAX_REGISTERS_PER_FUNCTION, MAX_SECTION_COUNT,
+        MAX_SYMBOL_BYTES, MAX_TOTAL_CONSTANT_STRING_BYTES, MAX_TOTAL_INSTRUCTIONS,
+        MAX_VERIFICATION_TYPE_CELLS,
+    },
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 const MAGIC: &[u8; 4] = b"JIMP";
 const HEADER_SIZE: usize = 20;
@@ -13,6 +21,7 @@ const HOST_IMPORTS: u16 = 2;
 const FUNCTIONS: u16 = 3;
 const CODE: u16 = 4;
 const DEBUG: u16 = 5;
+const DEBUG_VERSION: u16 = 1;
 const NO_NAME: u32 = u32::MAX;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,7 +61,7 @@ pub(crate) struct HostImport {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Function {
-    pub(crate) name: Option<String>,
+    pub(crate) name: Option<u32>,
     pub(crate) code_offset: u32,
     pub(crate) code_length: u32,
     pub(crate) register_count: u16,
@@ -67,6 +76,13 @@ pub(crate) struct PortableModule {
     pub(crate) imports: Vec<HostImport>,
     pub(crate) functions: Vec<Function>,
     pub(crate) code: Vec<u8>,
+    pub(crate) debug: Vec<DebugMapping>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct DebugMapping {
+    pub(crate) code_offset: u32,
+    pub(crate) source_line: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,12 +123,23 @@ pub(crate) enum Instruction {
         argument_count: usize,
         result: Option<usize>,
     },
+    Call {
+        function: usize,
+        argument_start: usize,
+        argument_count: usize,
+        result: Option<usize>,
+    },
+    Return {
+        result: Option<usize>,
+    },
     Halt,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct VerifiedFunction {
     pub(crate) register_count: usize,
+    pub(crate) parameter_types: Vec<ValueType>,
+    pub(crate) return_type: ValueType,
     pub(crate) instructions: Vec<Instruction>,
 }
 
@@ -122,6 +149,7 @@ pub(crate) struct VerifiedPortableModule {
     pub(crate) constants: Vec<Value>,
     pub(crate) imports: Vec<HostImport>,
     pub(crate) functions: Vec<VerifiedFunction>,
+    pub(crate) source_lines: Vec<Vec<Option<u32>>>,
 }
 
 struct Cursor<'a> {
@@ -208,7 +236,13 @@ fn decode_constants(section: Section<'_>) -> Result<Vec<Value>, String> {
     let mut cursor = Cursor::new(section.payload, section.offset);
     let count = usize::try_from(cursor.read_u32("constant count")?)
         .map_err(|_| "Constant count is not supported on this platform.")?;
+    if count > MAX_CONSTANTS {
+        return Err(format!(
+            "Constant count exceeds the sandbox limit of {MAX_CONSTANTS}."
+        ));
+    }
     let mut constants = Vec::with_capacity(count.min(section.payload.len()));
+    let mut total_string_bytes = 0_usize;
     for index in 0..count {
         let tag = cursor.read_u8(&format!("constant {index} tag"))?;
         let kind = value_type(tag, &format!("Constant {index}"), true, false)?;
@@ -231,6 +265,19 @@ fn decode_constants(section: Section<'_>) -> Result<Vec<Value>, String> {
                 let length =
                     usize::try_from(cursor.read_u32(&format!("constant {index} string length"))?)
                         .map_err(|_| format!("Constant {index} string is too large."))?;
+                if length > MAX_CONSTANT_STRING_BYTES {
+                    return Err(format!(
+                        "Constant {index} exceeds the sandbox string limit of {MAX_CONSTANT_STRING_BYTES} UTF-8 bytes."
+                    ));
+                }
+                total_string_bytes = total_string_bytes
+                    .checked_add(length)
+                    .ok_or("Constant string byte count overflow.")?;
+                if total_string_bytes > MAX_TOTAL_CONSTANT_STRING_BYTES {
+                    return Err(format!(
+                        "Constant strings exceed the sandbox aggregate limit of {MAX_TOTAL_CONSTANT_STRING_BYTES} UTF-8 bytes."
+                    ));
+                }
                 let bytes = cursor
                     .read_exact(length, &format!("constant {index} string"))?
                     .to_vec();
@@ -253,23 +300,39 @@ fn string_constant<'a>(
     context: &str,
 ) -> Result<&'a str, String> {
     let index = usize::try_from(index).map_err(|_| format!("{context} is out of range."))?;
-    constants
+    let value = constants
         .get(index)
         .and_then(Value::string)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| format!("{context} must reference a non-empty string constant."))
+        .ok_or_else(|| format!("{context} must reference a non-empty string constant."))?;
+    if value.len() > MAX_SYMBOL_BYTES {
+        return Err(format!(
+            "{context} exceeds the sandbox symbol limit of {MAX_SYMBOL_BYTES} UTF-8 bytes."
+        ));
+    }
+    Ok(value)
 }
 
 fn decode_imports(section: Section<'_>, constants: &[Value]) -> Result<Vec<HostImport>, String> {
     let mut cursor = Cursor::new(section.payload, section.offset);
     let count = usize::try_from(cursor.read_u32("host import count")?)
         .map_err(|_| "Host import count is not supported on this platform.")?;
+    if count > MAX_HOST_IMPORTS {
+        return Err(format!(
+            "Host import count exceeds the sandbox limit of {MAX_HOST_IMPORTS}."
+        ));
+    }
     let mut imports = Vec::with_capacity(count.min(section.payload.len()));
     for index in 0..count {
         let namespace_index = cursor.read_u32(&format!("host import {index} namespace"))?;
         let name_index = cursor.read_u32(&format!("host import {index} name"))?;
         let parameter_count =
             usize::from(cursor.read_u16(&format!("host import {index} parameter count"))?);
+        if parameter_count > MAX_PARAMETERS {
+            return Err(format!(
+                "Host import {index} parameter count exceeds the sandbox limit of {MAX_PARAMETERS}."
+            ));
+        }
         let return_type = value_type(
             cursor.read_u8(&format!("host import {index} return type"))?,
             &format!("Host import {index} return type"),
@@ -312,14 +375,29 @@ fn decode_functions(
     let mut cursor = Cursor::new(section.payload, section.offset);
     let count = usize::try_from(cursor.read_u32("function count")?)
         .map_err(|_| "Function count is not supported on this platform.")?;
+    if count > MAX_FUNCTIONS {
+        return Err(format!(
+            "Function count exceeds the sandbox limit of {MAX_FUNCTIONS}."
+        ));
+    }
     let mut functions = Vec::with_capacity(count.min(section.payload.len()));
     for index in 0..count {
         let name_index = cursor.read_u32(&format!("function {index} name"))?;
         let code_offset = cursor.read_u32(&format!("function {index} code offset"))?;
         let code_length_u32 = cursor.read_u32(&format!("function {index} code length"))?;
         let register_count = cursor.read_u16(&format!("function {index} register count"))?;
+        if usize::from(register_count) > MAX_REGISTERS_PER_FUNCTION {
+            return Err(format!(
+                "Function {index} register count exceeds the sandbox limit of {MAX_REGISTERS_PER_FUNCTION}."
+            ));
+        }
         let parameter_count =
             usize::from(cursor.read_u16(&format!("function {index} parameter count"))?);
+        if parameter_count > MAX_PARAMETERS {
+            return Err(format!(
+                "Function {index} parameter count exceeds the sandbox limit of {MAX_PARAMETERS}."
+            ));
+        }
         let return_type = value_type(
             cursor.read_u8(&format!("function {index} return type"))?,
             &format!("Function {index} return type"),
@@ -356,10 +434,8 @@ fn decode_functions(
         let name = if name_index == NO_NAME {
             None
         } else {
-            Some(
-                string_constant(constants, name_index, &format!("Function {index} name"))?
-                    .to_owned(),
-            )
+            string_constant(constants, name_index, &format!("Function {index} name"))?;
+            Some(name_index)
         };
         functions.push(Function {
             name,
@@ -403,6 +479,58 @@ fn decode_functions(
         return Err("Unreferenced bytes follow the final function.".into());
     }
     Ok(functions)
+}
+
+fn decode_debug(
+    section: Option<Section<'_>>,
+    code_length: usize,
+) -> Result<Vec<DebugMapping>, String> {
+    let Some(section) = section else {
+        return Ok(Vec::new());
+    };
+    if section.flags != SECTION_OPTIONAL {
+        return Err("Debug section must be optional.".into());
+    }
+    let mut cursor = Cursor::new(section.payload, section.offset);
+    if cursor.read_u16("debug version")? != DEBUG_VERSION {
+        return Err("Unsupported debug metadata version.".into());
+    }
+    if cursor.read_u16("debug flags")? != 0 {
+        return Err("Debug flags must be zero.".into());
+    }
+    let count = usize::try_from(cursor.read_u32("debug mapping count")?)
+        .map_err(|_| "Debug mapping count is unsupported.".to_owned())?;
+    if count > MAX_TOTAL_INSTRUCTIONS {
+        return Err(format!(
+            "Debug mapping count exceeds the sandbox instruction limit of {MAX_TOTAL_INSTRUCTIONS}."
+        ));
+    }
+    let mut mappings = Vec::with_capacity(count.min(section.payload.len() / 8));
+    let mut previous_offset = None;
+    for index in 0..count {
+        let code_offset = cursor.read_u32(&format!("debug mapping {index} code offset"))?;
+        let source_line = cursor.read_u32(&format!("debug mapping {index} source line"))?;
+        if previous_offset.is_some_and(|previous| code_offset <= previous) {
+            return Err("Debug mapping code offsets must be strictly increasing.".into());
+        }
+        if usize::try_from(code_offset).map_or(true, |offset| offset >= code_length) {
+            return Err(format!(
+                "Debug mapping {index} code offset is outside the code section."
+            ));
+        }
+        if source_line == 0 {
+            return Err(format!(
+                "Debug mapping {index} source line must be one-based."
+            ));
+        }
+        mappings.push(DebugMapping {
+            code_offset,
+            source_line,
+        });
+        previous_offset = Some(code_offset);
+    }
+    cursor.finish("debug section")?;
+    Ok(mappings)
 }
 
 fn decode_instruction_operands(
@@ -457,15 +585,19 @@ fn opcode_name(opcode: Opcode) -> &'static str {
 fn merge_register_types(
     destination: &mut Option<Vec<Option<ValueType>>>,
     incoming: &[Option<ValueType>],
-) {
+) -> bool {
     if let Some(existing) = destination {
+        let mut changed = false;
         for (current, candidate) in existing.iter_mut().zip(incoming) {
-            if *current != *candidate {
+            if current.is_some() && *current != *candidate {
                 *current = None;
+                changed = true;
             }
         }
+        changed
     } else {
         *destination = Some(incoming.to_vec());
+        true
     }
 }
 
@@ -481,11 +613,16 @@ fn verify_instruction_flow(
     }
     let mut incoming = vec![None; instructions.len()];
     incoming[0] = Some(initial);
+    let mut worklist = VecDeque::from([0]);
+    let mut queued = vec![false; instructions.len()];
+    queued[0] = true;
 
-    for (index, instruction) in instructions.iter().enumerate() {
-        let mut types = incoming[index].clone().ok_or_else(|| {
-            format!("Function {function_index} instruction {index} is unreachable.")
-        })?;
+    while let Some(index) = worklist.pop_front() {
+        queued[index] = false;
+        let instruction = &instructions[index];
+        let mut types = incoming[index]
+            .clone()
+            .expect("worklist contains only reachable instructions");
 
         match *instruction {
             Instruction::LoadConst {
@@ -588,18 +725,67 @@ fn verify_instruction_flow(
                     types[destination] = Some(host_import.return_type);
                 }
             }
+            Instruction::Call {
+                function: called_function,
+                argument_start,
+                argument_count,
+                result,
+            } => {
+                let signature = &module.functions[called_function];
+                for (argument, expected) in types[argument_start..argument_start + argument_count]
+                    .iter()
+                    .zip(&signature.parameter_types)
+                {
+                    if *argument != Some(*expected) {
+                        return Err(
+                            "CALL argument type must match on every control-flow path.".into()
+                        );
+                    }
+                }
+                if let Some(destination) = result {
+                    types[destination] = Some(signature.return_type);
+                }
+            }
+            Instruction::Return { result } => {
+                match (function.return_type, result) {
+                    (ValueType::Void, None) => {}
+                    (ValueType::Void, Some(_)) => {
+                        return Err("A VOID function RETURN must not contain a value.".into());
+                    }
+                    (expected, Some(register)) if types[register] == Some(expected) => {}
+                    (expected, Some(_)) => {
+                        return Err(format!("RETURN value must have type {expected:?}."));
+                    }
+                    (_, None) => {
+                        return Err("A value-returning function must return a value.".into());
+                    }
+                }
+                continue;
+            }
             Instruction::Halt => continue,
         }
 
-        match *instruction {
+        let successors: Vec<usize> = match *instruction {
             Instruction::Jump { target } => {
-                merge_register_types(&mut incoming[target], &types);
+                vec![target]
             }
             Instruction::JumpIfFalse { target, .. } | Instruction::JumpIfTrue { target, .. } => {
-                merge_register_types(&mut incoming[index + 1], &types);
-                merge_register_types(&mut incoming[target], &types);
+                vec![index + 1, target]
             }
-            _ => merge_register_types(&mut incoming[index + 1], &types),
+            _ => vec![index + 1],
+        };
+        for successor in successors {
+            if merge_register_types(&mut incoming[successor], &types) && !queued[successor] {
+                worklist.push_back(successor);
+                queued[successor] = true;
+            }
+        }
+    }
+    for (index, state) in incoming.iter().enumerate() {
+        if state.is_none() {
+            return Err(format!(
+                "Function {function_index} instruction {index} is unreachable."
+            ));
         }
     }
     Ok(())
@@ -609,7 +795,10 @@ fn verify_function(
     module: &PortableModule,
     function: &Function,
     function_index: usize,
-) -> Result<VerifiedFunction, String> {
+    total_instruction_count: &mut usize,
+    debug: &HashMap<u32, u32>,
+    matched_debug_mappings: &mut usize,
+) -> Result<(VerifiedFunction, Vec<Option<u32>>), String> {
     let register_count = usize::from(function.register_count);
     if function.parameter_types.len() > register_count {
         return Err(format!(
@@ -629,9 +818,17 @@ fn verify_function(
     let mut cursor = Cursor::new(function_code, code_start);
     let mut instructions = Vec::new();
     let mut instruction_offsets = Vec::new();
-    let mut halted = false;
+    let is_entry = usize::try_from(module.entry_function).ok() == Some(function_index);
 
     while cursor.offset < function_code.len() {
+        *total_instruction_count = total_instruction_count
+            .checked_add(1)
+            .ok_or("Instruction count overflow.")?;
+        if *total_instruction_count > MAX_TOTAL_INSTRUCTIONS {
+            return Err(format!(
+                "Instruction count exceeds the sandbox limit of {MAX_TOTAL_INSTRUCTIONS}."
+            ));
+        }
         let instruction_offset = cursor.offset;
         let encoded_opcode =
             cursor.read_u8(&format!("function {function_index} instruction opcode"))?;
@@ -791,20 +988,105 @@ fn verify_function(
                     result,
                 }
             }
-            Opcode::Halt => {
-                if cursor.offset != function_code.len() {
-                    return Err("HALT must be the final instruction of a function.".into());
+            Opcode::Call => {
+                let called_function = usize::try_from(operands[0])
+                    .map_err(|_| "CALL function index is out of range.".to_owned())?;
+                let signature = module
+                    .functions
+                    .get(called_function)
+                    .ok_or("CALL function index is out of range.")?;
+                if called_function == usize::try_from(module.entry_function).unwrap_or(usize::MAX) {
+                    return Err("CALL cannot invoke the entry function.".into());
                 }
-                halted = true;
+                let argument_start = usize::try_from(operands[1])
+                    .map_err(|_| "CALL argument start is out of range.".to_owned())?;
+                let argument_count = usize::try_from(operands[2])
+                    .map_err(|_| "CALL argument count is out of range.".to_owned())?;
+                if argument_count != signature.parameter_types.len() {
+                    return Err("CALL argument count does not match the function signature.".into());
+                }
+                if argument_count == 0 {
+                    if argument_start != 0 {
+                        return Err(
+                            "CALL with no arguments must use register zero as its argument start."
+                                .into(),
+                        );
+                    }
+                } else {
+                    let argument_end = argument_start
+                        .checked_add(argument_count)
+                        .ok_or("CALL argument range is out of bounds.")?;
+                    if argument_start >= register_count || argument_end > register_count {
+                        return Err("CALL argument range is out of bounds.".into());
+                    }
+                }
+                let result = if signature.return_type == ValueType::Void {
+                    if operands[3] != u32::from(NO_REGISTER) {
+                        return Err("A VOID CALL must use NO_REGISTER as its result.".into());
+                    }
+                    None
+                } else {
+                    Some(register_index(
+                        operands[3],
+                        register_count,
+                        "CALL result register",
+                    )?)
+                };
+                Instruction::Call {
+                    function: called_function,
+                    argument_start,
+                    argument_count,
+                    result,
+                }
+            }
+            Opcode::Return => {
+                if is_entry {
+                    return Err("RETURN is not valid in the entry function.".into());
+                }
+                let result = if function.return_type == ValueType::Void {
+                    if operands[0] != u32::from(NO_REGISTER) {
+                        return Err("A VOID function RETURN must use NO_REGISTER.".into());
+                    }
+                    None
+                } else {
+                    Some(register_index(
+                        operands[0],
+                        register_count,
+                        "RETURN result register",
+                    )?)
+                };
+                Instruction::Return { result }
+            }
+            Opcode::Halt => {
+                if !is_entry {
+                    return Err("HALT is only valid in the entry function.".into());
+                }
+                if cursor.offset != function_code.len() {
+                    return Err("HALT must be the final instruction of the entry function.".into());
+                }
                 Instruction::Halt
             }
         };
         instructions.push(instruction);
     }
 
-    if !halted {
+    let expected_terminal = if is_entry { "HALT" } else { "RETURN" };
+    let has_expected_terminal = matches!(
+        (is_entry, instructions.last()),
+        (true, Some(Instruction::Halt)) | (false, Some(Instruction::Return { .. }))
+    );
+    if !has_expected_terminal {
         return Err(format!(
-            "Function {function_index} must terminate with HALT."
+            "Function {function_index} must terminate with {expected_terminal}."
+        ));
+    }
+    let verification_type_cells = instructions
+        .len()
+        .checked_mul(register_count)
+        .ok_or_else(|| format!("Function {function_index} type-flow analysis size overflows."))?;
+    if verification_type_cells > MAX_VERIFICATION_TYPE_CELLS {
+        return Err(format!(
+            "Function {function_index} type-flow analysis exceeds the sandbox limit of {MAX_VERIFICATION_TYPE_CELLS} cells."
         ));
     }
     let offset_to_index: HashMap<_, _> = instruction_offsets
@@ -813,38 +1095,68 @@ fn verify_function(
         .enumerate()
         .map(|(index, offset)| (offset, index))
         .collect();
-    for (index, instruction) in instructions.iter_mut().enumerate() {
+    for instruction in &mut instructions {
         let (name, target) = match instruction {
             Instruction::Jump { target } => ("JUMP", target),
             Instruction::JumpIfFalse { target, .. } => ("JUMP_IF_FALSE", target),
             Instruction::JumpIfTrue { target, .. } => ("JUMP_IF_TRUE", target),
             _ => continue,
         };
-        if *target <= instruction_offsets[index] {
-            return Err(format!(
-                "{name} target must be a forward instruction offset."
-            ));
-        }
         *target = *offset_to_index
             .get(target)
             .ok_or_else(|| format!("{name} target must reference an instruction boundary."))?;
     }
     verify_instruction_flow(module, function, function_index, &instructions)?;
-    Ok(VerifiedFunction {
-        register_count,
-        instructions,
-    })
+    let source_lines = instruction_offsets
+        .iter()
+        .map(|local_offset| {
+            let global_offset = u32::try_from(code_start + local_offset)
+                .expect("validated code offsets fit in u32");
+            let source_line = debug.get(&global_offset).copied();
+            if source_line.is_some() {
+                *matched_debug_mappings += 1;
+            }
+            source_line
+        })
+        .collect();
+    Ok((
+        VerifiedFunction {
+            register_count,
+            parameter_types: function.parameter_types.clone(),
+            return_type: function.return_type,
+            instructions,
+        },
+        source_lines,
+    ))
 }
 
 pub(crate) fn verify_portable_module(
     module: PortableModule,
 ) -> Result<VerifiedPortableModule, String> {
-    let functions = module
-        .functions
+    let mut total_instruction_count = 0_usize;
+    let debug: HashMap<_, _> = module
+        .debug
         .iter()
-        .enumerate()
-        .map(|(index, function)| verify_function(&module, function, index))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|mapping| (mapping.code_offset, mapping.source_line))
+        .collect();
+    let mut matched_debug_mappings = 0_usize;
+    let mut functions = Vec::with_capacity(module.functions.len());
+    let mut source_lines = Vec::with_capacity(module.functions.len());
+    for (index, function) in module.functions.iter().enumerate() {
+        let (verified, lines) = verify_function(
+            &module,
+            function,
+            index,
+            &mut total_instruction_count,
+            &debug,
+            &mut matched_debug_mappings,
+        )?;
+        functions.push(verified);
+        source_lines.push(lines);
+    }
+    if matched_debug_mappings != module.debug.len() {
+        return Err("Debug mappings must reference instruction boundaries.".into());
+    }
     let entry_function = usize::try_from(module.entry_function)
         .map_err(|_| "Entry function index is unsupported.".to_owned())?;
     Ok(VerifiedPortableModule {
@@ -852,6 +1164,7 @@ pub(crate) fn verify_portable_module(
         constants: module.constants,
         imports: module.imports,
         functions,
+        source_lines,
     })
 }
 
@@ -868,6 +1181,11 @@ fn required_section<'a>(section: Option<Section<'a>>, kind: u16) -> Result<Secti
 }
 
 pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, String> {
+    if bytes.len() > MAX_MODULE_BYTES {
+        return Err(format!(
+            "Module size exceeds the sandbox limit of {MAX_MODULE_BYTES} bytes."
+        ));
+    }
     let mut cursor = Cursor::new(bytes, 0);
     if cursor.read_exact(4, "magic number")? != MAGIC {
         return Err("Invalid JIMP bytecode magic.".into());
@@ -884,6 +1202,11 @@ pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, Str
     }
     let entry_function = cursor.read_u32("entry function")?;
     let section_count = usize::from(cursor.read_u16("section count")?);
+    if section_count > MAX_SECTION_COUNT {
+        return Err(format!(
+            "Section count exceeds the sandbox limit of {MAX_SECTION_COUNT}."
+        ));
+    }
     if cursor.read_u16("reserved header field")? != 0 {
         return Err("Reserved header field must be zero.".into());
     }
@@ -965,12 +1288,19 @@ pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, Str
 
     let constants = decode_constants(required_section(constants, CONSTANTS)?)?;
     let imports = decode_imports(required_section(imports, HOST_IMPORTS)?, &constants)?;
-    let code = required_section(code, CODE)?.payload.to_vec();
+    let code_section = required_section(code, CODE)?;
+    if code_section.payload.len() > MAX_CODE_BYTES {
+        return Err(format!(
+            "Code size exceeds the sandbox limit of {MAX_CODE_BYTES} bytes."
+        ));
+    }
+    let code = code_section.payload.to_vec();
     let functions = decode_functions(
         required_section(functions, FUNCTIONS)?,
         &constants,
         code.len(),
     )?;
+    let debug = decode_debug(debug, code.len())?;
     let entry_index = usize::try_from(entry_function)
         .map_err(|_| "Entry function index is unsupported.".to_owned())?;
     let entry = functions
@@ -989,5 +1319,6 @@ pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, Str
         imports,
         functions,
         code,
+        debug,
     })
 }

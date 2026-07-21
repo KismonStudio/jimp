@@ -4,54 +4,45 @@
 
 ## Status
 
-This document defines the complete P2 syntax and semantics accepted by the JIMP compiler through P2.5. The language remains pre-stable.
+This document defines the source-language syntax and semantics implemented through P3.5. P3.5 does not change source syntax; it adds optional bytecode metadata that maps emitted instructions to source lines for inspection and runtime diagnostics. The language and portable format remain pre-stable.
 
-The keywords, grammar, operator rules, and examples are normative. Explanatory prose is informative unless it uses **must**, **must not**, **required**, or **invalid**.
+The keywords, grammar, type rules, and examples are normative. Explanatory prose is informative unless it uses **must**, **must not**, **required**, or **invalid**.
 
 ## Source encoding and lines
 
 - Source files use the `.jimp` extension and UTF-8 encoding.
 - LF and CRLF line endings are supported.
-- Each non-empty, non-comment logical line contains one complete simple statement or one conditional block delimiter.
+- Each non-empty logical line contains one complete simple statement or block delimiter.
 - Leading and trailing whitespace is ignored.
-- A semicolon at the end of a statement is optional.
+- A semicolon at the end of a simple statement is optional.
 - An empty program is valid.
 
-Comments begin with `//` after optional leading whitespace and occupy the rest of their logical line. Inline comments are not supported yet. Comment markers inside strings are ordinary content.
+Comments begin with `//` after optional leading whitespace and occupy the rest of their logical line. Inline comments are not supported. Comment markers inside strings are ordinary content.
 
 ## Reserved words and identifiers
 
 Reserved words are case-sensitive:
 
 ```text
-if else print true false null let var
+break continue else false function if let null print return true var while
 ```
 
-Identifiers begin with an ASCII letter or underscore and continue with ASCII letters, digits, or underscores. They are case-sensitive, and reserved words cannot be variable names.
+Identifiers begin with an ASCII letter or underscore and continue with ASCII letters, digits, or underscores. They are case-sensitive.
 
-## Literals
+## Types and literals
 
-### Strings
+The value types are `NULL`, `BOOL`, `I64`, `F64`, and `STRING`. `VOID` is permitted only as a function return type and never denotes a runtime value.
 
-Strings are delimited by double quotes. They support `\\`, `\"`, `\n`, `\r`, and `\t`. An unescaped quote, unescaped backslash, raw line ending, unsupported escape, or missing closing quote is invalid.
+- Strings use double quotes and support `\\`, `\"`, `\n`, `\r`, and `\t`.
+- Integers use base-ten digits with an optional leading minus sign and must fit signed `i64`.
+- Floating-point literals have a fractional part, an exponent, or both. They are rounded to finite IEEE 754 binary64 values.
+- Boolean literals are `true` and `false`; the null literal is `null`.
 
-### Integers
+Numeric separators, hexadecimal notation, a leading plus sign, `NaN`, infinity literals, and implicit conversions are not supported.
 
-Integer literals use base-ten digits with an optional leading minus sign. Leading zeroes are forbidden except for `0`. Values must fit signed `i64`, from `-9223372036854775808` through `9223372036854775807`.
+## Variables and lexical scope
 
-### Floating point
-
-Floating-point literals have an integer part followed by a fractional part, an exponent, or both. A fractional part requires digits after the decimal point. An exponent begins with `e` or `E`, may have a sign, and requires digits. Source literals are rounded to IEEE 754 binary64 and must be finite.
-
-### Boolean and null
-
-Boolean literals are `true` and `false`. The null literal is `null`.
-
-Numeric separators, hexadecimal notation, a leading plus sign, `NaN`, and infinity literals are not supported.
-
-## Variables
-
-Variables use lexical block scope. Names must be declared before use and cannot be declared more than once in the same scope. A nested block may shadow a name from an outer scope. Both declaration forms require an initializer:
+Both declaration forms require an initializer:
 
 ```jimp
 let immutableValue = 42;
@@ -59,85 +50,118 @@ var mutableValue = immutableValue + 1;
 mutableValue = mutableValue * 2;
 ```
 
-- `let` creates an immutable variable and cannot be assigned again.
-- `var` creates a mutable variable.
-- Initializers and assignments accept expressions.
-- A mutable variable's current type is tracked in source order and may change after an unconditional assignment.
-- Assignments inside a conditional may update an outer variable. After the conditional, every path must converge on the same type.
-- For `if` without `else`, the implicit false path retains the incoming type, so the taken path must finish with that same type.
-- For `if` with `else`, both explicit paths may converge on a new type even when it differs from the incoming type.
-- A declaration inside an `if` or `else` block is unavailable after that block closes.
-- Unused declarations are valid.
+- `let` creates an immutable variable; `var` creates a mutable variable.
+- Names must be declared before use and may not be duplicated in one scope.
+- Nested blocks may shadow outer variables.
+- A mutable variable's current type is tracked in source order.
+- Conditional paths must converge on the same type for every outer variable that remains reachable.
+- An outer variable assigned in a loop must preserve the type it had when the loop was entered.
+- Variables declared inside a block are unavailable after the block closes.
+- A variable name may not conflict with a function name.
 
 ## Expressions
 
-Primary expressions are literals, variable references, and parenthesized expressions. Operators are left-associative within the same precedence level.
+Primary expressions are literals, variable references, function calls, and parenthesized expressions. Function arguments and binary operands are evaluated from left to right.
 
 From highest to lowest precedence:
 
 | Precedence | Operators | Operand types | Result |
 | ---: | --- | --- | --- |
+| 8 | function call | exact declared parameter types | declared return type |
 | 7 | unary `-` | `I64` or `F64` | operand type |
 | 7 | unary `!` | `BOOL` | `BOOL` |
 | 6 | `*`, `/`, `%` | same numeric type | operand type |
 | 5 | `+`, `-` | same numeric type | operand type |
 | 4 | `<`, `<=`, `>`, `>=` | same numeric type | `BOOL` |
-| 3 | `==`, `!=` | same value type | `BOOL` |
+| 3 | `==`, `!=` | same non-`VOID` value type | `BOOL` |
 | 2 | `&&` | `BOOL`, `BOOL` | `BOOL` |
 | 1 | `||` | `BOOL`, `BOOL` | `BOOL` |
 
-There are no implicit conversions. In particular, mixed `I64`/`F64` arithmetic is invalid, and strings do not support arithmetic or ordered comparison.
+`&&` and `||` short-circuit. Checked `I64` arithmetic reports overflow and zero-divisor errors at runtime. `F64` operations follow IEEE 754 binary64 behavior.
 
-`I64` addition, subtraction, multiplication, division, remainder, and negation are checked. Overflow, division by zero, and remainder by zero are runtime errors. `I64` division truncates toward zero. `F64` operations follow IEEE 754 binary64 behavior, so execution may produce non-finite results even though source literals must be finite.
+A `VOID` call may be used as an expression statement, but its result cannot initialize or assign a variable, be printed, returned as a value, or participate in another expression.
 
-Equality supports `NULL`, `BOOL`, `I64`, `F64`, and `STRING` values when both operands have the same type. IEEE 754 equality rules apply to `F64`, including `NaN != NaN` and `-0.0 == 0.0`.
+## Functions
 
-Operands are evaluated from left to right. `&&` and `||` use short-circuit evaluation: `false && right` does not evaluate `right`, and `true || right` does not evaluate `right`.
-
-## Statements
-
-### `print`
-
-`print` requires a `STRING` expression and writes its value followed by a line feed through the console host.
+Functions are named, declared at program scope, and require explicit parameter and return types:
 
 ```jimp
-let message = "Hello, JIMP!";
-print message;
+function add(left: I64, right: I64): I64 {
+  return left + right;
+}
+
+let answer = add(20, 22);
 ```
 
-### Declaration and assignment
+- Parameter types may be `BOOL`, `I64`, `F64`, or `STRING`.
+- Return types may additionally be `NULL` or `VOID`.
+- Parameter names are unique within a function and parameters are immutable.
+- Calls must provide the exact number and types of arguments; no conversion is performed.
+- Calls may precede declarations, and direct or mutual recursion is valid.
+- A function has isolated lexical scope and cannot capture variables from program entry or another function.
+- A non-`VOID` function must return its declared type on every statically reachable path.
+- A `VOID` function may use `return;`; reaching the end performs an implicit empty return.
+- `return` is invalid outside a function. Returning a value from `VOID`, or omitting it from a value-returning function, is invalid.
 
-`let` and `var` declare initialized variables. Assignment replaces the current value of an existing `var`.
+Functions are not first-class values. Calls target a declared identifier directly.
 
-### `if` and `else`
+## Conditional and loop statements
 
-`if` requires a `BOOL` expression and a braced block. An optional `else` block executes when the condition is false. Blocks may be empty or nested.
+`if` and `while` require `BOOL` conditions and braced blocks:
 
 ```jimp
-if score >= 70 {
-  print "Approved";
-} else {
-  print "Not approved";
+var count = 0;
+while count < 10 {
+  count = count + 1;
+  if count == 2 {
+    continue;
+  }
+  if count == 4 {
+    break;
+  }
 }
 ```
 
-The opening brace must terminate the `if` or `else` logical line. A closing brace occupies its own logical line, except that `} else {` is also accepted. Standalone blocks and `else if` are not defined in P2.
+- `if` may have an `else`; blocks may be empty or nested.
+- `while` evaluates its condition before every iteration.
+- `break` exits the innermost loop; `continue` starts its next condition evaluation.
+- `break` and `continue` are invalid outside a loop.
+- A statement after an unconditional `return`, `break`, or `continue` in the same block is unreachable and invalid.
+- A `while` is not assumed to execute or terminate when checking function returns.
 
-### Expression statement
+The opening brace terminates its logical line. A closing brace occupies its own logical line, except that `} else {` is accepted. Standalone blocks and `else if` are not defined.
 
-Any expression may be used as a statement. It is evaluated and its result is discarded.
+## Other statements
+
+`print expression` requires `STRING` and writes the value followed by a line feed through the console host. It is a source-level construct lowered by the compiler, not a VM opcode.
+
+Any expression may be used as a statement; its result is discarded.
 
 ## Grammar
 
 The grammar uses ISO/IEC 14977-style EBNF. Lexical whitespace may surround operators and punctuation.
 
 ```ebnf
-program          = { trivia-line | statement-line | if-statement } ;
+program          = { trivia-line | top-level-item } ;
+top-level-item   = statement | function-declaration ;
 
-trivia-line      = whitespace, [ comment ], whitespace, line-boundary ;
+function-declaration = function-header, line-ending, block-body,
+                       close-brace-line ;
+function-header  = whitespace, "function", required-whitespace,
+                   identifier, whitespace, "(", whitespace,
+                   [ parameter-list ], whitespace, ")", whitespace,
+                   ":", whitespace, return-type, whitespace, "{" ;
+parameter-list   = parameter, { whitespace, ",", whitespace, parameter } ;
+parameter        = identifier, whitespace, ":", whitespace, parameter-type ;
+parameter-type   = "BOOL" | "I64" | "F64" | "STRING" ;
+return-type      = "NULL" | parameter-type | "VOID" ;
+
+statement        = statement-line | if-statement | while-statement ;
 statement-line   = whitespace, simple-statement, whitespace, line-boundary ;
 simple-statement = print-statement | variable-declaration
-                   | variable-assignment | expression-statement ;
+                   | variable-assignment | return-statement
+                   | break-statement | continue-statement
+                   | expression-statement ;
 
 if-statement     = if-header, line-ending, block-body,
                    ( close-brace-line,
@@ -145,27 +169,27 @@ if-statement     = if-header, line-ending, block-body,
                        block-body, close-brace-line ]
                    | close-else-header, line-ending,
                      block-body, close-brace-line ) ;
+while-statement  = while-header, line-ending, block-body, close-brace-line ;
 if-header        = whitespace, "if", required-whitespace,
-                   expression, whitespace, "{", whitespace ;
-else-header      = whitespace, "else", whitespace, "{", whitespace ;
+                   expression, whitespace, "{" ;
+else-header      = whitespace, "else", whitespace, "{" ;
+while-header     = whitespace, "while", required-whitespace,
+                   expression, whitespace, "{" ;
 close-brace-line = whitespace, "}", whitespace, line-boundary ;
 close-else-header = whitespace, "}", whitespace, "else",
-                    whitespace, "{", whitespace ;
-block-body       = { trivia-line | statement-line | if-statement } ;
+                    whitespace, "{" ;
+block-body       = { trivia-line | statement } ;
 
-comment          = "//", { comment-character } ;
-
-print-statement  = "print", required-whitespace,
-                   expression, whitespace, [ ";" ] ;
-
+print-statement  = "print", required-whitespace, expression, [ ";" ] ;
 variable-declaration = ( "let" | "var" ), required-whitespace,
                        identifier, whitespace, "=", whitespace,
-                       expression, whitespace, [ ";" ] ;
-
+                       expression, [ ";" ] ;
 variable-assignment = identifier, whitespace, "=", whitespace,
-                      expression, whitespace, [ ";" ] ;
-
-expression-statement = expression, whitespace, [ ";" ] ;
+                      expression, [ ";" ] ;
+return-statement = "return", [ required-whitespace, expression ], [ ";" ] ;
+break-statement  = "break", [ ";" ] ;
+continue-statement = "continue", [ ";" ] ;
+expression-statement = expression, [ ";" ] ;
 
 expression       = logical-or-expression ;
 logical-or-expression = logical-and-expression,
@@ -184,8 +208,11 @@ multiplicative-expression = unary-expression,
                             { whitespace, ( "*" | "/" | "%" ),
                               whitespace, unary-expression } ;
 unary-expression = { ( "!" | "-" ), whitespace }, primary-expression ;
-primary-expression = value-literal | identifier
+primary-expression = value-literal | function-call | identifier
                      | "(", whitespace, expression, whitespace, ")" ;
+function-call    = identifier, whitespace, "(", whitespace,
+                   [ argument-list ], whitespace, ")" ;
+argument-list    = expression, { whitespace, ",", whitespace, expression } ;
 
 value-literal    = string-literal | integer-literal | float-literal
                    | "true" | "false" | "null" ;
@@ -202,48 +229,33 @@ digit            = "0" | "1" | "2" | "3" | "4"
                    | "5" | "6" | "7" | "8" | "9" ;
 nonzero-digit    = "1" | "2" | "3" | "4" | "5"
                    | "6" | "7" | "8" | "9" ;
-
 string-literal   = '"', { string-character | escape-sequence }, '"' ;
 escape-sequence  = "\\", ( "\\" | '"' | "n" | "r" | "t" ) ;
+trivia-line      = whitespace, [ "//", { comment-character } ],
+                   whitespace, line-boundary ;
 whitespace       = { whitespace-character } ;
 required-whitespace = whitespace-character, whitespace ;
-comment-character = source-character - ( "\r" | "\n" ) ;
 line-ending      = "\n" | "\r", "\n" ;
 line-boundary    = line-ending | end-of-file ;
 ```
 
-`ASCII-letter` means `A` through `Z` or `a` through `z`. `source-character` is a Unicode character decoded from UTF-8. `whitespace-character` is any compiler-recognized non-line-terminating whitespace character. `end-of-file` is the terminal source boundary.
+`ASCII-letter` means `A` through `Z` or `a` through `z`. `string-character` excludes raw line endings, unescaped quotes, and unescaped backslashes. `comment-character` excludes line endings. `whitespace-character` is any compiler-recognized non-line-terminating whitespace character. `end-of-file` is the terminal source boundary.
 
 ## Invalid examples
 
 ```jimp
-let missingInitializer;
-let duplicate = 1;
-let duplicate = 2;
-duplicate = 3;
-unknown + 1;
-1 + true;
-1 + 1.0;
-"a" < "b";
-print 42;
-01;
-.5;
-9223372036854775808;
-1e309;
-if 1 {
+break;
+return 1;
+function missing(value: I64): I64 {
+  if value == 0 {
+    return 0;
+  }
 }
-if true
-  print "missing braces";
+function invalid(value: NULL): VOID {
 }
-if true {
-  let local = 1;
-}
-local;
-var divergent = 1;
-if true {
-  divergent = "text";
-} else {
-  divergent = false;
+var changing = 1;
+while true {
+  changing = false;
 }
 ```
 
@@ -251,4 +263,4 @@ The compiler must report the logical source line containing invalid syntax or se
 
 ## Out of scope
 
-JIMP does not yet define standalone blocks, `else if`, loops, backward branches, functions, modules, source-level imports, or a general standard library.
+JIMP does not yet define standalone blocks, `else if`, closures, first-class functions, default or variadic parameters, modules, source-level imports, heap values, exceptions, or a general standard library.

@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 pub(crate) const FORMAT_MAJOR: u16 = 2;
-pub(crate) const FORMAT_MINOR: u16 = 2;
+pub(crate) const FORMAT_MINOR: u16 = 5;
 pub(crate) const NO_REGISTER: u16 = 65535;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56,6 +56,8 @@ pub(crate) enum Opcode {
     Jump = 40,
     JumpIfFalse = 41,
     JumpIfTrue = 42,
+    Call = 50,
+    Return = 51,
     Halt = 255,
 }
 
@@ -85,6 +87,8 @@ impl TryFrom<u8> for Opcode {
             40 => Ok(Self::Jump),
             41 => Ok(Self::JumpIfFalse),
             42 => Ok(Self::JumpIfTrue),
+            50 => Ok(Self::Call),
+            51 => Ok(Self::Return),
             255 => Ok(Self::Halt),
             _ => Err(()),
         }
@@ -105,6 +109,7 @@ pub(crate) enum OperandKind {
     ImportIndex,
     RegisterCount,
     CodeOffset,
+    FunctionIndex,
 }
 
 pub(crate) struct OperandTypeDefinition {
@@ -159,6 +164,12 @@ pub(crate) const OPERAND_TYPES: &[OperandTypeDefinition] = &[
     OperandTypeDefinition {
         name: "code_offset",
         kind: OperandKind::CodeOffset,
+        encoding: OperandEncoding::U32,
+        allows_no_register: false,
+    },
+    OperandTypeDefinition {
+        name: "function_index",
+        kind: OperandKind::FunctionIndex,
         encoding: OperandEncoding::U32,
         allows_no_register: false,
     },
@@ -512,6 +523,36 @@ pub(crate) const INSTRUCTIONS: &[InstructionDefinition] = &[
                 kind: OperandKind::CodeOffset,
             },
         ],
+    },
+    InstructionDefinition {
+        name: "CALL",
+        opcode: Opcode::Call,
+        operands: &[
+            OperandDefinition {
+                name: "function",
+                kind: OperandKind::FunctionIndex,
+            },
+            OperandDefinition {
+                name: "argument_start",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "argument_count",
+                kind: OperandKind::RegisterCount,
+            },
+            OperandDefinition {
+                name: "result",
+                kind: OperandKind::OptionalRegister,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "RETURN",
+        opcode: Opcode::Return,
+        operands: &[OperandDefinition {
+            name: "result",
+            kind: OperandKind::OptionalRegister,
+        }],
     },
     InstructionDefinition {
         name: "HALT",

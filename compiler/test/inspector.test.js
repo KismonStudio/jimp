@@ -18,8 +18,8 @@ test("decodes portable headers, imports, and instructions", () => {
   const module = decodeBytecode(compile('print "Hello!";'));
 
   assert.equal(module.header.magic, "JIMP");
-  assert.equal(module.header.format, "2.2");
-  assert.equal(module.header.sectionCount, 4);
+  assert.equal(module.header.format, "2.5");
+  assert.equal(module.header.sectionCount, 5);
   assert.equal(module.imports[0].symbol, "std.console.write");
   assert.deepEqual(module.functions[0].instructions[0], {
     index: 0,
@@ -28,16 +28,31 @@ test("decodes portable headers, imports, and instructions", () => {
     opcode: 1,
     name: "LOAD_CONST",
     operands: { destination: 0, constant: 2 },
+    sourceLine: 1,
   });
 });
 
 test("formats a readable portable disassembly", () => {
   const output = formatInspection(decodeBytecode(compile('print "Hello!";')));
-  assert.match(output, /Format: 2\.2/);
+  assert.match(output, /Format: 2\.5/);
   assert.match(output, /std\.console\.write\(STRING\) -> VOID/);
   assert.match(output, /\[0000\] @code\+0x00000000 LOAD_CONST destination=0 constant=2/);
   assert.match(output, /HOST_CALL import=0 argument_start=0 argument_count=1 result=65535/);
+  assert.match(output, /@source:1/);
   assert.match(output, /HALT/);
+});
+
+test("maps instructions in different functions back to source lines", () => {
+  const module = decodeBytecode(compile(`
+    call();
+    function call(): VOID {
+      1 / 0;
+    }
+  `));
+
+  assert(module.debug.length > 0);
+  assert(module.functions[0].instructions.some(({ sourceLine }) => sourceLine === 2));
+  assert(module.functions[1].instructions.some(({ sourceLine }) => sourceLine === 4));
 });
 
 test("formats typed scalar constants", () => {

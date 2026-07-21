@@ -1,11 +1,16 @@
 const IDENTIFIER_SOURCE = String.raw`[A-Za-z_][A-Za-z0-9_]*`;
+const VALUE_TYPE_SOURCE = String.raw`(?:NULL|BOOL|I64|F64|STRING|VOID)`;
 const VARIABLE_DECLARATION = new RegExp(
   String.raw`^(let|var)\s+(${IDENTIFIER_SOURCE})\s*=\s*(.+)$`,
 );
 const VARIABLE_ASSIGNMENT = new RegExp(
   String.raw`^(${IDENTIFIER_SOURCE})\s*=(?!=)\s*(.+)$`,
 );
+const FUNCTION_HEADER = new RegExp(
+  String.raw`^function\s+(${IDENTIFIER_SOURCE})\s*\((.*)\)\s*:\s*(${VALUE_TYPE_SOURCE})\s*\{\s*$`,
+);
 const PRINT_STATEMENT = /^print\s+(.+)$/;
+const RETURN_STATEMENT = /^return(?:\s+(.+))?$/;
 const NUMBER_PREFIX = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+(?:[eE][+-]?[0-9]+)?|[eE][+-]?[0-9]+)?/;
 const I64_MIN = -(1n << 63n);
 const I64_MAX = (1n << 63n) - 1n;
@@ -41,10 +46,7 @@ function readString(source, start, line) {
   while (offset < source.length) {
     const character = source[offset];
     if (character === '"') {
-      return {
-        nextOffset: offset + 1,
-        value: decoded,
-      };
+      return { nextOffset: offset + 1, value: decoded };
     }
     if (character === "\\") {
       const escaped = source[offset + 1];
@@ -63,7 +65,10 @@ function readString(source, start, line) {
 
 function canStartSignedNumber(tokens) {
   const previous = tokens.at(-1);
-  return !previous || previous.kind === "operator" || previous.kind === "leftParenthesis";
+  return !previous
+    || previous.kind === "operator"
+    || previous.kind === "leftParenthesis"
+    || previous.kind === "comma";
 }
 
 function tokenizeExpression(source, line) {
@@ -119,13 +124,13 @@ function tokenizeExpression(source, line) {
       offset += 1;
       continue;
     }
-    if (character === "(") {
-      tokens.push({ kind: "leftParenthesis", value: character });
-      offset += 1;
-      continue;
-    }
-    if (character === ")") {
-      tokens.push({ kind: "rightParenthesis", value: character });
+    const punctuation = {
+      "(": "leftParenthesis",
+      ")": "rightParenthesis",
+      ",": "comma",
+    }[character];
+    if (punctuation) {
+      tokens.push({ kind: punctuation, value: character });
       offset += 1;
       continue;
     }
@@ -144,13 +149,6 @@ class ExpressionParser {
 
   current() {
     return this.tokens[this.offset];
-  }
-
-  matchOperator(operator) {
-    const token = this.current();
-    if (token.kind !== "operator" || token.value !== operator) return false;
-    this.offset += 1;
-    return true;
   }
 
   parse() {
@@ -174,10 +172,7 @@ class ExpressionParser {
   }
 
   parseComparison() {
-    return this.parseBinary(
-      () => this.parseAdditive(),
-      ["<", "<=", ">", ">="],
-    );
+    return this.parseBinary(() => this.parseAdditive(), ["<", "<=", ">", ">="]);
   }
 
   parseAdditive() {
@@ -218,6 +213,23 @@ class ExpressionParser {
     return this.parsePrimary();
   }
 
+  parseArguments(name) {
+    const argumentsList = [];
+    this.offset += 1;
+    if (this.current().kind !== "rightParenthesis") {
+      while (true) {
+        argumentsList.push(this.parseOr());
+        if (this.current().kind !== "comma") break;
+        this.offset += 1;
+      }
+    }
+    if (this.current().kind !== "rightParenthesis") {
+      throw new Error(`Expected closing parenthesis for call to "${name}" at line ${this.line}.`);
+    }
+    this.offset += 1;
+    return argumentsList;
+  }
+
   parsePrimary() {
     const token = this.current();
     if (token.kind === "literal") {
@@ -226,6 +238,14 @@ class ExpressionParser {
     }
     if (token.kind === "identifier") {
       this.offset += 1;
+      if (this.current().kind === "leftParenthesis") {
+        return {
+          kind: "callExpression",
+          line: this.line,
+          callee: token.value,
+          arguments: this.parseArguments(token.value),
+        };
+      }
       return { kind: "identifier", line: this.line, name: token.value };
     }
     if (token.kind === "leftParenthesis") {
@@ -251,15 +271,21 @@ function removeOptionalSemicolon(line) {
 
 function parseSimpleStatement(source, line) {
   const statement = removeOptionalSemicolon(source);
-  const printMatch = statement.match(PRINT_STATEMENT);
-  if (printMatch) {
+  if (statement === "break" || statement === "continue") {
+    return { kind: `${statement}Statement`, line };
+  }
+  const returnMatch = statement.match(RETURN_STATEMENT);
+  if (returnMatch) {
     return {
-      kind: "print",
+      kind: "returnStatement",
       line,
-      expression: parseExpression(printMatch[1], line),
+      expression: returnMatch[1] ? parseExpression(returnMatch[1], line) : null,
     };
   }
-
+  const printMatch = statement.match(PRINT_STATEMENT);
+  if (printMatch) {
+    return { kind: "print", line, expression: parseExpression(printMatch[1], line) };
+  }
   const declarationMatch = statement.match(VARIABLE_DECLARATION);
   if (declarationMatch) {
     return {
@@ -270,7 +296,6 @@ function parseSimpleStatement(source, line) {
       initializer: parseExpression(declarationMatch[3], line),
     };
   }
-
   const assignmentMatch = statement.match(VARIABLE_ASSIGNMENT);
   if (assignmentMatch) {
     return {
@@ -280,12 +305,22 @@ function parseSimpleStatement(source, line) {
       expression: parseExpression(assignmentMatch[2], line),
     };
   }
-
   return {
     kind: "expressionStatement",
     line,
     expression: parseExpression(statement, line),
   };
+}
+
+function parseParameters(source, line) {
+  if (source.trim() === "") return [];
+  return source.split(",").map((parameter) => {
+    const match = parameter.trim().match(
+      new RegExp(String.raw`^(${IDENTIFIER_SOURCE})\s*:\s*(${VALUE_TYPE_SOURCE})$`),
+    );
+    if (!match) throw new Error(`Invalid function parameter at line ${line}.`);
+    return { name: match[1], type: match[2], line };
+  });
 }
 
 class ProgramParser {
@@ -322,13 +357,22 @@ class ProgramParser {
           throw new Error(`Unexpected closing brace at line ${current.line}.`);
         }
         this.offset += 1;
-        return {
-          statements,
-          terminator: current.text === "} else {" ? "else" : "close",
-        };
+        return { statements, terminator: current.text === "} else {" ? "else" : "close" };
       }
       if (/^else\s*\{\s*$/.test(current.text)) {
         throw new Error(`Unexpected else at line ${current.line}.`);
+      }
+
+      const functionMatch = current.text.match(FUNCTION_HEADER);
+      if (functionMatch) {
+        if (openingLine !== null) {
+          throw new Error(`Functions must be declared at program scope at line ${current.line}.`);
+        }
+        statements.push(this.parseFunction(current, functionMatch));
+        continue;
+      }
+      if (/^function(?:\s|$)/.test(current.text)) {
+        throw new Error(`Invalid function declaration at line ${current.line}.`);
       }
 
       const conditionalMatch = current.text.match(/^if\s+(.+?)\s*\{\s*$/);
@@ -340,16 +384,40 @@ class ProgramParser {
         throw new Error(`Expected an opening brace for if at line ${current.line}.`);
       }
 
+      const loopMatch = current.text.match(/^while\s+(.+?)\s*\{\s*$/);
+      if (loopMatch) {
+        statements.push(this.parseLoop(current, loopMatch[1]));
+        continue;
+      }
+      if (/^while(?:\s|$)/.test(current.text)) {
+        throw new Error(`Expected an opening brace for while at line ${current.line}.`);
+      }
+
       this.offset += 1;
       statements.push(parseSimpleStatement(current.text, current.line));
     }
+  }
+
+  parseFunction(opening, match) {
+    this.offset += 1;
+    const body = this.parseStatementList(opening.line);
+    if (body.terminator === "else") {
+      throw new Error(`Unexpected else after function at line ${opening.line}.`);
+    }
+    return {
+      kind: "functionDeclaration",
+      line: opening.line,
+      name: match[1],
+      parameters: parseParameters(match[2], opening.line),
+      returnType: match[3],
+      body: { kind: "block", line: opening.line, statements: body.statements },
+    };
   }
 
   parseConditional(opening, conditionSource) {
     this.offset += 1;
     const consequent = this.parseStatementList(opening.line);
     let hasAlternate = consequent.terminator === "else";
-
     if (!hasAlternate) {
       this.skipTrivia();
       const candidate = this.lines[this.offset];
@@ -365,23 +433,28 @@ class ProgramParser {
       if (alternateBlock.terminator === "else") {
         throw new Error(`Unexpected second else for if at line ${opening.line}.`);
       }
-      alternate = {
-        kind: "block",
-        line: opening.line,
-        statements: alternateBlock.statements,
-      };
+      alternate = { kind: "block", line: opening.line, statements: alternateBlock.statements };
     }
-
     return {
       kind: "ifStatement",
       line: opening.line,
       condition: parseExpression(conditionSource, opening.line),
-      consequent: {
-        kind: "block",
-        line: opening.line,
-        statements: consequent.statements,
-      },
+      consequent: { kind: "block", line: opening.line, statements: consequent.statements },
       alternate,
+    };
+  }
+
+  parseLoop(opening, conditionSource) {
+    this.offset += 1;
+    const body = this.parseStatementList(opening.line);
+    if (body.terminator === "else") {
+      throw new Error(`Unexpected else after while at line ${opening.line}.`);
+    }
+    return {
+      kind: "whileStatement",
+      line: opening.line,
+      condition: parseExpression(conditionSource, opening.line),
+      body: { kind: "block", line: opening.line, statements: body.statements },
     };
   }
 

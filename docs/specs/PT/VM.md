@@ -1,12 +1,12 @@
 # VM Portátil JIMP v1
 
-[English version](../EN/VM.md)
+[Versão em inglês](../EN/VM.md)
 
 ## Status
 
-Este documento especifica a base implementada da VM portátil JIMP v1. O P2.5 conclui a redução da linguagem principal e as verificações semânticas de fluxo, mantendo o formato de contêiner `.jbc` `2.2`.
+Este documento especifica a VM portátil JIMP v1 implementada até o P3.5. O formato `2.5` adiciona metadados opcionais e não autoritativos de linhas do código-fonte à base de execução com recursos limitados e erros padronizados concluída até o P3.4.
 
-O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.2` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
+O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.5` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -46,7 +46,7 @@ Cada função declara um `register_count` codificado como inteiro sem sinal de 1
 - `0xffff` é reservado como `NO_REGISTER` nos operandos das instruções.
 - Uma função pode declarar de zero até `65535` registradores.
 - Todo registrador é inicializado com `null` quando seu frame é criado.
-- Argumentos de função, quando funções se tornarem executáveis, ocupam registradores consecutivos iniciando em `r0`.
+- Argumentos de função ocupam registradores consecutivos iniciando em `r0` em cada novo frame de chamada.
 - Ler ou escrever um índice fora do intervalo declarado constitui bytecode inválido.
 - Registradores contêm valores, nunca ponteiros do host ou endereços do bytecode.
 
@@ -62,7 +62,7 @@ Um arquivo `.jbc` portátil consiste em um cabeçalho, um diretório de seções
 | --- | --- | --- |
 | magic | 4 bytes | ASCII `JIMP` |
 | versão principal do formato | `u16` | `2` |
-| versão secundária do formato | `u16` | `1` |
+| versão secundária do formato | `u16` | `5` |
 | flags do módulo | `u32` | `0`; demais bits são reservados |
 | função de entrada | `u32` | Índice na seção de funções |
 | quantidade de seções | `u16` | Quantidade de entradas do diretório |
@@ -144,9 +144,7 @@ A seção de funções começa com uma quantidade de funções codificada como `
 | reservado | `u16` | Deve ser `0` |
 | tipos dos parâmetros | array de bytes | Uma tag de tipo escalar por parâmetro |
 
-Os intervalos de código das funções devem estar completamente dentro da seção de código e não devem se sobrepor. O índice da função de entrada no cabeçalho deve existir. Na fundação inicial da v1, a função de entrada deve possuir zero parâmetros e retornar `void`.
-
-As instruções de invocação de função são intencionalmente adiadas. O modelo da seção de funções é definido agora para que o contêiner não precise ser redesenhado quando `CALL` e `RETURN` forem introduzidos.
+Os intervalos de código das funções devem estar completamente dentro da seção de código e não devem se sobrepor. O índice da função de entrada no cabeçalho deve existir, possuir zero parâmetros, retornar `void` e terminar fisicamente com `HALT`. Todas as outras funções terminam fisicamente com `RETURN`. `HALT` é inválido fora da função de entrada, `RETURN` é inválido dentro dela e o bytecode não pode chamar a função de entrada.
 
 ## Seção de código e modelo de instruções
 
@@ -158,6 +156,22 @@ A seção de código contém os fluxos de instruções das funções. Cada instr
 - Opcodes desconhecidos e operandos malformados são inválidos.
 - Os limites das instruções devem ser derivados da definição da ISA, não estimados por varredura dos bytes.
 - Um módulo não pode definir novas semânticas de opcode.
+
+## Seção de debug
+
+A seção de debug relaciona offsets de instruções codificadas às linhas do código-fonte. Sua entrada no diretório deve definir a flag `OPTIONAL`. Um módulo válido no formato `2.5` pode omitir essa seção sem alterar a semântica da execução.
+
+| Campo | Codificação | Significado |
+| --- | --- | --- |
+| versão do debug | `u16` | `1` |
+| flags do debug | `u16` | `0`; demais bits são reservados |
+| quantidade de mapeamentos | `u32` | Quantidade de mapeamentos seguintes |
+| offset do código | `u32` | Offset relativo ao início da seção completa de código |
+| linha do código-fonte | `u32` | Linha do código-fonte iniciada em um |
+
+Cada mapeamento contém um `offset do código` seguido por uma `linha do código-fonte`. Os offsets devem estar em ordem estritamente crescente e devem referenciar limites de instruções decodificadas. Uma quantidade acima do limite de instruções do sandbox, uma linha zero, offsets duplicados, mapeamentos incompletos ou dados residuais tornam a seção inválida. Mapeamentos podem ser omitidos para instruções individuais.
+
+Os metadados de debug não são autoritativos: eles não devem alterar a decodificação, a verificação, o fluxo de controle, os valores, a autorização do host nem qualquer outro comportamento da execução. O runtime oficial usa um mapeamento válido da instrução atual ao relatar uma falha de execução; sem mapeamento, a mesma falha é relatada sem localização no código-fonte.
 
 O conjunto inicial de instruções genéricas possui as seguintes operações semânticas. Os opcodes numéricos e as codificações dos operandos são definidos pela fonte [`isa/v1.json`](../../../isa/v1.json), legível por máquina, e resumidos na [referência da ISA](ISA.md) gerada.
 
@@ -189,17 +203,30 @@ O conjunto inicial de instruções genéricas possui as seguintes operações se
 
 `BOOL_AND` e `BOOL_OR` aceitam dois operandos `BOOL` e produzem `BOOL`. Elas permanecem operações imediatas no bytecode. O compilador reduz `&&` e `||` do código-fonte a desvios condicionais, de modo que o operando direito seja avaliado somente quando necessário.
 
-### Controle de fluxo para frente
+### Controle de fluxo
 
 `JUMP target` continua a execução em `target`. `JUMP_IF_FALSE condition, target` e `JUMP_IF_TRUE condition, target` selecionam entre `target` e a instrução seguinte de acordo com um registrador `BOOL`.
 
 - `target` é um offset de bytes `u32` sem sinal, relativo ao início da função atual.
 - Um destino deve identificar o primeiro byte de uma instrução na mesma função.
-- Um destino deve ser estritamente maior que o offset da instrução de desvio.
+- Um destino pode estar antes ou depois da instrução de desvio, permitindo loops.
 - Toda instrução codificada deve ser alcançável a partir da entrada da função.
 - Os tipos de registradores exigidos por uma instrução devem ser válidos em todos os caminhos de controle de fluxo recebidos.
 
-Destinos para trás são rejeitados pelo formato `2.2`. Isso impede loops ilimitados antes da especificação dos limites de passos de execução no P3.
+O verificador calcula um ponto fixo entre todos os caminhos de entrada. Arestas de retorno não podem contornar verificações de tipo nem tornar uma instrução codificada inalcançável.
+
+### `CALL function, argument_start, argument_count, result`
+
+- `function`: índice na tabela de funções (`u32`), exceto a função de entrada.
+- `argument_start`: primeiro registrador de argumento no chamador (`u16`).
+- `argument_count`: quantidade de registradores consecutivos do chamador (`u16`).
+- `result`: registrador de destino no chamador (`u16`) ou `NO_REGISTER`.
+
+A quantidade e os tipos dos argumentos devem corresponder exatamente à assinatura da função chamada. Uma chamada cria um frame isolado com a quantidade declarada de registradores, inicializa todos com `null` e copia os argumentos para registradores consecutivos iniciando em `r0`. Uma função `void` exige `NO_REGISTER`; uma função que retorna valor exige um registrador de destino válido. Chamadas podem ser recursivas.
+
+### `RETURN result`
+
+`result` é um registrador (`u16`) ou `NO_REGISTER`. Uma função `void` deve retornar `NO_REGISTER`. Uma função que retorna valor deve retornar um registrador cujo tipo corresponda exatamente à sua assinatura. O retorno remove o frame atual, escreve o valor retornado no destino declarado pelo chamador quando aplicável e retoma o chamador após seu `CALL`.
 
 ### `HOST_CALL import, argument_start, argument_count, result`
 
@@ -267,10 +294,16 @@ A decodificação de instruções estabelece primeiro a estrutura de opcodes, op
 
 ## Limites de recursos e segurança
 
-Um runtime pode impor limites documentados inferiores aos máximos do formato, incluindo tamanho do módulo, quantidade de constantes, tamanho de strings, quantidade de imports, quantidade de funções, registradores por função, quantidade de instruções, memória e passos de execução. Os limites devem ser verificados antes de alocações inseguras ou da execução.
+Os limites oficiais são gerados a partir de [`sandbox/v1.json`](../../../sandbox/v1.json) e publicados no [Sandbox de Referência JIMP v1](SANDBOX.md). O encoder e o verificador JavaScript e o decoder e o verificador Rust aplicam os mesmos limites de carregamento e verificação. A CLI verifica o tamanho do arquivo codificado antes de lê-lo.
+
+A execução acompanha passos, frames de chamada, registradores ativos e memória lógica de valores do runtime. A memória lógica de valores equivale a `16` bytes por registrador ativo mais os bytes UTF-8 do conteúdo de cada string armazenada nesses registradores. O armazenamento do pool de constantes é limitado separadamente. Um frame é cobrado antes da alocação de seu array de registradores ou da cópia das strings dos argumentos. Substituir ou retornar um valor atualiza a cobrança, e argumentos do host são emprestados sem uma cópia feita pela VM.
+
+Ultrapassar um limite de carregamento ou verificação rejeita o módulo completo antes da execução e de efeitos no host. Ultrapassar um limite de execução encerra o programa com erro; efeitos concluídos por chamadas autorizadas anteriores ao host não são revertidos. Limites lógicos são portáteis e determinísticos, mas não descrevem o overhead do alocador da implementação nem o RSS total do processo.
+
+As falhas são expostas por meio do [Formato Padrão de Erros JIMP v1](ERRORS.md). Falhas de decodificação, verificação, resolução de imports do host e execução possuem códigos estáveis distintos. O texto do diagnóstico é um detalhe de implementação e pode melhorar sem alterar o código do erro.
 
 O módulo nunca deve conter endereços nativos considerados confiáveis. Dados de debug não são autoritativos e não devem afetar a execução. Hosts expõem capacidades explicitamente e permanecem responsáveis pela autorização da plataforma e pela política de sandbox.
 
 ## Decisões adiadas
 
-Os seguintes itens exigem especificações posteriores: desvios para trás e loops, chamadas e retornos, valores de heap, coleções, buffers binários, operações assíncronas do host, exceções, imports e exports de módulos, codificação de debug e execução AOT/JIT.
+Os seguintes itens exigem especificações posteriores: valores de heap, coleções, buffers binários, operações assíncronas do host, exceções, imports e exports de módulos, identidade do arquivo-fonte, localizações de debug por coluna e execução AOT/JIT.

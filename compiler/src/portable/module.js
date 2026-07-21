@@ -5,11 +5,30 @@ import {
   OPERAND_TYPES,
   VALUE_TYPES,
 } from "../generated/isa.js";
+import { SANDBOX_LIMITS } from "../generated/sandbox.js";
+
+const {
+  MAX_CODE_BYTES,
+  MAX_CONSTANTS,
+  MAX_CONSTANT_STRING_BYTES,
+  MAX_FUNCTIONS,
+  MAX_HOST_IMPORTS,
+  MAX_MODULE_BYTES,
+  MAX_PARAMETERS,
+  MAX_REGISTERS_PER_FUNCTION,
+  MAX_SECTION_COUNT,
+  MAX_SYMBOL_BYTES,
+  MAX_TOTAL_CONSTANT_STRING_BYTES,
+  MAX_TOTAL_INSTRUCTIONS,
+  MAX_VERIFICATION_TYPE_CELLS,
+} = SANDBOX_LIMITS;
 
 const MAGIC = Buffer.from("JIMP");
 const HEADER_SIZE = 20;
 const DIRECTORY_ENTRY_SIZE = 12;
 const NO_NAME = 0xffffffff;
+const DEBUG_VERSION = 1;
+const SECTION_OPTIONAL = 1;
 
 export const SECTION_KINDS = Object.freeze({
   CONSTANTS: 1,
@@ -73,7 +92,7 @@ function encodeValueType(name, context, { allowNull = true, allowVoid = false } 
   return tag;
 }
 
-function encodeConstant(constant, index) {
+function encodeConstant(constant, index, resourceState) {
   const context = `Constant ${index}`;
   const tag = encodeValueType(constant.type, context);
   invariant(constant.type !== "VOID", `${context} cannot use VOID.`);
@@ -103,7 +122,11 @@ function encodeConstant(constant, index) {
     case "STRING": {
       invariant(typeof constant.value === "string", `${context} must contain a string.`);
       const payload = Buffer.from(constant.value, "utf8");
-      assertUnsigned(payload.length, 0xffffffff, `${context} UTF-8 length`);
+      invariant(payload.length <= MAX_CONSTANT_STRING_BYTES,
+        `${context} exceeds the sandbox string limit of ${MAX_CONSTANT_STRING_BYTES} UTF-8 bytes.`);
+      resourceState.stringBytes += payload.length;
+      invariant(resourceState.stringBytes <= MAX_TOTAL_CONSTANT_STRING_BYTES,
+        `Constant strings exceed the sandbox aggregate limit of ${MAX_TOTAL_CONSTANT_STRING_BYTES} UTF-8 bytes.`);
       return Buffer.concat([encodeU8(tag), encodeU32(payload.length), payload]);
     }
     default:
@@ -112,24 +135,33 @@ function encodeConstant(constant, index) {
 }
 
 function encodeConstants(constants) {
-  assertUnsigned(constants.length, 0xffffffff, "Constant count");
-  return Buffer.concat([encodeU32(constants.length), ...constants.map(encodeConstant)]);
+  invariant(constants.length <= MAX_CONSTANTS,
+    `Constant count exceeds the sandbox limit of ${MAX_CONSTANTS}.`);
+  const resourceState = { stringBytes: 0 };
+  return Buffer.concat([
+    encodeU32(constants.length),
+    ...constants.map((constant, index) => encodeConstant(constant, index, resourceState)),
+  ]);
 }
 
 function assertStringConstant(constants, index, context) {
   assertUnsigned(index, 0xffffffff, context);
   const constant = constants[index];
   invariant(constant?.type === "STRING" && constant.value.length > 0, `${context} must reference a non-empty string constant.`);
+  invariant(Buffer.byteLength(constant.value, "utf8") <= MAX_SYMBOL_BYTES,
+    `${context} exceeds the sandbox symbol limit of ${MAX_SYMBOL_BYTES} UTF-8 bytes.`);
 }
 
 function encodeImports(imports, constants) {
-  assertUnsigned(imports.length, 0xffffffff, "Host import count");
+  invariant(imports.length <= MAX_HOST_IMPORTS,
+    `Host import count exceeds the sandbox limit of ${MAX_HOST_IMPORTS}.`);
   const entries = imports.map((hostImport, index) => {
     const context = `Host import ${index}`;
     assertStringConstant(constants, hostImport.namespace, `${context} namespace`);
     assertStringConstant(constants, hostImport.name, `${context} name`);
     const parameterTypes = hostImport.parameterTypes ?? [];
-    assertUnsigned(parameterTypes.length, 0xffff, `${context} parameter count`);
+    invariant(parameterTypes.length <= MAX_PARAMETERS,
+      `${context} parameter count exceeds the sandbox limit of ${MAX_PARAMETERS}.`);
     const parameterTags = parameterTypes.map((type, parameterIndex) =>
       encodeValueType(type, `${context} parameter ${parameterIndex}`, { allowNull: false }));
     const returnTag = encodeValueType(hostImport.returnType, `${context} return type`, { allowVoid: true });
@@ -147,7 +179,8 @@ function encodeImports(imports, constants) {
 }
 
 function encodeFunctions(functions, constants) {
-  assertUnsigned(functions.length, 0xffffffff, "Function count");
+  invariant(functions.length <= MAX_FUNCTIONS,
+    `Function count exceeds the sandbox limit of ${MAX_FUNCTIONS}.`);
   let codeOffset = 0;
   const codeParts = [];
   const entries = functions.map((func, index) => {
@@ -156,10 +189,11 @@ function encodeFunctions(functions, constants) {
     if (func.name !== null && func.name !== undefined) {
       assertStringConstant(constants, func.name, `${context} name`);
     }
-    assertUnsigned(func.registerCount, 0xffff, `${context} register count`);
+    assertUnsigned(func.registerCount, MAX_REGISTERS_PER_FUNCTION, `${context} register count`);
     assertUnsigned(func.code.length, 0xffffffff, `${context} code length`);
     const parameterTypes = func.parameterTypes ?? [];
-    assertUnsigned(parameterTypes.length, 0xffff, `${context} parameter count`);
+    invariant(parameterTypes.length <= MAX_PARAMETERS,
+      `${context} parameter count exceeds the sandbox limit of ${MAX_PARAMETERS}.`);
     const parameterTags = parameterTypes.map((type, parameterIndex) =>
       encodeValueType(type, `${context} parameter ${parameterIndex}`, { allowNull: false }));
     const returnTag = encodeValueType(func.returnType, `${context} return type`, { allowVoid: true });
@@ -176,7 +210,8 @@ function encodeFunctions(functions, constants) {
       Buffer.from(parameterTags),
     ]);
     codeOffset += func.code.length;
-    assertUnsigned(codeOffset, 0xffffffff, "Combined code length");
+    invariant(codeOffset <= MAX_CODE_BYTES,
+      `Combined code length exceeds the sandbox limit of ${MAX_CODE_BYTES} bytes.`);
     codeParts.push(func.code);
     return entry;
   });
@@ -184,6 +219,36 @@ function encodeFunctions(functions, constants) {
     functions: Buffer.concat([encodeU32(functions.length), ...entries]),
     code: Buffer.concat(codeParts),
   };
+}
+
+function encodeDebug(functions) {
+  if (!functions.some((func) => Object.hasOwn(func, "debug"))) return null;
+  const entries = [];
+  let functionCodeOffset = 0;
+  for (let functionIndex = 0; functionIndex < functions.length; functionIndex += 1) {
+    const func = functions[functionIndex];
+    invariant(Array.isArray(func.debug), `Function ${functionIndex} debug mappings must be an array.`);
+    let previousOffset = -1;
+    for (const [mappingIndex, mapping] of func.debug.entries()) {
+      const context = `Function ${functionIndex} debug mapping ${mappingIndex}`;
+      assertUnsigned(mapping.offset, 0xffffffff, `${context} code offset`);
+      invariant(mapping.offset < func.code.length, `${context} code offset is outside the function.`);
+      invariant(mapping.offset > previousOffset, `${context} code offsets must be strictly increasing.`);
+      assertUnsigned(mapping.line, 0xffffffff, `${context} source line`);
+      invariant(mapping.line > 0, `${context} source line must be one-based.`);
+      entries.push({ offset: functionCodeOffset + mapping.offset, line: mapping.line });
+      previousOffset = mapping.offset;
+    }
+    functionCodeOffset += func.code.length;
+  }
+  invariant(entries.length <= MAX_TOTAL_INSTRUCTIONS,
+    `Debug mapping count exceeds the sandbox instruction limit of ${MAX_TOTAL_INSTRUCTIONS}.`);
+  return Buffer.concat([
+    encodeU16(DEBUG_VERSION),
+    encodeU16(0),
+    encodeU32(entries.length),
+    ...entries.flatMap(({ offset, line }) => [encodeU32(offset), encodeU32(line)]),
+  ]);
 }
 
 export function encodeInstruction(name, operands = {}) {
@@ -219,12 +284,20 @@ export function encodePortableModule({ constants, imports, functions, entryFunct
   invariant(entry.returnType === "VOID", "Entry function must return VOID.");
 
   const encodedFunctions = encodeFunctions(functions, constants);
+  const encodedDebug = encodeDebug(functions);
   const sections = [
     { kind: SECTION_KINDS.CONSTANTS, payload: encodeConstants(constants) },
     { kind: SECTION_KINDS.HOST_IMPORTS, payload: encodeImports(imports, constants) },
     { kind: SECTION_KINDS.FUNCTIONS, payload: encodedFunctions.functions },
     { kind: SECTION_KINDS.CODE, payload: encodedFunctions.code },
+    ...(encodedDebug === null ? [] : [{
+      kind: SECTION_KINDS.DEBUG,
+      flags: SECTION_OPTIONAL,
+      payload: encodedDebug,
+    }]),
   ];
+  invariant(sections.length <= MAX_SECTION_COUNT,
+    `Section count exceeds the sandbox limit of ${MAX_SECTION_COUNT}.`);
   const directorySize = sections.length * DIRECTORY_ENTRY_SIZE;
   let sectionOffset = HEADER_SIZE + directorySize;
   const directory = [];
@@ -232,12 +305,13 @@ export function encodePortableModule({ constants, imports, functions, entryFunct
     assertUnsigned(sectionOffset, 0xffffffff, "Section offset");
     directory.push(Buffer.concat([
       encodeU16(section.kind),
-      encodeU16(0),
+      encodeU16(section.flags ?? 0),
       encodeU32(sectionOffset),
       encodeU32(section.payload.length),
     ]));
     sectionOffset += section.payload.length;
-    assertUnsigned(sectionOffset, 0xffffffff, "Module length");
+    invariant(sectionOffset <= MAX_MODULE_BYTES,
+      `Module size exceeds the sandbox limit of ${MAX_MODULE_BYTES} bytes.`);
   }
 
   const header = Buffer.concat([
@@ -291,7 +365,10 @@ function decodeValueType(tag, context, { allowNull = true, allowVoid = false } =
 function decodeConstants(section) {
   const cursor = new Cursor(section.payload, section.offset);
   const count = cursor.u32("constant count");
+  invariant(count <= MAX_CONSTANTS,
+    `Constant count exceeds the sandbox limit of ${MAX_CONSTANTS}.`);
   const constants = [];
+  let totalStringBytes = 0;
   for (let index = 0; index < count; index += 1) {
     const tag = cursor.u8(`constant ${index} tag`);
     const type = decodeValueType(tag, `Constant ${index}`);
@@ -307,6 +384,11 @@ function decodeConstants(section) {
       value = cursor.f64(`constant ${index} f64`);
     } else if (type === "STRING") {
       const length = cursor.u32(`constant ${index} string length`);
+      invariant(length <= MAX_CONSTANT_STRING_BYTES,
+        `Constant ${index} exceeds the sandbox string limit of ${MAX_CONSTANT_STRING_BYTES} UTF-8 bytes.`);
+      totalStringBytes += length;
+      invariant(totalStringBytes <= MAX_TOTAL_CONSTANT_STRING_BYTES,
+        `Constant strings exceed the sandbox aggregate limit of ${MAX_TOTAL_CONSTANT_STRING_BYTES} UTF-8 bytes.`);
       const encoded = cursor.read(length, `constant ${index} string`);
       try {
         value = new TextDecoder("utf-8", { fatal: true }).decode(encoded);
@@ -323,11 +405,15 @@ function decodeConstants(section) {
 function decodeImports(section, constants) {
   const cursor = new Cursor(section.payload, section.offset);
   const count = cursor.u32("host import count");
+  invariant(count <= MAX_HOST_IMPORTS,
+    `Host import count exceeds the sandbox limit of ${MAX_HOST_IMPORTS}.`);
   const imports = [];
   for (let index = 0; index < count; index += 1) {
     const namespace = cursor.u32(`host import ${index} namespace`);
     const name = cursor.u32(`host import ${index} name`);
     const parameterCount = cursor.u16(`host import ${index} parameter count`);
+    invariant(parameterCount <= MAX_PARAMETERS,
+      `Host import ${index} parameter count exceeds the sandbox limit of ${MAX_PARAMETERS}.`);
     const returnType = decodeValueType(cursor.u8(`host import ${index} return type`), `Host import ${index} return type`, { allowVoid: true });
     invariant(cursor.u8(`host import ${index} flags`) === 0, `Host import ${index} flags must be zero.`);
     const parameterTypes = [];
@@ -355,13 +441,19 @@ function decodeImports(section, constants) {
 function decodeFunctions(section, constants, codeLength) {
   const cursor = new Cursor(section.payload, section.offset);
   const count = cursor.u32("function count");
+  invariant(count <= MAX_FUNCTIONS,
+    `Function count exceeds the sandbox limit of ${MAX_FUNCTIONS}.`);
   const functions = [];
   for (let index = 0; index < count; index += 1) {
     const name = cursor.u32(`function ${index} name`);
     const codeOffset = cursor.u32(`function ${index} code offset`);
     const length = cursor.u32(`function ${index} code length`);
     const registerCount = cursor.u16(`function ${index} register count`);
+    invariant(registerCount <= MAX_REGISTERS_PER_FUNCTION,
+      `Function ${index} register count exceeds the sandbox limit of ${MAX_REGISTERS_PER_FUNCTION}.`);
     const parameterCount = cursor.u16(`function ${index} parameter count`);
+    invariant(parameterCount <= MAX_PARAMETERS,
+      `Function ${index} parameter count exceeds the sandbox limit of ${MAX_PARAMETERS}.`);
     const returnType = decodeValueType(cursor.u8(`function ${index} return type`), `Function ${index} return type`, { allowVoid: true });
     invariant(cursor.u8(`function ${index} flags`) === 0, `Function ${index} flags must be zero.`);
     invariant(cursor.u16(`function ${index} reserved`) === 0, `Function ${index} reserved field must be zero.`);
@@ -394,12 +486,52 @@ function decodeFunctions(section, constants, codeLength) {
   return functions;
 }
 
-function decodeFunctionInstructions(code, func, functionIndex, constants, imports) {
+function decodeDebug(section, functions) {
+  if (section === undefined) return [];
+  invariant(section.flags === SECTION_OPTIONAL, "Debug section must be optional.");
+  const cursor = new Cursor(section.payload, section.offset);
+  invariant(cursor.u16("debug version") === DEBUG_VERSION,
+    `Unsupported debug metadata version.`);
+  invariant(cursor.u16("debug flags") === 0, "Debug flags must be zero.");
+  const count = cursor.u32("debug mapping count");
+  invariant(count <= MAX_TOTAL_INSTRUCTIONS,
+    `Debug mapping count exceeds the sandbox instruction limit of ${MAX_TOTAL_INSTRUCTIONS}.`);
+  const instructionOffsets = new Set(functions.flatMap((func) =>
+    func.instructions.map(({ offset }) => offset)));
+  const mappings = [];
+  let previousOffset = -1;
+  for (let index = 0; index < count; index += 1) {
+    const offset = cursor.u32(`debug mapping ${index} code offset`);
+    const line = cursor.u32(`debug mapping ${index} source line`);
+    invariant(offset > previousOffset, "Debug mapping code offsets must be strictly increasing.");
+    invariant(instructionOffsets.has(offset),
+      `Debug mapping ${index} must reference an instruction boundary.`);
+    invariant(line > 0, `Debug mapping ${index} source line must be one-based.`);
+    mappings.push({ offset, line });
+    previousOffset = offset;
+  }
+  cursor.finish("debug section");
+  return mappings;
+}
+
+function decodeFunctionInstructions(
+  code,
+  func,
+  functionIndex,
+  entryFunction,
+  constants,
+  imports,
+  functions,
+  resourceState,
+) {
   const functionCode = code.subarray(func.codeOffset, func.codeOffset + func.codeLength);
   const cursor = new Cursor(functionCode, func.codeOffset);
   const instructions = [];
 
   while (cursor.offset < functionCode.length) {
+    resourceState.instructionCount += 1;
+    invariant(resourceState.instructionCount <= MAX_TOTAL_INSTRUCTIONS,
+      `Instruction count exceeds the sandbox limit of ${MAX_TOTAL_INSTRUCTIONS}.`);
     const localOffset = cursor.offset;
     const opcode = cursor.u8(`function ${functionIndex} instruction opcode`);
     const definition = instructionByOpcode.get(opcode);
@@ -427,10 +559,18 @@ function decodeFunctionInstructions(code, func, functionIndex, constants, import
     });
   }
 
-  invariant(instructions.length > 0 && instructions.at(-1).name === "HALT",
-    `Function ${functionIndex} must terminate with HALT.`);
-  invariant(instructions.slice(0, -1).every(({ name }) => name !== "HALT"),
-    "HALT must be the final instruction of a function.");
+  const isEntry = functionIndex === entryFunction;
+  const terminal = isEntry ? "HALT" : "RETURN";
+  invariant(instructions.length > 0 && instructions.at(-1).name === terminal,
+    `Function ${functionIndex} must terminate with ${terminal}.`);
+  invariant(!isEntry || instructions.slice(0, -1).every(({ name }) => name !== "HALT"),
+    "HALT must be the final instruction of the entry function.");
+  invariant(isEntry || instructions.every(({ name }) => name !== "HALT"),
+    "HALT is only valid in the entry function.");
+  invariant(!isEntry || instructions.every(({ name }) => name !== "RETURN"),
+    "RETURN is not valid in the entry function.");
+  invariant(instructions.length * func.registerCount <= MAX_VERIFICATION_TYPE_CELLS,
+    `Function ${functionIndex} type-flow analysis exceeds the sandbox limit of ${MAX_VERIFICATION_TYPE_CELLS} cells.`);
 
   const instructionByOffset = new Map(instructions.map((instruction) => [
     instruction.localOffset,
@@ -438,8 +578,6 @@ function decodeFunctionInstructions(code, func, functionIndex, constants, import
   ]));
   for (const instruction of instructions) {
     if (!["JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE"].includes(instruction.name)) continue;
-    invariant(instruction.operands.target > instruction.localOffset,
-      `${instruction.name} target must be a forward instruction offset.`);
     invariant(instructionByOffset.has(instruction.operands.target),
       `${instruction.name} target must reference an instruction boundary.`);
   }
@@ -456,19 +594,35 @@ function decodeFunctionInstructions(code, func, functionIndex, constants, import
     return index;
   }
 
+  const queue = [0];
+  const queued = new Set([0]);
+
   function mergeInto(index, types) {
     if (incomingTypes[index] === null) {
       incomingTypes[index] = [...types];
+      if (!queued.has(index)) {
+        queue.push(index);
+        queued.add(index);
+      }
       return;
     }
-    incomingTypes[index] = incomingTypes[index].map((type, registerIndex) =>
-      (type === types[registerIndex] ? type : "UNKNOWN"));
+    let changed = false;
+    incomingTypes[index] = incomingTypes[index].map((type, registerIndex) => {
+      if (type === types[registerIndex] || type === "UNKNOWN") return type;
+      changed = true;
+      return "UNKNOWN";
+    });
+    if (changed && !queued.has(index)) {
+      queue.push(index);
+      queued.add(index);
+    }
   }
 
-  for (const instruction of instructions) {
+  while (queue.length > 0) {
+    const instructionIndex = queue.shift();
+    queued.delete(instructionIndex);
+    const instruction = instructions[instructionIndex];
     const registerTypes = incomingTypes[instruction.index];
-    invariant(registerTypes !== null,
-      `Instruction at code offset ${instruction.offset} is unreachable.`);
     const types = [...registerTypes];
     const { name, operands } = instruction;
 
@@ -543,9 +697,44 @@ function decodeFunctionInstructions(code, func, functionIndex, constants, import
         const result = register(operands, "result", name);
         types[result] = hostImport.returnType;
       }
+    } else if (name === "CALL") {
+      const calledFunction = functions[operands.function];
+      invariant(calledFunction, "CALL function index is out of range.");
+      invariant(operands.function !== entryFunction, "CALL cannot invoke the entry function.");
+      invariant(operands.argument_count === calledFunction.parameterTypes.length,
+        "CALL argument count does not match the function signature.");
+      if (operands.argument_count === 0) {
+        invariant(operands.argument_start === 0,
+          "CALL with no arguments must use register zero as its argument start.");
+      } else {
+        invariant(operands.argument_start < func.registerCount,
+          "CALL argument start is out of range.");
+        invariant(operands.argument_start + operands.argument_count <= func.registerCount,
+          "CALL argument range is out of bounds.");
+      }
+      for (let index = 0; index < calledFunction.parameterTypes.length; index += 1) {
+        invariant(types[operands.argument_start + index] === calledFunction.parameterTypes[index],
+          `CALL argument ${index} type does not match the function signature.`);
+      }
+      if (calledFunction.returnType === "VOID") {
+        invariant(operands.result === NO_REGISTER,
+          "A VOID CALL must use NO_REGISTER as its result.");
+      } else {
+        const result = register(operands, "result", name);
+        types[result] = calledFunction.returnType;
+      }
+    } else if (name === "RETURN") {
+      if (func.returnType === "VOID") {
+        invariant(operands.result === NO_REGISTER,
+          "A VOID function RETURN must use NO_REGISTER.");
+      } else {
+        const result = register(operands, "result", name);
+        invariant(types[result] === func.returnType,
+          `RETURN value must have type ${func.returnType}.`);
+      }
     }
 
-    if (name === "HALT") continue;
+    if (name === "HALT" || name === "RETURN") continue;
     if (name === "JUMP") {
       mergeInto(instructionByOffset.get(operands.target), types);
       continue;
@@ -558,11 +747,18 @@ function decodeFunctionInstructions(code, func, functionIndex, constants, import
     mergeInto(instruction.index + 1, types);
   }
 
+  for (const instruction of instructions) {
+    invariant(incomingTypes[instruction.index] !== null,
+      `Instruction at code offset ${instruction.offset} is unreachable.`);
+  }
+
   return instructions.map(({ localOffset: _localOffset, ...instruction }) => instruction);
 }
 
 export function decodePortableModule(bytecode) {
   invariant(Buffer.isBuffer(bytecode), "Bytecode must be a Buffer.");
+  invariant(bytecode.length <= MAX_MODULE_BYTES,
+    `Module size exceeds the sandbox limit of ${MAX_MODULE_BYTES} bytes.`);
   const cursor = new Cursor(bytecode);
   invariant(cursor.read(4, "magic number").equals(MAGIC), "Invalid JIMP bytecode magic.");
   const major = cursor.u16("format major version");
@@ -572,6 +768,8 @@ export function decodePortableModule(bytecode) {
   invariant(cursor.u32("module flags") === 0, "Module flags must be zero.");
   const entryFunction = cursor.u32("entry function");
   const sectionCount = cursor.u16("section count");
+  invariant(sectionCount <= MAX_SECTION_COUNT,
+    `Section count exceeds the sandbox limit of ${MAX_SECTION_COUNT}.`);
   invariant(cursor.u16("reserved header field") === 0, "Reserved header field must be zero.");
   const directoryEnd = HEADER_SIZE + sectionCount * DIRECTORY_ENTRY_SIZE;
   invariant(directoryEnd <= bytecode.length, "Section directory exceeds the file bounds.");
@@ -610,11 +808,36 @@ export function decodePortableModule(bytecode) {
   const constants = decodeConstants(sections.get(SECTION_KINDS.CONSTANTS));
   const imports = decodeImports(sections.get(SECTION_KINDS.HOST_IMPORTS), constants);
   const code = sections.get(SECTION_KINDS.CODE).payload;
-  const functions = decodeFunctions(sections.get(SECTION_KINDS.FUNCTIONS), constants, code.length)
-    .map((func, index) => ({
+  invariant(code.length <= MAX_CODE_BYTES,
+    `Code size exceeds the sandbox limit of ${MAX_CODE_BYTES} bytes.`);
+  const functionDefinitions = decodeFunctions(
+    sections.get(SECTION_KINDS.FUNCTIONS),
+    constants,
+    code.length,
+  );
+  const resourceState = { instructionCount: 0 };
+  const decodedFunctions = functionDefinitions.map((func, index) => ({
       ...func,
-      instructions: decodeFunctionInstructions(code, func, index, constants, imports),
+      instructions: decodeFunctionInstructions(
+        code,
+        func,
+        index,
+        entryFunction,
+        constants,
+        imports,
+        functionDefinitions,
+        resourceState,
+      ),
     }));
+  const debug = decodeDebug(sections.get(SECTION_KINDS.DEBUG), decodedFunctions);
+  const sourceLineByOffset = new Map(debug.map(({ offset, line }) => [offset, line]));
+  const functions = decodedFunctions.map((func) => ({
+    ...func,
+    instructions: func.instructions.map((instruction) => ({
+      ...instruction,
+      sourceLine: sourceLineByOffset.get(instruction.offset) ?? null,
+    })),
+  }));
   invariant(entryFunction < functions.length, "Entry function index is out of range.");
   invariant(functions[entryFunction].parameterTypes.length === 0, "Entry function must have no parameters.");
   invariant(functions[entryFunction].returnType === "VOID", "Entry function must return VOID.");
@@ -624,6 +847,7 @@ export function decodePortableModule(bytecode) {
     constants,
     imports,
     functions,
+    debug,
     code: Buffer.from(code),
   };
 }

@@ -5,10 +5,14 @@
   "type": "module",
   "scripts": {
     "generate:isa": "node tools/generate-isa.js",
+    "generate:sandbox": "node tools/generate-sandbox.js",
+    "generate:errors": "node tools/generate-errors.js",
     "check:isa": "node tools/generate-isa.js --check",
+    "check:sandbox": "node tools/generate-sandbox.js --check",
+    "check:errors": "node tools/generate-errors.js --check",
     "test": "node --test",
     "test:integration": "node --test integration/compiler-runtime.js",
-    "check": "npm run check:isa && npm test && npm run test:integration && cargo fmt --manifest-path runtime/Cargo.toml -- --check && cargo clippy --manifest-path runtime/Cargo.toml -- -D warnings && cargo test --manifest-path runtime/Cargo.toml",
+    "check": "npm run check:isa && npm run check:sandbox && npm run check:errors && npm test && npm run test:integration && cargo fmt --manifest-path runtime/Cargo.toml -- --check && cargo clippy --manifest-path runtime/Cargo.toml -- -D warnings && cargo test --manifest-path runtime/Cargo.toml",
     "compile": "node compiler/src/cli.js"
   },
   "engines": {

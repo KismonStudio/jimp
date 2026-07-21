@@ -3,7 +3,7 @@
   "name": "jimp-portable-vm",
   "formatVersion": {
     "major": 2,
-    "minor": 2
+    "minor": 5
   },
   "endianness": "little",
   "opcodeWidth": 1,
@@ -16,7 +16,8 @@
     { "name": "constant_index", "encoding": "u32", "allowsNoRegister": false },
     { "name": "import_index", "encoding": "u32", "allowsNoRegister": false },
     { "name": "register_count", "encoding": "u16", "allowsNoRegister": false },
-    { "name": "code_offset", "encoding": "u32", "allowsNoRegister": false }
+    { "name": "code_offset", "encoding": "u32", "allowsNoRegister": false },
+    { "name": "function_index", "encoding": "u32", "allowsNoRegister": false }
   ],
   "valueTypes": [
     {
@@ -295,8 +296,8 @@
         { "name": "target", "type": "code_offset" }
       ],
       "description": {
-        "en": "Continues execution at a forward instruction offset in the current function.",
-        "pt": "Continua a execucao em um offset de instrucao posterior na funcao atual."
+        "en": "Continues execution at an instruction offset in the current function.",
+        "pt": "Continua a execucao em um offset de instrucao na funcao atual."
       }
     },
     {
@@ -307,8 +308,8 @@
         { "name": "target", "type": "code_offset" }
       ],
       "description": {
-        "en": "Jumps forward when a boolean condition is false.",
-        "pt": "Desvia para frente quando uma condicao booleana e falsa."
+        "en": "Jumps when a boolean condition is false.",
+        "pt": "Desvia quando uma condicao booleana e falsa."
       }
     },
     {
@@ -319,8 +320,33 @@
         { "name": "target", "type": "code_offset" }
       ],
       "description": {
-        "en": "Jumps forward when a boolean condition is true.",
-        "pt": "Desvia para frente quando uma condicao booleana e verdadeira."
+        "en": "Jumps when a boolean condition is true.",
+        "pt": "Desvia quando uma condicao booleana e verdadeira."
+      }
+    },
+    {
+      "name": "CALL",
+      "opcode": 50,
+      "operands": [
+        { "name": "function", "type": "function_index" },
+        { "name": "argument_start", "type": "register" },
+        { "name": "argument_count", "type": "register_count" },
+        { "name": "result", "type": "optional_register" }
+      ],
+      "description": {
+        "en": "Invokes a typed function using consecutive argument registers.",
+        "pt": "Invoca uma funcao tipada usando registradores de argumento consecutivos."
+      }
+    },
+    {
+      "name": "RETURN",
+      "opcode": 51,
+      "operands": [
+        { "name": "result", "type": "optional_register" }
+      ],
+      "description": {
+        "en": "Returns from the current function with an optional value.",
+        "pt": "Retorna da funcao atual com um valor opcional."
       }
     },
     {

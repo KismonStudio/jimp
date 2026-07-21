@@ -52,7 +52,7 @@ test("round-trips portable constants and typed host imports", () => {
 
   assert.deepEqual(module.header, {
     major: 2,
-    minor: 2,
+    minor: 5,
     entryFunction: 0,
     sectionCount: 4,
   });
@@ -74,6 +74,95 @@ test("round-trips portable constants and typed host imports", () => {
   }]);
   assert.equal(module.functions[0].registerCount, 2);
   assert(module.code.length > 0);
+});
+
+test("round-trips optional source-line debug mappings", () => {
+  const load = encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 });
+  const halt = encodeInstruction("HALT");
+  const bytecode = encodePortableModule({
+    constants: [{ type: "I64", value: 1n }],
+    imports: [],
+    functions: [{
+      name: null,
+      code: Buffer.concat([load, halt]),
+      debug: [
+        { offset: 0, line: 3 },
+        { offset: load.length, line: 4 },
+      ],
+      registerCount: 1,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+  const module = decodePortableModule(bytecode);
+
+  assert.equal(module.header.sectionCount, 5);
+  assert.deepEqual(module.debug, [
+    { offset: 0, line: 3 },
+    { offset: load.length, line: 4 },
+  ]);
+  assert.deepEqual(
+    module.functions[0].instructions.map(({ sourceLine }) => sourceLine),
+    [3, 4],
+  );
+});
+
+test("rejects invalid debug mappings without affecting modules that omit them", () => {
+  const code = encodeInstruction("HALT");
+  const createDebugModule = () => encodePortableModule({
+    constants: [],
+    imports: [],
+    functions: [{
+      name: null,
+      code,
+      debug: [{ offset: 0, line: 1 }],
+      registerCount: 0,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+  const debugSection = (bytecode) => {
+    const sectionCount = bytecode.readUInt16LE(16);
+    for (let index = 0; index < sectionCount; index += 1) {
+      const directoryOffset = 20 + index * 12;
+      if (bytecode.readUInt16LE(directoryOffset) === 5) {
+        return {
+          directoryOffset,
+          payloadOffset: bytecode.readUInt32LE(directoryOffset + 4),
+        };
+      }
+    }
+    throw new Error("Missing debug section.");
+  };
+
+  const requiredDebug = createDebugModule();
+  const required = debugSection(requiredDebug);
+  requiredDebug.writeUInt16LE(0, required.directoryOffset + 2);
+  assert.throws(() => decodePortableModule(requiredDebug), /Debug section must be optional/);
+
+  const invalidLine = createDebugModule();
+  const lineSection = debugSection(invalidLine);
+  invalidLine.writeUInt32LE(0, lineSection.payloadOffset + 12);
+  assert.throws(() => decodePortableModule(invalidLine), /source line must be one-based/);
+
+  const invalidBoundary = createDebugModule();
+  const boundarySection = debugSection(invalidBoundary);
+  invalidBoundary.writeUInt32LE(1, boundarySection.payloadOffset + 8);
+  assert.throws(() => decodePortableModule(invalidBoundary), /instruction boundary/);
+
+  assert.throws(() => encodePortableModule({
+    constants: [],
+    imports: [],
+    functions: [{
+      name: null,
+      code,
+      debug: [{ offset: 0, line: 0 }],
+      registerCount: 0,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  }), /source line must be one-based/);
+  assert.deepEqual(decodePortableModule(createPortableModule()).debug, []);
 });
 
 test("rejects host names that are not non-empty string constants", () => {
@@ -133,7 +222,7 @@ test("rejects invalid typed arithmetic during portable verification", () => {
   assert.throws(() => decodePortableModule(bytecode), /ADD operands must be I64 or F64/);
 });
 
-test("rejects backward and unaligned jump targets", () => {
+test("accepts backward jumps and rejects unaligned jump targets", () => {
   const createModule = (target) => encodePortableModule({
     constants: [],
     imports: [],
@@ -149,10 +238,24 @@ test("rejects backward and unaligned jump targets", () => {
     }],
   });
 
-  assert.throws(
-    () => decodePortableModule(createModule(0)),
-    /target must be a forward instruction offset/,
-  );
+  const loopCode = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+    encodeInstruction("JUMP_IF_TRUE", { condition: 0, target: 0 }),
+    encodeInstruction("HALT"),
+  ]);
+  const loopModule = encodePortableModule({
+    constants: [{ type: "BOOL", value: true }],
+    imports: [],
+    functions: [{
+      name: null,
+      code: loopCode,
+      registerCount: 1,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+
+  assert.doesNotThrow(() => decodePortableModule(loopModule));
   assert.throws(
     () => decodePortableModule(createModule(2)),
     /target must reference an instruction boundary/,
@@ -197,5 +300,78 @@ test("rejects register types that are unsafe on a conditional path", () => {
   assert.throws(
     () => decodePortableModule(bytecode),
     /HOST_CALL argument 0 type does not match the import signature/,
+  );
+});
+
+test("verifies typed CALL and RETURN contracts", () => {
+  const bytecode = encodePortableModule({
+    constants: [{ type: "I64", value: 42n }],
+    imports: [],
+    functions: [
+      {
+        name: null,
+        code: Buffer.concat([
+          encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+          encodeInstruction("CALL", {
+            function: 1,
+            argument_start: 0,
+            argument_count: 1,
+            result: 1,
+          }),
+          encodeInstruction("HALT"),
+        ]),
+        registerCount: 2,
+        parameterTypes: [],
+        returnType: "VOID",
+      },
+      {
+        name: null,
+        code: encodeInstruction("RETURN", { result: 0 }),
+        registerCount: 1,
+        parameterTypes: ["I64"],
+        returnType: "I64",
+      },
+    ],
+  });
+  const module = decodePortableModule(bytecode);
+
+  assert.equal(module.functions[0].instructions[1].name, "CALL");
+  assert.equal(module.functions[1].instructions[0].name, "RETURN");
+});
+
+test("rejects incompatible CALL arguments", () => {
+  const bytecode = encodePortableModule({
+    constants: [{ type: "BOOL", value: true }],
+    imports: [],
+    functions: [
+      {
+        name: null,
+        code: Buffer.concat([
+          encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+          encodeInstruction("CALL", {
+            function: 1,
+            argument_start: 0,
+            argument_count: 1,
+            result: 1,
+          }),
+          encodeInstruction("HALT"),
+        ]),
+        registerCount: 2,
+        parameterTypes: [],
+        returnType: "VOID",
+      },
+      {
+        name: null,
+        code: encodeInstruction("RETURN", { result: 0 }),
+        registerCount: 1,
+        parameterTypes: ["I64"],
+        returnType: "I64",
+      },
+    ],
+  });
+
+  assert.throws(
+    () => decodePortableModule(bytecode),
+    /CALL argument 0 type does not match the function signature/,
   );
 });

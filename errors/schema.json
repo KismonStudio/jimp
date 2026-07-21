@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jimp.dev/schemas/errors-v1.json",
+  "title": "JIMP standard errors",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "codes"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "const": "jimp-error" },
+    "version": { "const": 1 },
+    "codes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "code", "phase", "exitCode", "description"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "code": { "type": "string", "pattern": "^JIMP-[0-9]{4}$" },
+          "phase": { "enum": ["usage", "io", "compile", "decode", "verify", "resolve", "execute", "internal"] },
+          "exitCode": { "type": "integer", "minimum": 1, "maximum": 255 },
+          "description": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["en", "pt"],
+            "properties": {
+              "en": { "type": "string", "minLength": 1 },
+              "pt": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

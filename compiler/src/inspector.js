@@ -49,7 +49,8 @@ export function formatInspection(module) {
       const operands = Object.entries(instruction.operands)
         .map(([name, value]) => `${name}=${value}`)
         .join(" ");
-      lines.push(`    [${index}] @code+0x${offset} ${instruction.name}${operands ? ` ${operands}` : ""}`);
+      const source = instruction.sourceLine === null ? "" : ` @source:${instruction.sourceLine}`;
+      lines.push(`    [${index}] @code+0x${offset} ${instruction.name}${operands ? ` ${operands}` : ""}${source}`);
     }
   });
   return `${lines.join("\n")}\n`;

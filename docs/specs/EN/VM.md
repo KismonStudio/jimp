@@ -4,9 +4,9 @@
 
 ## Status
 
-This document specifies the implemented foundation of the portable JIMP VM v1. P2.5 completes the core-language lowering and semantic flow checks while retaining `.jbc` container format `2.2`.
+This document specifies the implemented portable JIMP VM v1 through P3.5. Format `2.5` adds optional, non-authoritative source-line debug metadata to the resource-bounded execution and standard-error foundation completed through P3.4.
 
-The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.2` remains pre-stable while the language and VM continue to evolve.
+The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.5` remains pre-stable while the language and VM continue to evolve.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -46,7 +46,7 @@ Each function declares a `register_count` encoded as an unsigned 16-bit integer.
 - `0xffff` is reserved as `NO_REGISTER` in instruction operands.
 - A function may declare zero through `65535` registers.
 - Every register is initialized to `null` when its frame is created.
-- Function arguments, when functions become executable, occupy consecutive registers starting at `r0`.
+- Function arguments occupy consecutive registers starting at `r0` in each newly created call frame.
 - Reading or writing an index outside the declared register range is invalid bytecode.
 - Registers contain values, never host pointers or bytecode addresses.
 
@@ -62,7 +62,7 @@ A portable `.jbc` file consists of a header, a section directory, and section pa
 | --- | --- | --- |
 | magic | 4 bytes | ASCII `JIMP` |
 | format major | `u16` | `2` |
-| format minor | `u16` | `1` |
+| format minor | `u16` | `5` |
 | module flags | `u32` | `0`; other bits are reserved |
 | entry function | `u32` | Index in the function section |
 | section count | `u16` | Number of directory entries |
@@ -144,9 +144,7 @@ The function section starts with a function count encoded as `u32`. Each functio
 | reserved | `u16` | Must be `0` |
 | parameter types | byte array | One scalar type tag per parameter |
 
-Function code ranges must be fully inside the code section and must not overlap. The header's entry-function index must exist. In the initial v1 foundation, the entry function must have zero parameters and return `void`.
-
-Function invocation instructions are intentionally deferred. The function-section model is defined now so the container will not require redesign when `CALL` and `RETURN` are introduced.
+Function code ranges must be fully inside the code section and must not overlap. The header's entry-function index must exist, have zero parameters, return `void`, and end physically with `HALT`. Every other function ends physically with `RETURN`. `HALT` is invalid outside the entry function, `RETURN` is invalid inside it, and bytecode cannot call the entry function.
 
 ## Code section and instruction model
 
@@ -158,6 +156,22 @@ The code section contains function instruction streams. Every instruction starts
 - Unknown opcodes and malformed operands are invalid.
 - Instruction boundaries must be derived from the ISA definition, not guessed by scanning bytes.
 - A module cannot define new opcode semantics.
+
+## Debug section
+
+The debug section maps encoded instruction offsets back to source lines. Its directory entry must set the `OPTIONAL` flag. A valid format `2.5` module may omit this section without changing execution semantics.
+
+| Field | Encoding | Meaning |
+| --- | --- | --- |
+| debug version | `u16` | `1` |
+| debug flags | `u16` | `0`; other bits are reserved |
+| mapping count | `u32` | Number of mappings that follow |
+| code offset | `u32` | Offset relative to the start of the complete code section |
+| source line | `u32` | One-based source line |
+
+Each mapping contains one `code offset` followed by one `source line`. Code offsets must be strictly increasing and must reference decoded instruction boundaries. A mapping count above the sandbox instruction limit, a zero source line, duplicate offsets, incomplete mappings, or trailing data is invalid. Mappings may be omitted for individual instructions.
+
+Debug metadata is non-authoritative: it must not change instruction decoding, verification, control flow, values, host authorization, or any other execution behavior. The official runtime uses a valid mapping for the current instruction when reporting an execution failure; without a mapping, the same failure is reported without a source location.
 
 The initial generic instruction set has these semantic operations. Numeric opcodes and operand encodings are defined by the machine-readable [`isa/v1.json`](../../../isa/v1.json) source and summarized in the generated [ISA reference](ISA.md).
 
@@ -189,17 +203,30 @@ The initial generic instruction set has these semantic operations. Numeric opcod
 
 `BOOL_AND` and `BOOL_OR` accept two `BOOL` operands and produce `BOOL`. They remain eager bytecode operations. The compiler lowers source-level `&&` and `||` to conditional jumps so their right operand is evaluated only when required.
 
-### Forward control flow
+### Control flow
 
 `JUMP target` continues execution at `target`. `JUMP_IF_FALSE condition, target` and `JUMP_IF_TRUE condition, target` select between `target` and the following instruction according to a `BOOL` register.
 
 - `target` is an unsigned `u32` byte offset relative to the beginning of the current function.
 - A target must identify the first byte of an instruction in the same function.
-- A target must be strictly greater than the offset of its jump instruction.
+- A target may be before or after the jump instruction, enabling loops.
 - Every encoded instruction must be reachable from the function entry.
 - Register types required by an instruction must be valid on every incoming control-flow path.
 
-Backward targets are rejected by format `2.2`. This prevents unbounded loops before execution-step limits are specified in P3.
+The verifier computes a fixed point across all incoming paths. Back edges cannot bypass type checks or make an encoded instruction unreachable.
+
+### `CALL function, argument_start, argument_count, result`
+
+- `function`: function-table index (`u32`), excluding the entry function.
+- `argument_start`: first argument register in the caller (`u16`).
+- `argument_count`: number of consecutive caller registers (`u16`).
+- `result`: caller destination register (`u16`) or `NO_REGISTER`.
+
+The argument count and types must exactly match the callee signature. A call creates an isolated frame with the callee's declared register count, initializes all registers to `null`, and copies arguments into consecutive registers beginning at `r0`. A `void` callee requires `NO_REGISTER`; a value-returning callee requires a valid destination register. Calls may be recursive.
+
+### `RETURN result`
+
+`result` is a register (`u16`) or `NO_REGISTER`. A `void` function must return `NO_REGISTER`. A value-returning function must return a register whose type exactly matches its signature. Returning removes the current frame, writes a returned value to the caller's declared destination when applicable, and resumes the caller after its `CALL`.
 
 ### `HOST_CALL import, argument_start, argument_count, result`
 
@@ -267,10 +294,16 @@ Instruction decoding first establishes opcode, operand, register, index, and jum
 
 ## Resource limits and security
 
-A runtime may impose documented limits lower than format maxima, including module size, constant count, string length, import count, function count, registers per function, instruction count, memory, and execution steps. Limits must be checked before unsafe allocation or execution.
+The official limits are generated from [`sandbox/v1.json`](../../../sandbox/v1.json) and published in the [JIMP Reference Sandbox v1](SANDBOX.md). The JavaScript encoder and verifier and the Rust decoder and verifier enforce the same load and verification limits. The CLI checks the encoded file size before reading it.
+
+Execution tracks steps, call frames, active registers, and logical runtime value memory. Logical value memory equals `16` bytes for every active register plus the UTF-8 payload bytes of every string stored in those registers. Constant-pool storage is bounded separately. A frame is charged before its register array or argument strings are copied. Replacing or returning a value updates the charge, and host arguments are borrowed without a VM-side copy.
+
+Exceeding a load or verification limit rejects the complete module before execution and host effects. Exceeding an execution limit terminates the program with an error; completed effects from earlier authorized host calls are not rolled back. Logical limits are portable and deterministic but do not describe implementation allocator overhead or total process RSS.
+
+Failures are exposed through the [JIMP Standard Error Format v1](ERRORS.md). Decode, verification, host-import resolution, and execution failures have separate stable codes. Diagnostic wording is implementation detail and may improve without changing the error code.
 
 The module must never contain trusted native addresses. Debug data is non-authoritative and must not affect execution. Hosts expose capabilities explicitly and remain responsible for platform authorization and sandbox policy.
 
 ## Deferred decisions
 
-The following items require later specifications: backward branches and loops, calls and returns, heap values, collections, binary buffers, asynchronous host operations, exceptions, module imports and exports, debug encoding, and AOT/JIT execution.
+The following items require later specifications: heap values, collections, binary buffers, asynchronous host operations, exceptions, module imports and exports, source-file identity, column-level debug locations, and AOT/JIT execution.

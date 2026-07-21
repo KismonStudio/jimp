@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import { compile } from "../compiler/src/compiler.js";
-import { NO_REGISTER } from "../compiler/src/generated/isa.js";
+import { NO_REGISTER, OPCODES } from "../compiler/src/generated/isa.js";
+import { SANDBOX_LIMITS } from "../compiler/src/generated/sandbox.js";
 import {
   encodeInstruction,
   encodePortableModule,
@@ -14,6 +15,7 @@ import {
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const runtimeManifest = join(repositoryRoot, "runtime", "Cargo.toml");
+const compilerCli = join(repositoryRoot, "compiler", "src", "cli.js");
 const runtimeBinary = join(
   repositoryRoot,
   "runtime",
@@ -50,6 +52,21 @@ function runBytecode(bytecode, runtimeArguments = []) {
     encoding: "utf8",
     windowsHide: true,
   });
+}
+
+function parseStandardError(result) {
+  assert.notEqual(result.stderr, "", "Expected a structured diagnostic on stderr.");
+  return JSON.parse(result.stderr);
+}
+
+function assertStandardError(result, code, phase, status = 1) {
+  const error = parseStandardError(result);
+  assert.equal(result.status, status);
+  assert.equal(result.stdout, "");
+  assert.equal(error.schema, "jimp-error-v1");
+  assert.equal(error.code, code);
+  assert.equal(error.phase, phase);
+  return error;
 }
 
 function createPortableModule({
@@ -181,6 +198,49 @@ test("executes compiler output in the Rust runtime", () => {
   assert.equal(result.stderr, "");
 });
 
+test("reports compiler failures through the standard JSON error contract", () => {
+  programCounter += 1;
+  const sourcePath = join(temporaryDirectory, `invalid-${programCounter}.jimp`);
+  writeFileSync(sourcePath, "var value = ;");
+  const result = spawnSync(
+    process.execPath,
+    [compilerCli, "compile", sourcePath, "--error-format=json"],
+    { cwd: repositoryRoot, encoding: "utf8", windowsHide: true },
+  );
+  const error = assertStandardError(result, "JIMP-1001", "compile");
+  assert.deepEqual(error.location, { kind: "source", line: 1 });
+
+  const usageResult = spawnSync(
+    process.execPath,
+    [compilerCli, "--error-format=json"],
+    { cwd: repositoryRoot, encoding: "utf8", windowsHide: true },
+  );
+  assertStandardError(usageResult, "JIMP-0001", "usage", 2);
+});
+
+test("classifies runtime decode, verify, resolve, and execute failures", () => {
+  const decodeResult = runBytecode(Buffer.from("not bytecode"), ["--error-format=json"]);
+  const verifyResult = runBytecode(createInvalidBooleanAddModule(), ["--error-format=json"]);
+  const resolveResult = runBytecode(
+    createPortableModule({ namespace: "std.network", name: "fetch" }),
+    ["--validate-portable", "--error-format=json"],
+  );
+  const executeResult = runBytecode(compile("1 / 0;"), ["--error-format=json"]);
+
+  assertStandardError(decodeResult, "JIMP-2001", "decode");
+  assertStandardError(verifyResult, "JIMP-2002", "verify");
+  assertStandardError(resolveResult, "JIMP-3001", "resolve");
+  const executionError = assertStandardError(executeResult, "JIMP-4001", "execute");
+  assert.deepEqual(executionError.location, { kind: "source", line: 1 });
+
+  const usageResult = spawnSync(runtimeBinary, ["--error-format=json"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assertStandardError(usageResult, "JIMP-0001", "usage", 2);
+});
+
 test("executes portable scalar literal statements without host output", () => {
   const bytecode = compile("-9223372036854775808;\n3.5;\ntrue;\nfalse;\nnull;");
   const result = runBytecode(bytecode);
@@ -263,6 +323,118 @@ test("executes a variable type joined across conditional paths", () => {
   assert.equal(result.stderr, "");
 });
 
+test("executes typed, forward, recursive, and VOID function calls", () => {
+  const bytecode = compile(`
+    let result = factorial(5);
+    if result == 120 {
+      announce("Functions executed");
+    } else {
+      announce("wrong result");
+    }
+    function factorial(value: I64): I64 {
+      if value <= 1 {
+        return 1;
+      } else {
+        return value * factorial(value - 1);
+      }
+    }
+    function announce(message: STRING): VOID {
+      print message;
+    }
+  `);
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Functions executed\n");
+  assert.equal(result.stderr, "");
+});
+
+test("executes while loops with break and continue", () => {
+  const bytecode = compile(`
+    var value = 0;
+    while value < 10 {
+      value = value + 1;
+      if value == 2 {
+        continue;
+      }
+      if value == 4 {
+        break;
+      }
+    }
+    if value == 4 {
+      print "Loops executed";
+    } else {
+      print "wrong result";
+    }
+  `);
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Loops executed\n");
+  assert.equal(result.stderr, "");
+});
+
+test("stops recursive programs at the call-stack limit", () => {
+  const bytecode = compile(`
+    recurse();
+    function recurse(): VOID {
+      recurse();
+    }
+  `);
+
+  assertRejectedWithoutOutput(bytecode, /Call stack limit of 1024 frame\(s\) was exceeded/);
+});
+
+test("stops non-terminating loops at the execution-step limit", () => {
+  const bytecode = compile("while true {\n}");
+
+  assertRejectedWithoutOutput(bytecode, /Execution step limit of 1000000 was exceeded/);
+});
+
+test("rejects module structure above sandbox limits before host output", () => {
+  const excessiveSections = compile('print "must not be written";');
+  excessiveSections.writeUInt16LE(SANDBOX_LIMITS.MAX_SECTION_COUNT + 1, 16);
+  assertRejectedWithoutOutput(
+    excessiveSections,
+    /Section count exceeds the sandbox limit/,
+  );
+
+  const excessiveRegisters = compile('print "must not be written";');
+  const functions = findSection(excessiveRegisters, 3);
+  excessiveRegisters.writeUInt16LE(
+    SANDBOX_LIMITS.MAX_REGISTERS_PER_FUNCTION + 1,
+    functions.offset + 16,
+  );
+  assertRejectedWithoutOutput(
+    excessiveRegisters,
+    /register count exceeds the sandbox limit/,
+  );
+});
+
+test("rejects decoded instruction counts above the Rust verification budget", () => {
+  const move = encodeInstruction("MOVE", { destination: 0, source: 0 });
+  const excessiveInstructions = Buffer.concat([
+    Buffer.alloc(move.length * SANDBOX_LIMITS.MAX_TOTAL_INSTRUCTIONS, move),
+    Buffer.from([OPCODES.HALT]),
+  ]);
+  const bytecode = encodePortableModule({
+    constants: [],
+    imports: [],
+    functions: [{
+      name: null,
+      code: excessiveInstructions,
+      registerCount: 1,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+
+  assertRejectedWithoutOutput(
+    bytecode,
+    /Instruction count exceeds the sandbox limit/,
+  );
+});
+
 test("rejects invalid expression operand types during Rust verification", () => {
   assertRejectedWithoutOutput(createInvalidBooleanAddModule(), /ADD operands must be I64 or F64/);
 });
@@ -294,6 +466,20 @@ test("rejects a truncated operand", () => {
   const code = findSection(bytecode, 4);
   bytecode[code.offset + code.length - 1] = 1;
   assertRejectedWithoutOutput(bytecode, /Unexpected end of bytecode/);
+});
+
+test("rejects malformed debug metadata before execution", () => {
+  const zeroLine = compile("1;");
+  const zeroLineDebug = findSection(zeroLine, 5);
+  zeroLine.writeUInt32LE(0, zeroLineDebug.offset + 12);
+  const decodeResult = runBytecode(zeroLine, ["--error-format=json"]);
+  assertStandardError(decodeResult, "JIMP-2001", "decode");
+
+  const unalignedOffset = compile("1;");
+  const unalignedDebug = findSection(unalignedOffset, 5);
+  unalignedOffset.writeUInt32LE(1, unalignedDebug.offset + 8);
+  const verifyResult = runBytecode(unalignedOffset, ["--error-format=json"]);
+  assertStandardError(verifyResult, "JIMP-2002", "verify");
 });
 
 test("resolves portable host imports across JavaScript and Rust", () => {

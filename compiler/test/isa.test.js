@@ -9,7 +9,7 @@ import {
 } from "../src/generated/isa.js";
 
 test("exposes the portable VM v1 metadata", () => {
-  assert.deepEqual(FORMAT_VERSION, { major: 2, minor: 2 });
+  assert.deepEqual(FORMAT_VERSION, { major: 2, minor: 5 });
   assert.equal(NO_REGISTER, 0xffff);
   assert.equal(VALUE_TYPES.STRING, 4);
   assert.equal(VALUE_TYPES.VOID, 255);
@@ -21,10 +21,12 @@ test("exposes the portable VM v1 metadata", () => {
   assert.equal(OPCODES.JUMP, 40);
   assert.equal(OPCODES.JUMP_IF_FALSE, 41);
   assert.equal(OPCODES.JUMP_IF_TRUE, 42);
+  assert.equal(OPCODES.CALL, 50);
+  assert.equal(OPCODES.RETURN, 51);
   assert.equal(OPCODES.HALT, 255);
 });
 
-test("defines forward control-flow operands", () => {
+test("defines control-flow operands", () => {
   const jump = INSTRUCTIONS.find(({ name }) => name === "JUMP");
   const conditional = INSTRUCTIONS.find(({ name }) => name === "JUMP_IF_FALSE");
 
@@ -36,6 +38,22 @@ test("defines forward control-flow operands", () => {
       { name: "target", type: "code_offset" },
     ],
   );
+});
+
+test("defines typed function call and return operands", () => {
+  const call = INSTRUCTIONS.find(({ name }) => name === "CALL");
+  const returnInstruction = INSTRUCTIONS.find(({ name }) => name === "RETURN");
+
+  assert.deepEqual(
+    call.operands.map(({ name, type }) => [name, type]),
+    [
+      ["function", "function_index"],
+      ["argument_start", "register"],
+      ["argument_count", "register_count"],
+      ["result", "optional_register"],
+    ],
+  );
+  assert.deepEqual(returnInstruction.operands, [{ name: "result", type: "optional_register" }]);
 });
 
 test("defines typed unary and binary expression operands", () => {

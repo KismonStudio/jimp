@@ -74,7 +74,7 @@ function validateDefinition(definition) {
     "NEGATE", "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "REMAINDER",
     "EQUAL", "NOT_EQUAL", "LESS_THAN", "LESS_EQUAL", "GREATER_THAN", "GREATER_EQUAL",
     "BOOL_NOT", "BOOL_AND", "BOOL_OR",
-    "JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "HALT",
+    "JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "CALL", "RETURN", "HALT",
   ]) {
     invariant(definition.instructions.some(({ name }) => name === requiredInstruction), `missing ${requiredInstruction} instruction`);
   }
@@ -185,7 +185,7 @@ function generateDocumentation(definition, language) {
     : "# VM Portátil JIMP v1 — Referência Gerada da ISA";
   const alternate = isEnglish
     ? "[Portuguese version](../PT/ISA.md)"
-    : "[English version](../EN/ISA.md)";
+    : "[Versão em inglês](../EN/ISA.md)";
   const warning = isEnglish
     ? "This file is generated from [`isa/v1.json`](../../../isa/v1.json). Do not edit it manually."
     : "Este arquivo é gerado a partir de [`isa/v1.json`](../../../isa/v1.json). Não o edite manualmente.";

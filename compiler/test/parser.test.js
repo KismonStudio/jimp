@@ -107,3 +107,65 @@ test("joins mutable variable types after conditional paths", () => {
     /incompatible types across conditional paths/,
   );
 });
+
+test("parses and analyzes typed functions, calls, and returns", () => {
+  const program = analyzeProgram(parseProgram(`
+    let answer = add(20, 22);
+    function add(left: I64, right: I64): I64 {
+      return left + right;
+    }
+  `));
+
+  assert.equal(program.statements[0].initializer.kind, "callExpression");
+  assert.equal(program.statements[0].initializer.type, "I64");
+  assert.equal(program.functions[0].name, "add");
+  assert.deepEqual(program.functions[0].parameterTypes, ["I64", "I64"]);
+  assert.equal(program.functions[0].body.statements[0].kind, "returnStatement");
+});
+
+test("supports recursion and requires exact function contracts", () => {
+  assert.doesNotThrow(() => analyzeProgram(parseProgram(`
+    function countdown(value: I64): I64 {
+      if value == 0 {
+        return 0;
+      } else {
+        return countdown(value - 1);
+      }
+    }
+    countdown(3);
+  `)));
+  assert.throws(
+    () => analyzeProgram(parseProgram("function missing(): I64 {\n  1;\n}")),
+    /does not return I64 on every path/,
+  );
+  assert.throws(
+    () => analyzeProgram(parseProgram("function identity(value: I64): I64 {\n return value;\n}\nidentity(true);")),
+    /argument 0 requires I64, received BOOL/,
+  );
+});
+
+test("analyzes loops with break and continue", () => {
+  const program = analyzeProgram(parseProgram(`
+    var value = 0;
+    while value < 10 {
+      value = value + 1;
+      if value == 2 {
+        continue;
+      }
+      if value == 4 {
+        break;
+      }
+    }
+  `));
+
+  assert.equal(program.statements[1].kind, "whileStatement");
+  assert.equal(program.statements[1].body.statements[1].consequent.statements[0].kind, "continueStatement");
+  assert.throws(
+    () => analyzeProgram(parseProgram("break;")),
+    /break is only valid inside a loop/,
+  );
+  assert.throws(
+    () => analyzeProgram(parseProgram("var value = 1;\nwhile true {\n value = false;\n}")),
+    /must preserve type I64 inside a loop/,
+  );
+});

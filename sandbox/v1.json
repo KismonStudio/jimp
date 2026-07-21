@@ -1,0 +1,187 @@
+{
+  "$schema": "./schema.json",
+  "name": "jimp-reference-sandbox",
+  "version": 1,
+  "limits": [
+    {
+      "name": "MAX_MODULE_BYTES",
+      "value": 16777216,
+      "unit": "bytes",
+      "phase": "load",
+      "description": {
+        "en": "Maximum encoded .jbc file size.",
+        "pt": "Tamanho máximo do arquivo .jbc codificado."
+      }
+    },
+    {
+      "name": "MAX_SECTION_COUNT",
+      "value": 16,
+      "unit": "sections",
+      "phase": "load",
+      "description": {
+        "en": "Maximum number of module-directory entries.",
+        "pt": "Quantidade máxima de entradas no diretório do módulo."
+      }
+    },
+    {
+      "name": "MAX_CONSTANTS",
+      "value": 65536,
+      "unit": "constants",
+      "phase": "load",
+      "description": {
+        "en": "Maximum number of constant-pool entries.",
+        "pt": "Quantidade máxima de entradas no pool de constantes."
+      }
+    },
+    {
+      "name": "MAX_CONSTANT_STRING_BYTES",
+      "value": 1048576,
+      "unit": "bytes",
+      "phase": "load",
+      "description": {
+        "en": "Maximum UTF-8 byte length of one string constant.",
+        "pt": "Tamanho máximo em bytes UTF-8 de uma constante string."
+      }
+    },
+    {
+      "name": "MAX_TOTAL_CONSTANT_STRING_BYTES",
+      "value": 8388608,
+      "unit": "bytes",
+      "phase": "load",
+      "description": {
+        "en": "Maximum combined UTF-8 bytes of all string constants.",
+        "pt": "Máximo de bytes UTF-8 combinados de todas as constantes string."
+      }
+    },
+    {
+      "name": "MAX_SYMBOL_BYTES",
+      "value": 256,
+      "unit": "bytes",
+      "phase": "load",
+      "description": {
+        "en": "Maximum UTF-8 byte length of a referenced function or host symbol component.",
+        "pt": "Tamanho máximo em bytes UTF-8 de um componente referenciado de símbolo de função ou host."
+      }
+    },
+    {
+      "name": "MAX_HOST_IMPORTS",
+      "value": 1024,
+      "unit": "imports",
+      "phase": "load",
+      "description": {
+        "en": "Maximum number of typed host imports.",
+        "pt": "Quantidade máxima de imports tipados do host."
+      }
+    },
+    {
+      "name": "MAX_FUNCTIONS",
+      "value": 4096,
+      "unit": "functions",
+      "phase": "load",
+      "description": {
+        "en": "Maximum number of functions, including entry.",
+        "pt": "Quantidade máxima de funções, incluindo a entrada."
+      }
+    },
+    {
+      "name": "MAX_PARAMETERS",
+      "value": 256,
+      "unit": "parameters",
+      "phase": "load",
+      "description": {
+        "en": "Maximum parameters in a host or function signature.",
+        "pt": "Quantidade máxima de parâmetros em uma assinatura de host ou função."
+      }
+    },
+    {
+      "name": "MAX_CODE_BYTES",
+      "value": 8388608,
+      "unit": "bytes",
+      "phase": "load",
+      "description": {
+        "en": "Maximum combined encoded function-code size.",
+        "pt": "Tamanho máximo combinado do código codificado das funções."
+      }
+    },
+    {
+      "name": "MAX_TOTAL_INSTRUCTIONS",
+      "value": 262144,
+      "unit": "instructions",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum decoded instructions across the module.",
+        "pt": "Quantidade máxima de instruções decodificadas no módulo."
+      }
+    },
+    {
+      "name": "MAX_REGISTERS_PER_FUNCTION",
+      "value": 4096,
+      "unit": "registers",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum virtual registers in one function frame.",
+        "pt": "Quantidade máxima de registradores virtuais em um frame de função."
+      }
+    },
+    {
+      "name": "MAX_VERIFICATION_TYPE_CELLS",
+      "value": 4194304,
+      "unit": "type cells",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum instruction-count times register-count for one function's flow analysis.",
+        "pt": "Máximo do produto entre instruções e registradores na análise de fluxo de uma função."
+      }
+    },
+    {
+      "name": "MAX_CALL_FRAMES",
+      "value": 1024,
+      "unit": "frames",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum simultaneous call frames, including entry.",
+        "pt": "Quantidade máxima de frames de chamada simultâneos, incluindo a entrada."
+      }
+    },
+    {
+      "name": "MAX_ACTIVE_REGISTERS",
+      "value": 262144,
+      "unit": "registers",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum virtual registers across all active frames.",
+        "pt": "Quantidade máxima de registradores virtuais em todos os frames ativos."
+      }
+    },
+    {
+      "name": "REGISTER_SLOT_BYTES",
+      "value": 16,
+      "unit": "bytes",
+      "phase": "execute",
+      "description": {
+        "en": "Logical memory charged for every active register, excluding string payload bytes.",
+        "pt": "Memória lógica cobrada por registrador ativo, sem os bytes do conteúdo de strings."
+      }
+    },
+    {
+      "name": "MAX_RUNTIME_VALUE_BYTES",
+      "value": 33554432,
+      "unit": "bytes",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum logical bytes for active register slots and their string payloads.",
+        "pt": "Máximo de bytes lógicos para registradores ativos e conteúdos de strings."
+      }
+    },
+    {
+      "name": "MAX_EXECUTION_STEPS",
+      "value": 1000000,
+      "unit": "instructions",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum instructions executed by one program.",
+        "pt": "Quantidade máxima de instruções executadas por um programa."
+      }
+    }
+  ]
+}

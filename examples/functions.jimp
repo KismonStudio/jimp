@@ -1,0 +1,19 @@
+let result = factorial(5);
+
+if result == 120 {
+  announce("factorial(5) == 120");
+} else {
+  announce("unexpected factorial result");
+}
+
+function factorial(value: I64): I64 {
+  if value <= 1 {
+    return 1;
+  } else {
+    return value * factorial(value - 1);
+  }
+}
+
+function announce(message: STRING): VOID {
+  print message;
+}

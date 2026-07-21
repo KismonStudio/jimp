@@ -8,7 +8,7 @@ test("compiles print statements into portable bytecode", () => {
   const module = decodePortableModule(bytecode);
   assert.equal(bytecode.subarray(0, 4).toString(), "JIMP");
   assert.equal(bytecode.readUInt16LE(4), 2);
-  assert.equal(bytecode.readUInt16LE(6), 2);
+  assert.equal(bytecode.readUInt16LE(6), 5);
   assert.equal(module.imports[0].symbol, "std.console.write");
   assert.deepEqual(
     module.functions[0].instructions.map(({ name }) => name),
@@ -312,4 +312,56 @@ test("rejects syntax excluded from v1", () => {
   for (const source of invalidSources) {
     assert.throws(() => compile(source), /line 1/);
   }
+});
+
+test("lowers typed and recursive functions to CALL and RETURN", () => {
+  const module = decodePortableModule(compile(`
+    factorial(5);
+    function factorial(value: I64): I64 {
+      if value <= 1 {
+        return 1;
+      } else {
+        return value * factorial(value - 1);
+      }
+    }
+  `));
+
+  assert.equal(module.functions.length, 2);
+  assert.deepEqual(module.functions[1].parameterTypes, ["I64"]);
+  assert.equal(module.functions[1].returnType, "I64");
+  assert(module.functions[0].instructions.some(({ name }) => name === "CALL"));
+  assert(module.functions[1].instructions.some(({ name }) => name === "CALL"));
+  assert.equal(module.functions[1].instructions.at(-1).name, "RETURN");
+});
+
+test("reuses consecutive argument registers across calls", () => {
+  const module = decodePortableModule(compile(`
+    identity(1);
+    identity(2);
+    identity(3);
+    function identity(value: I64): I64 {
+      return value;
+    }
+  `));
+
+  assert.equal(module.functions[0].registerCount, 2);
+});
+
+test("lowers while, break, and continue to generic jumps", () => {
+  const module = decodePortableModule(compile(`
+    var value = 0;
+    while value < 5 {
+      value = value + 1;
+      if value == 2 {
+        continue;
+      }
+      if value == 4 {
+        break;
+      }
+    }
+  `));
+  const jumps = module.functions[0].instructions.filter(({ name }) => name === "JUMP");
+
+  assert(jumps.length >= 3);
+  assert(jumps.some(({ offset, operands }) => operands.target < offset));
 });
