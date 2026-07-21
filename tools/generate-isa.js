@@ -73,7 +73,8 @@ function validateDefinition(definition) {
     "LOAD_CONST", "MOVE", "HOST_CALL",
     "NEGATE", "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "REMAINDER",
     "EQUAL", "NOT_EQUAL", "LESS_THAN", "LESS_EQUAL", "GREATER_THAN", "GREATER_EQUAL",
-    "BOOL_NOT", "BOOL_AND", "BOOL_OR", "HALT",
+    "BOOL_NOT", "BOOL_AND", "BOOL_OR",
+    "JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "HALT",
   ]) {
     invariant(definition.instructions.some(({ name }) => name === requiredInstruction), `missing ${requiredInstruction} instruction`);
   }
@@ -132,9 +133,14 @@ function generateRust(definition) {
                 kind: OperandKind::${toPascalCase(type)},
             },`)
         .join("\n");
-      const encodedOperands = operands.length > 0
-        ? `&[\n${operands}\n        ]`
-        : "&[]";
+      const encodedOperands = instruction.operands.length === 0
+        ? "&[]"
+        : instruction.operands.length === 1
+          ? `&[OperandDefinition {
+            name: "${instruction.operands[0].name}",
+            kind: OperandKind::${toPascalCase(instruction.operands[0].type)},
+        }]`
+          : `&[\n${operands}\n        ]`;
       return `    InstructionDefinition {
         name: "${instruction.name}",
         opcode: Opcode::${toPascalCase(instruction.name)},

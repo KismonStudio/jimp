@@ -4,7 +4,7 @@
 
 > Este arquivo é gerado a partir de [`isa/v1.json`](../../../isa/v1.json). Não o edite manualmente.
 
-- Versão do formato: `2.1`
+- Versão do formato: `2.2`
 - Ordem dos bytes: `little-endian`
 - Tamanho do opcode: `1 byte`
 - `NO_REGISTER`: `65535` (`0xffff`)
@@ -42,4 +42,7 @@
 | `30` | `BOOL_NOT` | `destination: register (u16)`<br>`operand: register (u16)` | Calcula a negação booleana. |
 | `31` | `BOOL_AND` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Calcula a conjunção booleana com avaliação imediata. |
 | `32` | `BOOL_OR` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Calcula a disjunção booleana com avaliação imediata. |
+| `40` | `JUMP` | `target: code_offset (u32)` | Continua a execucao em um offset de instrucao posterior na funcao atual. |
+| `41` | `JUMP_IF_FALSE` | `condition: register (u16)`<br>`target: code_offset (u32)` | Desvia para frente quando uma condicao booleana e falsa. |
+| `42` | `JUMP_IF_TRUE` | `condition: register (u16)`<br>`target: code_offset (u32)` | Desvia para frente quando uma condicao booleana e verdadeira. |
 | `255` | `HALT` | — | Encerra a função de entrada com sucesso. |

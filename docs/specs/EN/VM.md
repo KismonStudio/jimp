@@ -4,9 +4,9 @@
 
 ## Status
 
-This document specifies the implemented foundation of the portable JIMP VM v1. P2.3 uses `.jbc` container format `2.1`, extending the generic ISA with typed expression operations.
+This document specifies the implemented foundation of the portable JIMP VM v1. P2.5 completes the core-language lowering and semantic flow checks while retaining `.jbc` container format `2.2`.
 
-The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.1` remains pre-stable while the language and VM continue to evolve.
+The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.2` remains pre-stable while the language and VM continue to evolve.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -187,7 +187,19 @@ The initial generic instruction set has these semantic operations. Numeric opcod
 
 ### Typed boolean operations
 
-`BOOL_AND` and `BOOL_OR` accept two `BOOL` operands and produce `BOOL`. They are eager instructions: both input registers must already contain computed values. Control-flow-based short-circuit behavior is outside format 2.1.
+`BOOL_AND` and `BOOL_OR` accept two `BOOL` operands and produce `BOOL`. They remain eager bytecode operations. The compiler lowers source-level `&&` and `||` to conditional jumps so their right operand is evaluated only when required.
+
+### Forward control flow
+
+`JUMP target` continues execution at `target`. `JUMP_IF_FALSE condition, target` and `JUMP_IF_TRUE condition, target` select between `target` and the following instruction according to a `BOOL` register.
+
+- `target` is an unsigned `u32` byte offset relative to the beginning of the current function.
+- A target must identify the first byte of an instruction in the same function.
+- A target must be strictly greater than the offset of its jump instruction.
+- Every encoded instruction must be reachable from the function entry.
+- Register types required by an instruction must be valid on every incoming control-flow path.
+
+Backward targets are rejected by format `2.2`. This prevents unbounded loops before execution-step limits are specified in P3.
 
 ### `HOST_CALL import, argument_start, argument_count, result`
 
@@ -202,7 +214,7 @@ Arguments occupy the consecutive range beginning at `argument_start`. The count 
 
 - Has no operands.
 - Terminates the entry function and the program successfully.
-- In the initial linear foundation, it must be the final instruction of the entry function.
+- It must be the final encoded instruction of the entry function and must be reachable.
 
 `PRINT`, `FETCH`, `JSON`, `VAR`, and `FUNCTION` are not VM instructions. The compiler lowers language constructs to generic instructions and host imports.
 
@@ -244,12 +256,14 @@ Before executing any instruction, a runtime must:
 1. Validate the header and version.
 2. Validate the section directory, bounds, cardinality, and overlap rules.
 3. Decode and validate every constant, import, function, and instruction.
-4. Validate all indices, register ranges, function ranges, signatures, and termination rules.
+4. Validate all indices, register ranges, function ranges, jump targets, reachability, path-sensitive register types, signatures, and termination rules.
 5. Apply implementation resource limits.
 6. Resolve and authorize every host import without program-requested effects.
 7. Create the verified internal program representation.
 
 Only then may execution begin. Structural validation failure must produce no program-requested host effect. A host call may still fail during execution; effects completed by earlier valid host calls are not rolled back.
+
+Instruction decoding first establishes opcode, operand, register, index, and jump-target structure. Type validation then propagates register types over the verified control-flow graph and requires every instruction contract to hold for all incoming paths. Physical instruction order alone must not determine the inferred type at a branch entry.
 
 ## Resource limits and security
 
@@ -259,4 +273,4 @@ The module must never contain trusted native addresses. Debug data is non-author
 
 ## Deferred decisions
 
-The following items require later specifications: branching, short-circuit lowering, calls and returns, heap values, collections, binary buffers, asynchronous host operations, exceptions, module imports and exports, debug encoding, and AOT/JIT execution.
+The following items require later specifications: backward branches and loops, calls and returns, heap values, collections, binary buffers, asynchronous host operations, exceptions, module imports and exports, debug encoding, and AOT/JIT execution.

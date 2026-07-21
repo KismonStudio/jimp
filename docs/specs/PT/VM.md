@@ -4,9 +4,9 @@
 
 ## Status
 
-Este documento especifica a base implementada da VM portátil JIMP v1. O P2.3 utiliza o formato de contêiner `.jbc` `2.1`, ampliando a ISA genérica com operações tipadas de expressão.
+Este documento especifica a base implementada da VM portátil JIMP v1. O P2.5 conclui a redução da linguagem principal e as verificações semânticas de fluxo, mantendo o formato de contêiner `.jbc` `2.2`.
 
-O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.1` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
+O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.2` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -187,7 +187,19 @@ O conjunto inicial de instruções genéricas possui as seguintes operações se
 
 ### Operações booleanas tipadas
 
-`BOOL_AND` e `BOOL_OR` aceitam dois operandos `BOOL` e produzem `BOOL`. Elas são instruções imediatas: os dois registradores de entrada já devem conter valores calculados. O comportamento de curto-circuito baseado em controle de fluxo está fora do formato 2.1.
+`BOOL_AND` e `BOOL_OR` aceitam dois operandos `BOOL` e produzem `BOOL`. Elas permanecem operações imediatas no bytecode. O compilador reduz `&&` e `||` do código-fonte a desvios condicionais, de modo que o operando direito seja avaliado somente quando necessário.
+
+### Controle de fluxo para frente
+
+`JUMP target` continua a execução em `target`. `JUMP_IF_FALSE condition, target` e `JUMP_IF_TRUE condition, target` selecionam entre `target` e a instrução seguinte de acordo com um registrador `BOOL`.
+
+- `target` é um offset de bytes `u32` sem sinal, relativo ao início da função atual.
+- Um destino deve identificar o primeiro byte de uma instrução na mesma função.
+- Um destino deve ser estritamente maior que o offset da instrução de desvio.
+- Toda instrução codificada deve ser alcançável a partir da entrada da função.
+- Os tipos de registradores exigidos por uma instrução devem ser válidos em todos os caminhos de controle de fluxo recebidos.
+
+Destinos para trás são rejeitados pelo formato `2.2`. Isso impede loops ilimitados antes da especificação dos limites de passos de execução no P3.
 
 ### `HOST_CALL import, argument_start, argument_count, result`
 
@@ -202,7 +214,7 @@ Os argumentos ocupam o intervalo consecutivo iniciado em `argument_start`. A qua
 
 - Não possui operandos.
 - Encerra a função de entrada e o programa com sucesso.
-- Na fundação linear inicial, deve ser a última instrução da função de entrada.
+- Deve ser a última instrução codificada da função de entrada e deve ser alcançável.
 
 `PRINT`, `FETCH`, `JSON`, `VAR` e `FUNCTION` não são instruções da VM. O compilador reduz as construções da linguagem a instruções genéricas e imports do host.
 
@@ -244,12 +256,14 @@ Antes de executar qualquer instrução, um runtime deve:
 1. Validar o cabeçalho e a versão.
 2. Validar o diretório de seções, limites, cardinalidade e regras de sobreposição.
 3. Decodificar e validar todas as constantes, imports, funções e instruções.
-4. Validar todos os índices, intervalos de registradores, intervalos de funções, assinaturas e regras de encerramento.
+4. Validar todos os índices, intervalos de registradores, intervalos de funções, destinos de desvio, alcançabilidade, tipos de registradores sensíveis aos caminhos, assinaturas e regras de encerramento.
 5. Aplicar limites de recursos da implementação.
 6. Resolver e autorizar todos os imports do host sem efeitos solicitados pelo programa.
 7. Criar a representação interna verificada do programa.
 
 Somente então a execução pode começar. Uma falha de validação estrutural não deve produzir efeitos no host solicitados pelo programa. Uma chamada ao host ainda pode falhar durante a execução; efeitos concluídos por chamadas válidas anteriores não são revertidos.
+
+A decodificação de instruções estabelece primeiro a estrutura de opcodes, operandos, registradores, índices e destinos de desvio. Em seguida, a validação de tipos propaga os tipos dos registradores pelo grafo de controle de fluxo verificado e exige que o contrato de cada instrução seja válido em todos os caminhos recebidos. A ordem física das instruções, isoladamente, não deve determinar o tipo inferido na entrada de um desvio.
 
 ## Limites de recursos e segurança
 
@@ -259,4 +273,4 @@ O módulo nunca deve conter endereços nativos considerados confiáveis. Dados d
 
 ## Decisões adiadas
 
-Os seguintes itens exigem especificações posteriores: desvios, redução com curto-circuito, chamadas e retornos, valores de heap, coleções, buffers binários, operações assíncronas do host, exceções, imports e exports de módulos, codificação de debug e execução AOT/JIT.
+Os seguintes itens exigem especificações posteriores: desvios para trás e loops, chamadas e retornos, valores de heap, coleções, buffers binários, operações assíncronas do host, exceções, imports e exports de módulos, codificação de debug e execução AOT/JIT.

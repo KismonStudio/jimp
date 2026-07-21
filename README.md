@@ -4,7 +4,7 @@ JIMP is a programming language that compiles to portable bytecode, with a JavaSc
 
 ## Current foundation
 
-The current language foundation supports typed scalar expressions, immutable `let` variables, mutable `var` variables, and `print` for string expressions. It lowers source constructs to generic VM instructions and typed host imports, encodes a portable `.jbc` 2.1 module, validates the complete module, and executes it through the Rust runtime. The [language syntax](docs/specs/EN/LANGUAGE.md), [portable VM contract](docs/specs/EN/VM.md), and [generated ISA reference](docs/specs/EN/ISA.md) are formally documented.
+The completed P2 language foundation supports typed scalar expressions, lexical `let` and `var` variables, `if`/`else` blocks, short-circuit boolean operators, flow-sensitive type joins, and `print` for string expressions. It lowers source constructs to generic VM instructions and typed host imports, encodes a portable `.jbc` 2.2 module, validates every reachable control-flow path, and executes it through the Rust runtime. The [language syntax](docs/specs/EN/LANGUAGE.md), [portable VM contract](docs/specs/EN/VM.md), and [generated ISA reference](docs/specs/EN/ISA.md) are formally documented.
 
 Implementation progress and the prioritized roadmap are maintained in [docs/STATUS.md](docs/STATUS.md).
 
@@ -23,6 +23,6 @@ Use `inspect <file.jbc> --json` to produce machine-readable output. Inspection v
 
 The portable VM ISA source of truth is [`isa/v1.json`](isa/v1.json). After changing it, run `npm run generate:isa`; `npm run check` rejects stale generated JavaScript, Rust, or specification files.
 
-Portable `.jbc` encoding, decoding, and JavaScript verification live in [`compiler/src/portable/module.js`](compiler/src/portable/module.js). The Rust runtime independently decodes and verifies format `2.1`, resolves authorized host imports to numeric handles, and executes the generic instruction stream.
+Portable `.jbc` encoding, decoding, and JavaScript verification live in [`compiler/src/portable/module.js`](compiler/src/portable/module.js). The Rust runtime independently decodes and verifies format `2.2`, resolves authorized host imports to numeric handles, and executes the generic instruction stream.
 
 Use `cargo run --manifest-path runtime/Cargo.toml -- --validate-portable <file.jbc>` to validate a module and resolve its host imports without executing it.

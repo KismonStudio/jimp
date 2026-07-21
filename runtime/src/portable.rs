@@ -2,6 +2,7 @@ use crate::generated::isa::{
     FORMAT_MAJOR, FORMAT_MINOR, INSTRUCTIONS, NO_REGISTER, OPERAND_TYPES, Opcode, OperandEncoding,
     ValueType,
 };
+use std::collections::HashMap;
 
 const MAGIC: &[u8; 4] = b"JIMP";
 const HEADER_SIZE: usize = 20;
@@ -88,6 +89,17 @@ pub(crate) enum Instruction {
         destination: usize,
         left: usize,
         right: usize,
+    },
+    Jump {
+        target: usize,
+    },
+    JumpIfFalse {
+        condition: usize,
+        target: usize,
+    },
+    JumpIfTrue {
+        condition: usize,
+        target: usize,
     },
     HostCall {
         import: usize,
@@ -442,6 +454,157 @@ fn opcode_name(opcode: Opcode) -> &'static str {
         .name
 }
 
+fn merge_register_types(
+    destination: &mut Option<Vec<Option<ValueType>>>,
+    incoming: &[Option<ValueType>],
+) {
+    if let Some(existing) = destination {
+        for (current, candidate) in existing.iter_mut().zip(incoming) {
+            if *current != *candidate {
+                *current = None;
+            }
+        }
+    } else {
+        *destination = Some(incoming.to_vec());
+    }
+}
+
+fn verify_instruction_flow(
+    module: &PortableModule,
+    function: &Function,
+    function_index: usize,
+    instructions: &[Instruction],
+) -> Result<(), String> {
+    let mut initial = vec![Some(ValueType::Null); usize::from(function.register_count)];
+    for (destination, parameter_type) in initial.iter_mut().zip(&function.parameter_types) {
+        *destination = Some(*parameter_type);
+    }
+    let mut incoming = vec![None; instructions.len()];
+    incoming[0] = Some(initial);
+
+    for (index, instruction) in instructions.iter().enumerate() {
+        let mut types = incoming[index].clone().ok_or_else(|| {
+            format!("Function {function_index} instruction {index} is unreachable.")
+        })?;
+
+        match *instruction {
+            Instruction::LoadConst {
+                destination,
+                constant,
+            } => types[destination] = Some(module.constants[constant].value_type()),
+            Instruction::Move {
+                destination,
+                source,
+            } => types[destination] = types[source],
+            Instruction::Unary {
+                opcode,
+                destination,
+                operand,
+            } => {
+                let operand_type = types[operand];
+                if opcode == Opcode::Negate {
+                    if !operand_type.is_some_and(is_numeric) {
+                        return Err("NEGATE operand must be I64 or F64 on every path.".into());
+                    }
+                    types[destination] = operand_type;
+                } else {
+                    if operand_type != Some(ValueType::Bool) {
+                        return Err("BOOL_NOT operand must be BOOL on every path.".into());
+                    }
+                    types[destination] = Some(ValueType::Bool);
+                }
+            }
+            Instruction::Binary {
+                opcode,
+                destination,
+                left,
+                right,
+            } => {
+                let name = opcode_name(opcode);
+                let left_type = types[left];
+                let right_type = types[right];
+                if left_type.is_none() || left_type != right_type {
+                    return Err(format!(
+                        "{name} operands must have the same type on every path."
+                    ));
+                }
+                let value_type = left_type.expect("checked type must be present");
+                let result_type = match opcode {
+                    Opcode::Add
+                    | Opcode::Subtract
+                    | Opcode::Multiply
+                    | Opcode::Divide
+                    | Opcode::Remainder => {
+                        if !is_numeric(value_type) {
+                            return Err(format!("{name} operands must be I64 or F64."));
+                        }
+                        value_type
+                    }
+                    Opcode::Equal | Opcode::NotEqual => ValueType::Bool,
+                    Opcode::LessThan
+                    | Opcode::LessEqual
+                    | Opcode::GreaterThan
+                    | Opcode::GreaterEqual => {
+                        if !is_numeric(value_type) {
+                            return Err(format!("{name} operands must be I64 or F64."));
+                        }
+                        ValueType::Bool
+                    }
+                    Opcode::BoolAnd | Opcode::BoolOr => {
+                        if value_type != ValueType::Bool {
+                            return Err(format!("{name} operands must be BOOL."));
+                        }
+                        ValueType::Bool
+                    }
+                    _ => unreachable!("verified binary instruction has a binary opcode"),
+                };
+                types[destination] = Some(result_type);
+            }
+            Instruction::Jump { .. } => {}
+            Instruction::JumpIfFalse { condition, .. }
+            | Instruction::JumpIfTrue { condition, .. } => {
+                if types[condition] != Some(ValueType::Bool) {
+                    return Err("Conditional jump condition must be BOOL on every path.".into());
+                }
+            }
+            Instruction::HostCall {
+                import,
+                argument_start,
+                argument_count,
+                result,
+            } => {
+                let host_import = &module.imports[import];
+                for (argument, expected) in types[argument_start..argument_start + argument_count]
+                    .iter()
+                    .zip(&host_import.parameter_types)
+                {
+                    if *argument != Some(*expected) {
+                        return Err(
+                            "HOST_CALL argument type must match on every control-flow path.".into(),
+                        );
+                    }
+                }
+                if let Some(destination) = result {
+                    types[destination] = Some(host_import.return_type);
+                }
+            }
+            Instruction::Halt => continue,
+        }
+
+        match *instruction {
+            Instruction::Jump { target } => {
+                merge_register_types(&mut incoming[target], &types);
+            }
+            Instruction::JumpIfFalse { target, .. } | Instruction::JumpIfTrue { target, .. } => {
+                merge_register_types(&mut incoming[index + 1], &types);
+                merge_register_types(&mut incoming[target], &types);
+            }
+            _ => merge_register_types(&mut incoming[index + 1], &types),
+        }
+    }
+    Ok(())
+}
+
 fn verify_function(
     module: &PortableModule,
     function: &Function,
@@ -464,9 +627,8 @@ fn verify_function(
         format!("Function {function_index} code range is outside the code section.")
     })?;
     let mut cursor = Cursor::new(function_code, code_start);
-    let mut register_types = vec![ValueType::Null; register_count];
-    register_types[..function.parameter_types.len()].copy_from_slice(&function.parameter_types);
     let mut instructions = Vec::new();
+    let mut instruction_offsets = Vec::new();
     let mut halted = false;
 
     while cursor.offset < function_code.len() {
@@ -480,6 +642,7 @@ fn verify_function(
             )
         })?;
         let operands = decode_instruction_operands(opcode, &mut cursor)?;
+        instruction_offsets.push(instruction_offset);
         let instruction = match opcode {
             Opcode::LoadConst => {
                 let destination = register_index(
@@ -489,11 +652,10 @@ fn verify_function(
                 )?;
                 let constant = usize::try_from(operands[1])
                     .map_err(|_| "LOAD_CONST constant index is out of range.".to_owned())?;
-                let value = module
+                module
                     .constants
                     .get(constant)
                     .ok_or("LOAD_CONST constant index is out of range.")?;
-                register_types[destination] = value.value_type();
                 Instruction::LoadConst {
                     destination,
                     constant,
@@ -503,7 +665,6 @@ fn verify_function(
                 let destination =
                     register_index(operands[0], register_count, "MOVE destination register")?;
                 let source = register_index(operands[1], register_count, "MOVE source register")?;
-                register_types[destination] = register_types[source];
                 Instruction::Move {
                     destination,
                     source,
@@ -521,18 +682,6 @@ fn verify_function(
                     register_count,
                     &format!("{name} operand register"),
                 )?;
-                let operand_type = register_types[operand];
-                if opcode == Opcode::Negate {
-                    if !is_numeric(operand_type) {
-                        return Err("NEGATE operand must be I64 or F64.".into());
-                    }
-                    register_types[destination] = operand_type;
-                } else {
-                    if operand_type != ValueType::Bool {
-                        return Err("BOOL_NOT operand must be BOOL.".into());
-                    }
-                    register_types[destination] = ValueType::Bool;
-                }
                 Instruction::Unary {
                     opcode,
                     destination,
@@ -568,46 +717,30 @@ fn verify_function(
                     register_count,
                     &format!("{name} right register"),
                 )?;
-                let left_type = register_types[left];
-                let right_type = register_types[right];
-                if left_type != right_type {
-                    return Err(format!("{name} operands must have the same type."));
-                }
-                let result_type = match opcode {
-                    Opcode::Add
-                    | Opcode::Subtract
-                    | Opcode::Multiply
-                    | Opcode::Divide
-                    | Opcode::Remainder => {
-                        if !is_numeric(left_type) {
-                            return Err(format!("{name} operands must be I64 or F64."));
-                        }
-                        left_type
-                    }
-                    Opcode::Equal | Opcode::NotEqual => ValueType::Bool,
-                    Opcode::LessThan
-                    | Opcode::LessEqual
-                    | Opcode::GreaterThan
-                    | Opcode::GreaterEqual => {
-                        if !is_numeric(left_type) {
-                            return Err(format!("{name} operands must be I64 or F64."));
-                        }
-                        ValueType::Bool
-                    }
-                    Opcode::BoolAnd | Opcode::BoolOr => {
-                        if left_type != ValueType::Bool {
-                            return Err(format!("{name} operands must be BOOL."));
-                        }
-                        ValueType::Bool
-                    }
-                    _ => unreachable!("grouped binary opcodes are exhaustive"),
-                };
-                register_types[destination] = result_type;
                 Instruction::Binary {
                     opcode,
                     destination,
                     left,
                     right,
+                }
+            }
+            Opcode::Jump => Instruction::Jump {
+                target: usize::try_from(operands[0])
+                    .map_err(|_| "JUMP target is out of range.".to_owned())?,
+            },
+            Opcode::JumpIfFalse | Opcode::JumpIfTrue => {
+                let name = opcode_name(opcode);
+                let condition = register_index(
+                    operands[0],
+                    register_count,
+                    &format!("{name} condition register"),
+                )?;
+                let target = usize::try_from(operands[1])
+                    .map_err(|_| format!("{name} target is out of range."))?;
+                if opcode == Opcode::JumpIfFalse {
+                    Instruction::JumpIfFalse { condition, target }
+                } else {
+                    Instruction::JumpIfTrue { condition, target }
                 }
             }
             Opcode::HostCall => {
@@ -640,13 +773,6 @@ fn verify_function(
                     if argument_start >= register_count || argument_end > register_count {
                         return Err("HOST_CALL argument range is out of bounds.".into());
                     }
-                    for (index, expected_type) in host_import.parameter_types.iter().enumerate() {
-                        if register_types[argument_start + index] != *expected_type {
-                            return Err(format!(
-                                "HOST_CALL argument {index} type does not match the import signature."
-                            ));
-                        }
-                    }
                 }
                 let result = if host_import.return_type == ValueType::Void {
                     if operands[3] != u32::from(NO_REGISTER) {
@@ -656,7 +782,6 @@ fn verify_function(
                 } else {
                     let result =
                         register_index(operands[3], register_count, "HOST_CALL result register")?;
-                    register_types[result] = host_import.return_type;
                     Some(result)
                 };
                 Instruction::HostCall {
@@ -682,6 +807,29 @@ fn verify_function(
             "Function {function_index} must terminate with HALT."
         ));
     }
+    let offset_to_index: HashMap<_, _> = instruction_offsets
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, offset)| (offset, index))
+        .collect();
+    for (index, instruction) in instructions.iter_mut().enumerate() {
+        let (name, target) = match instruction {
+            Instruction::Jump { target } => ("JUMP", target),
+            Instruction::JumpIfFalse { target, .. } => ("JUMP_IF_FALSE", target),
+            Instruction::JumpIfTrue { target, .. } => ("JUMP_IF_TRUE", target),
+            _ => continue,
+        };
+        if *target <= instruction_offsets[index] {
+            return Err(format!(
+                "{name} target must be a forward instruction offset."
+            ));
+        }
+        *target = *offset_to_index
+            .get(target)
+            .ok_or_else(|| format!("{name} target must reference an instruction boundary."))?;
+    }
+    verify_instruction_flow(module, function, function_index, &instructions)?;
     Ok(VerifiedFunction {
         register_count,
         instructions,

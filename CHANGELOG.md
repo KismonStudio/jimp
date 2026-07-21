@@ -25,14 +25,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Source-language scalar literals for signed `i64`, finite `f64`, boolean, and `null` values.
 - Exact signed-i64 range validation and finite IEEE 754 binary64 parsing diagnostics.
 - A dedicated source parser that produces typed statements before portable bytecode lowering.
-- Program-scoped immutable `let` and mutable `var` declarations with required literal initializers.
+- Lexically scoped immutable `let` and mutable `var` declarations with required expression initializers.
 - Semantic analysis for declaration-before-use, duplicate names, reserved names, and immutable reassignment.
 - Persistent VM register allocation for variables plus an isolated temporary register for discarded values and host calls.
-- Precedence-aware arithmetic, comparison, equality, unary, and eager boolean expressions.
+- Precedence-aware arithmetic, comparison, equality, unary, and short-circuit boolean expressions.
 - Generic typed expression opcodes generated for JavaScript and Rust from the machine-readable ISA.
 - Flow-sensitive expression type analysis with same-type numeric rules and no implicit conversions.
 - Checked `I64` arithmetic, IEEE 754 `F64` operations, and runtime diagnostics for overflow and zero divisors.
 - Temporary-register reuse while lowering expression trees.
+- Braced, nestable `if`/`else` blocks with mandatory `BOOL` conditions and block-local declarations.
+- Generic forward `JUMP`, `JUMP_IF_FALSE`, and `JUMP_IF_TRUE` instructions with function-relative targets.
+- Control-flow verification for instruction boundaries, forward-only targets, reachability, and register types on every incoming path.
+- Conditional execution and short-circuit coverage across the JavaScript compiler and Rust runtime.
+- Flow-sensitive conditional type joins that allow mutable variables to converge to a new type when all paths agree.
+- Compiler and integration coverage for convergent, divergent, and implicit no-`else` type paths.
 
 ### Fixed
 
@@ -43,11 +49,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Runtime decoding and verification now complete before VM execution begins.
 - Console effects are isolated behind a host interface and are unavailable to the bytecode decoder.
 - Runtime code is separated into portable decoding, VM, and host modules.
-- The active compiler and runtime now use portable `.jbc` format `2.1`; legacy format `1` and portable `2.0` are no longer accepted.
+- The active compiler and runtime now use portable `.jbc` format `2.2`; legacy format `1` and portable formats `2.0` and `2.1` are no longer accepted.
 - Source-level `print` is lowered to `LOAD_CONST` plus the typed `std.console.write` host import instead of a hardcoded VM opcode.
 - Host effects are dispatched through resolved numeric capability handles and runtime-checked value arrays.
 - The bytecode inspector now disassembles the portable module structure and generic ISA instructions.
 - `print` now accepts any expression statically resolved as `STRING` while remaining a compiler lowering to host calls.
+- Rust portable verification now separates structural instruction decoding from control-flow type propagation, avoiding dependence on physical branch layout.
 
 ## [0.1.0] - 2026-07-17
 

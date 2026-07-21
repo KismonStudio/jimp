@@ -4,7 +4,7 @@
 
 ## Status
 
-Este documento define a sintaxe e a semântica de expressões aceitas atualmente pelo compilador JIMP até o P2.3. A linguagem permanece pré-estável.
+Este documento define a sintaxe e a semântica completas do P2 aceitas pelo compilador JIMP até o P2.5. A linguagem permanece pré-estável.
 
 As palavras reservadas, a gramática, as regras de operadores e os exemplos são normativos. O texto explicativo é informativo, exceto quando utiliza **deve**, **não deve**, **obrigatório** ou **inválido**.
 
@@ -12,7 +12,7 @@ As palavras reservadas, a gramática, as regras de operadores e os exemplos são
 
 - Arquivos de código-fonte utilizam a extensão `.jimp` e codificação UTF-8.
 - Terminações de linha LF e CRLF são aceitas.
-- Cada linha lógica não vazia e que não seja comentário contém exatamente uma instrução completa.
+- Cada linha lógica não vazia e que não seja comentário contém uma instrução simples completa ou um delimitador de bloco condicional.
 - Espaços em branco no início e no final são ignorados.
 - O ponto e vírgula no final de uma instrução é opcional.
 - Um programa vazio é válido.
@@ -24,7 +24,7 @@ Comentários começam com `//` após espaços em branco opcionais e ocupam o res
 As palavras reservadas diferenciam maiúsculas de minúsculas:
 
 ```text
-print true false null let var
+if else print true false null let var
 ```
 
 Identificadores começam com uma letra ASCII ou sublinhado e continuam com letras ASCII, dígitos ou sublinhados. Eles diferenciam maiúsculas de minúsculas, e palavras reservadas não podem nomear variáveis.
@@ -51,7 +51,7 @@ Separadores numéricos, notação hexadecimal, sinal de mais inicial, `NaN` e li
 
 ## Variáveis
 
-As variáveis utilizam atualmente o escopo do programa. Nomes devem ser declarados antes do uso e não podem ser declarados mais de uma vez. As duas formas de declaração exigem inicializador:
+As variáveis utilizam escopo léxico de bloco. Nomes devem ser declarados antes do uso e não podem ser declarados mais de uma vez no mesmo escopo. Um bloco aninhado pode ocultar um nome do escopo externo. As duas formas de declaração exigem inicializador:
 
 ```jimp
 let immutableValue = 42;
@@ -62,7 +62,11 @@ mutableValue = mutableValue * 2;
 - `let` cria uma variável imutável que não pode receber nova atribuição.
 - `var` cria uma variável mutável.
 - Inicializadores e atribuições aceitam expressões.
-- O tipo atual de uma variável mutável é acompanhado na ordem do código-fonte e pode mudar após uma atribuição durante a base pré-estável do P2.
+- O tipo atual de uma variável mutável é acompanhado na ordem do código-fonte e pode mudar após uma atribuição incondicional.
+- Atribuições dentro de uma condicional podem atualizar uma variável externa. Após a condicional, todos os caminhos devem convergir para o mesmo tipo.
+- Em um `if` sem `else`, o caminho falso implícito mantém o tipo de entrada; portanto, o caminho executado deve terminar com esse mesmo tipo.
+- Em um `if` com `else`, os dois caminhos explícitos podem convergir para um novo tipo, mesmo que seja diferente do tipo de entrada.
+- Uma declaração dentro de um bloco `if` ou `else` deixa de estar disponível quando o bloco termina.
 - Declarações não utilizadas são válidas.
 
 ## Expressões
@@ -88,7 +92,7 @@ Soma, subtração, multiplicação, divisão, resto e negação de `I64` são ve
 
 A igualdade aceita valores `NULL`, `BOOL`, `I64`, `F64` e `STRING` quando os dois operandos possuem o mesmo tipo. As regras de igualdade IEEE 754 se aplicam a `F64`, incluindo `NaN != NaN` e `-0.0 == 0.0`.
 
-Os operandos são avaliados da esquerda para a direita. `&&` e `||` são imediatos no P2.3: os dois operandos são avaliados. A avaliação com curto-circuito exige a base de desvios planejada para o P2.4.
+Os operandos são avaliados da esquerda para a direita. `&&` e `||` utilizam avaliação de curto-circuito: `false && direita` não avalia `direita`, e `true || direita` não avalia `direita`.
 
 ## Instruções
 
@@ -105,6 +109,20 @@ print message;
 
 `let` e `var` declaram variáveis inicializadas. Uma atribuição substitui o valor atual de uma `var` existente.
 
+### `if` e `else`
+
+`if` exige uma expressão `BOOL` e um bloco entre chaves. Um bloco `else` opcional é executado quando a condição é falsa. Os blocos podem estar vazios ou aninhados.
+
+```jimp
+if score >= 70 {
+  print "Aprovado";
+} else {
+  print "Não aprovado";
+}
+```
+
+A chave de abertura deve terminar a linha lógica do `if` ou `else`. A chave de fechamento ocupa sua própria linha lógica, com exceção da forma `} else {`, que também é aceita. Blocos independentes e `else if` não são definidos no P2.
+
 ### Instrução de expressão
 
 Qualquer expressão pode ser utilizada como instrução. Ela é avaliada e seu resultado é descartado.
@@ -114,13 +132,26 @@ Qualquer expressão pode ser utilizada como instrução. Ela é avaliada e seu r
 A gramática utiliza EBNF no estilo ISO/IEC 14977. Espaços em branco léxicos podem aparecer ao redor de operadores e pontuação.
 
 ```ebnf
-program          = { logical-line } ;
+program          = { trivia-line | statement-line | if-statement } ;
 
-logical-line     = whitespace,
-                   [ comment | print-statement | variable-declaration
-                   | variable-assignment | expression-statement ],
-                   whitespace,
-                   ( line-ending | end-of-file ) ;
+trivia-line      = whitespace, [ comment ], whitespace, line-boundary ;
+statement-line   = whitespace, simple-statement, whitespace, line-boundary ;
+simple-statement = print-statement | variable-declaration
+                   | variable-assignment | expression-statement ;
+
+if-statement     = if-header, line-ending, block-body,
+                   ( close-brace-line,
+                     [ { trivia-line }, else-header, line-ending,
+                       block-body, close-brace-line ]
+                   | close-else-header, line-ending,
+                     block-body, close-brace-line ) ;
+if-header        = whitespace, "if", required-whitespace,
+                   expression, whitespace, "{", whitespace ;
+else-header      = whitespace, "else", whitespace, "{", whitespace ;
+close-brace-line = whitespace, "}", whitespace, line-boundary ;
+close-else-header = whitespace, "}", whitespace, "else",
+                    whitespace, "{", whitespace ;
+block-body       = { trivia-line | statement-line | if-statement } ;
 
 comment          = "//", { comment-character } ;
 
@@ -178,6 +209,7 @@ whitespace       = { whitespace-character } ;
 required-whitespace = whitespace-character, whitespace ;
 comment-character = source-character - ( "\r" | "\n" ) ;
 line-ending      = "\n" | "\r", "\n" ;
+line-boundary    = line-ending | end-of-file ;
 ```
 
 `ASCII-letter` significa `A` até `Z` ou `a` até `z`. `source-character` representa um caractere Unicode decodificado de UTF-8. `whitespace-character` é qualquer caractere de espaço em branco que não encerre linha e seja reconhecido pelo compilador. `end-of-file` é o limite terminal do código-fonte.
@@ -198,10 +230,25 @@ print 42;
 .5;
 9223372036854775808;
 1e309;
+if 1 {
+}
+if true
+  print "sem chaves";
+}
+if true {
+  let local = 1;
+}
+local;
+var divergent = 1;
+if true {
+  divergent = "texto";
+} else {
+  divergent = false;
+}
 ```
 
 O compilador deve informar a linha lógica que contém sintaxe ou semântica inválida e não deve emitir bytecode.
 
 ## Fora do escopo
 
-O JIMP ainda não define escopos léxicos de bloco, controle de fluxo condicional, avaliação booleana com curto-circuito, funções, módulos, imports no código-fonte ou uma biblioteca padrão geral.
+O JIMP ainda não define blocos independentes, `else if`, loops, desvios para trás, funções, módulos, imports no código-fonte ou uma biblioteca padrão geral.

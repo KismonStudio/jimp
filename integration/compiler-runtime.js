@@ -115,6 +115,42 @@ function createInvalidBooleanAddModule() {
   });
 }
 
+function createInvalidConditionalHostModule() {
+  const code = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 2 }),
+    encodeInstruction("JUMP_IF_FALSE", { condition: 0, target: 21 }),
+    encodeInstruction("LOAD_CONST", { destination: 1, constant: 3 }),
+    encodeInstruction("HOST_CALL", {
+      import: 0,
+      argument_start: 1,
+      argument_count: 1,
+      result: NO_REGISTER,
+    }),
+    encodeInstruction("HALT"),
+  ]);
+  return encodePortableModule({
+    constants: [
+      { type: "STRING", value: "std.console" },
+      { type: "STRING", value: "write" },
+      { type: "BOOL", value: false },
+      { type: "STRING", value: "must not be written" },
+    ],
+    imports: [{
+      namespace: 0,
+      name: 1,
+      parameterTypes: ["STRING"],
+      returnType: "VOID",
+    }],
+    functions: [{
+      name: null,
+      code,
+      registerCount: 2,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+}
+
 function findSection(bytecode, expectedKind) {
   const sectionCount = bytecode.readUInt16LE(16);
   for (let index = 0; index < sectionCount; index += 1) {
@@ -187,17 +223,55 @@ test("executes arithmetic, comparison, and boolean expressions", () => {
   assert.equal(result.stderr, "");
 });
 
-test("reports eager boolean right-hand runtime failures before host output", () => {
+test("executes conditional blocks and short-circuits boolean expressions", () => {
   const bytecode = compile(`
     false && (1 / 0 == 0);
-    print "must not be written";
+    true || (1 / 0 == 0);
+    var message = "initial";
+    if false {
+      message = "wrong";
+    } else {
+      if true {
+        message = "conditional path";
+      }
+    }
+    print message;
   `);
+  const result = runBytecode(bytecode);
 
-  assertRejectedWithoutOutput(bytecode, /I64 division by zero/);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "conditional path\n");
+  assert.equal(result.stderr, "");
+});
+
+test("executes a variable type joined across conditional paths", () => {
+  const bytecode = compile(`
+    var value = 40;
+    if false {
+      value = "then";
+    } else {
+      let calculatedBeforeAssignment = value + 2;
+      calculatedBeforeAssignment == 42;
+      value = "joined";
+    }
+    print value;
+  `);
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "joined\n");
+  assert.equal(result.stderr, "");
 });
 
 test("rejects invalid expression operand types during Rust verification", () => {
   assertRejectedWithoutOutput(createInvalidBooleanAddModule(), /ADD operands must be I64 or F64/);
+});
+
+test("rejects host arguments that are not typed on every conditional path", () => {
+  assertRejectedWithoutOutput(
+    createInvalidConditionalHostModule(),
+    /HOST_CALL argument type must match on every control-flow path/,
+  );
 });
 
 test("rejects trailing data before producing host output", () => {
@@ -211,8 +285,8 @@ test("rejects trailing data before producing host output", () => {
 test("rejects an unknown opcode", () => {
   const bytecode = compile("");
   const code = findSection(bytecode, 4);
-  bytecode[code.offset] = 42;
-  assertRejectedWithoutOutput(bytecode, /Unsupported portable opcode 42/);
+  bytecode[code.offset] = 254;
+  assertRejectedWithoutOutput(bytecode, /Unsupported portable opcode 254/);
 });
 
 test("rejects a truncated operand", () => {

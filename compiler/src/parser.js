@@ -249,55 +249,148 @@ function removeOptionalSemicolon(line) {
   return line.endsWith(";") ? line.slice(0, -1).trimEnd() : line;
 }
 
+function parseSimpleStatement(source, line) {
+  const statement = removeOptionalSemicolon(source);
+  const printMatch = statement.match(PRINT_STATEMENT);
+  if (printMatch) {
+    return {
+      kind: "print",
+      line,
+      expression: parseExpression(printMatch[1], line),
+    };
+  }
+
+  const declarationMatch = statement.match(VARIABLE_DECLARATION);
+  if (declarationMatch) {
+    return {
+      kind: "variableDeclaration",
+      line,
+      mutable: declarationMatch[1] === "var",
+      name: declarationMatch[2],
+      initializer: parseExpression(declarationMatch[3], line),
+    };
+  }
+
+  const assignmentMatch = statement.match(VARIABLE_ASSIGNMENT);
+  if (assignmentMatch) {
+    return {
+      kind: "variableAssignment",
+      line,
+      name: assignmentMatch[1],
+      expression: parseExpression(assignmentMatch[2], line),
+    };
+  }
+
+  return {
+    kind: "expressionStatement",
+    line,
+    expression: parseExpression(statement, line),
+  };
+}
+
+class ProgramParser {
+  constructor(source) {
+    this.lines = source.replaceAll("\r\n", "\n").split("\n").map((text, index) => ({
+      line: index + 1,
+      text: text.trim(),
+    }));
+    this.offset = 0;
+  }
+
+  skipTrivia() {
+    while (this.offset < this.lines.length) {
+      const { text } = this.lines[this.offset];
+      if (text !== "" && !text.startsWith("//")) return;
+      this.offset += 1;
+    }
+  }
+
+  parseStatementList(openingLine = null) {
+    const statements = [];
+    while (true) {
+      this.skipTrivia();
+      if (this.offset >= this.lines.length) {
+        if (openingLine !== null) {
+          throw new Error(`Expected closing brace for block opened at line ${openingLine}.`);
+        }
+        return { statements, terminator: null };
+      }
+
+      const current = this.lines[this.offset];
+      if (current.text === "}" || current.text === "} else {") {
+        if (openingLine === null) {
+          throw new Error(`Unexpected closing brace at line ${current.line}.`);
+        }
+        this.offset += 1;
+        return {
+          statements,
+          terminator: current.text === "} else {" ? "else" : "close",
+        };
+      }
+      if (/^else\s*\{\s*$/.test(current.text)) {
+        throw new Error(`Unexpected else at line ${current.line}.`);
+      }
+
+      const conditionalMatch = current.text.match(/^if\s+(.+?)\s*\{\s*$/);
+      if (conditionalMatch) {
+        statements.push(this.parseConditional(current, conditionalMatch[1]));
+        continue;
+      }
+      if (/^if(?:\s|$)/.test(current.text)) {
+        throw new Error(`Expected an opening brace for if at line ${current.line}.`);
+      }
+
+      this.offset += 1;
+      statements.push(parseSimpleStatement(current.text, current.line));
+    }
+  }
+
+  parseConditional(opening, conditionSource) {
+    this.offset += 1;
+    const consequent = this.parseStatementList(opening.line);
+    let hasAlternate = consequent.terminator === "else";
+
+    if (!hasAlternate) {
+      this.skipTrivia();
+      const candidate = this.lines[this.offset];
+      if (candidate && /^else\s*\{\s*$/.test(candidate.text)) {
+        hasAlternate = true;
+        this.offset += 1;
+      }
+    }
+
+    let alternate = null;
+    if (hasAlternate) {
+      const alternateBlock = this.parseStatementList(opening.line);
+      if (alternateBlock.terminator === "else") {
+        throw new Error(`Unexpected second else for if at line ${opening.line}.`);
+      }
+      alternate = {
+        kind: "block",
+        line: opening.line,
+        statements: alternateBlock.statements,
+      };
+    }
+
+    return {
+      kind: "ifStatement",
+      line: opening.line,
+      condition: parseExpression(conditionSource, opening.line),
+      consequent: {
+        kind: "block",
+        line: opening.line,
+        statements: consequent.statements,
+      },
+      alternate,
+    };
+  }
+
+  parse() {
+    const result = this.parseStatementList();
+    return { kind: "program", statements: result.statements };
+  }
+}
+
 export function parseProgram(source) {
-  const statements = [];
-  const lines = source.replaceAll("\r\n", "\n").split("\n");
-
-  lines.forEach((rawLine, index) => {
-    const lineNumber = index + 1;
-    const trimmed = rawLine.trim();
-    if (trimmed === "" || trimmed.startsWith("//")) return;
-    const line = removeOptionalSemicolon(trimmed);
-
-    const printMatch = line.match(PRINT_STATEMENT);
-    if (printMatch) {
-      statements.push({
-        kind: "print",
-        line: lineNumber,
-        expression: parseExpression(printMatch[1], lineNumber),
-      });
-      return;
-    }
-
-    const declarationMatch = line.match(VARIABLE_DECLARATION);
-    if (declarationMatch) {
-      statements.push({
-        kind: "variableDeclaration",
-        line: lineNumber,
-        mutable: declarationMatch[1] === "var",
-        name: declarationMatch[2],
-        initializer: parseExpression(declarationMatch[3], lineNumber),
-      });
-      return;
-    }
-
-    const assignmentMatch = line.match(VARIABLE_ASSIGNMENT);
-    if (assignmentMatch) {
-      statements.push({
-        kind: "variableAssignment",
-        line: lineNumber,
-        name: assignmentMatch[1],
-        expression: parseExpression(assignmentMatch[2], lineNumber),
-      });
-      return;
-    }
-
-    statements.push({
-      kind: "expressionStatement",
-      line: lineNumber,
-      expression: parseExpression(line, lineNumber),
-    });
-  });
-
-  return { kind: "program", statements };
+  return new ProgramParser(source).parse();
 }

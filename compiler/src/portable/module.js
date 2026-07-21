@@ -397,15 +397,14 @@ function decodeFunctions(section, constants, codeLength) {
 function decodeFunctionInstructions(code, func, functionIndex, constants, imports) {
   const functionCode = code.subarray(func.codeOffset, func.codeOffset + func.codeLength);
   const cursor = new Cursor(functionCode, func.codeOffset);
-  const registerTypes = Array(func.registerCount).fill("NULL");
   const instructions = [];
-  let halted = false;
 
   while (cursor.offset < functionCode.length) {
-    const offset = cursor.offset;
+    const localOffset = cursor.offset;
     const opcode = cursor.u8(`function ${functionIndex} instruction opcode`);
     const definition = instructionByOpcode.get(opcode);
-    invariant(definition, `Unsupported portable opcode ${opcode} at code offset ${func.codeOffset + offset}.`);
+    invariant(definition,
+      `Unsupported portable opcode ${opcode} at code offset ${func.codeOffset + localOffset}.`);
     const operands = {};
     for (const operand of definition.operands) {
       const type = operandTypeByName.get(operand.type);
@@ -417,94 +416,149 @@ function decodeFunctionInstructions(code, func, functionIndex, constants, import
       }
       operands[operand.name] = value;
     }
-
-    if (definition.name === "LOAD_CONST") {
-      invariant(operands.destination < func.registerCount, "LOAD_CONST destination register is out of range.");
-      invariant(operands.constant < constants.length, "LOAD_CONST constant index is out of range.");
-      registerTypes[operands.destination] = constants[operands.constant].type;
-    } else if (definition.name === "MOVE") {
-      invariant(operands.destination < func.registerCount, "MOVE destination register is out of range.");
-      invariant(operands.source < func.registerCount, "MOVE source register is out of range.");
-      registerTypes[operands.destination] = registerTypes[operands.source];
-    } else if (definition.name === "NEGATE" || definition.name === "BOOL_NOT") {
-      invariant(operands.destination < func.registerCount,
-        `${definition.name} destination register is out of range.`);
-      invariant(operands.operand < func.registerCount,
-        `${definition.name} operand register is out of range.`);
-      const operandType = registerTypes[operands.operand];
-      if (definition.name === "NEGATE") {
-        invariant(NUMERIC_TYPES.has(operandType), "NEGATE operand must be I64 or F64.");
-        registerTypes[operands.destination] = operandType;
-      } else {
-        invariant(operandType === "BOOL", "BOOL_NOT operand must be BOOL.");
-        registerTypes[operands.destination] = "BOOL";
-      }
-    } else if (
-      NUMERIC_BINARY_INSTRUCTIONS.has(definition.name)
-      || EQUALITY_INSTRUCTIONS.has(definition.name)
-      || ORDERED_COMPARISON_INSTRUCTIONS.has(definition.name)
-      || BOOLEAN_BINARY_INSTRUCTIONS.has(definition.name)
-    ) {
-      invariant(operands.destination < func.registerCount,
-        `${definition.name} destination register is out of range.`);
-      invariant(operands.left < func.registerCount,
-        `${definition.name} left register is out of range.`);
-      invariant(operands.right < func.registerCount,
-        `${definition.name} right register is out of range.`);
-      const leftType = registerTypes[operands.left];
-      const rightType = registerTypes[operands.right];
-      invariant(leftType === rightType, `${definition.name} operands must have the same type.`);
-      if (NUMERIC_BINARY_INSTRUCTIONS.has(definition.name)) {
-        invariant(NUMERIC_TYPES.has(leftType), `${definition.name} operands must be I64 or F64.`);
-        registerTypes[operands.destination] = leftType;
-      } else if (EQUALITY_INSTRUCTIONS.has(definition.name)) {
-        registerTypes[operands.destination] = "BOOL";
-      } else if (ORDERED_COMPARISON_INSTRUCTIONS.has(definition.name)) {
-        invariant(NUMERIC_TYPES.has(leftType), `${definition.name} operands must be I64 or F64.`);
-        registerTypes[operands.destination] = "BOOL";
-      } else {
-        invariant(leftType === "BOOL", `${definition.name} operands must be BOOL.`);
-        registerTypes[operands.destination] = "BOOL";
-      }
-    } else if (definition.name === "HOST_CALL") {
-      const hostImport = imports[operands.import];
-      invariant(hostImport, "HOST_CALL import index is out of range.");
-      invariant(operands.argument_count === hostImport.parameterTypes.length,
-        "HOST_CALL argument count does not match the import signature.");
-      if (operands.argument_count === 0) {
-        invariant(operands.argument_start === 0, "HOST_CALL with no arguments must use register zero as its argument start.");
-      } else {
-        invariant(operands.argument_start < func.registerCount, "HOST_CALL argument start is out of range.");
-        invariant(operands.argument_start + operands.argument_count <= func.registerCount,
-          "HOST_CALL argument range is out of bounds.");
-      }
-      for (let index = 0; index < hostImport.parameterTypes.length; index += 1) {
-        invariant(registerTypes[operands.argument_start + index] === hostImport.parameterTypes[index],
-          `HOST_CALL argument ${index} type does not match the import signature.`);
-      }
-      if (hostImport.returnType === "VOID") {
-        invariant(operands.result === NO_REGISTER, "A VOID HOST_CALL must use NO_REGISTER as its result.");
-      } else {
-        invariant(operands.result < func.registerCount, "HOST_CALL result register is out of range.");
-        registerTypes[operands.result] = hostImport.returnType;
-      }
-    } else if (definition.name === "HALT") {
-      invariant(cursor.offset === functionCode.length, "HALT must be the final instruction of a function.");
-      halted = true;
-    }
-
     instructions.push({
       index: instructions.length,
-      offset: func.codeOffset + offset,
-      size: cursor.offset - offset,
+      localOffset,
+      offset: func.codeOffset + localOffset,
+      size: cursor.offset - localOffset,
       opcode,
       name: definition.name,
       operands,
     });
   }
 
-  invariant(halted, `Function ${functionIndex} must terminate with HALT.`);
-  return instructions;
+  invariant(instructions.length > 0 && instructions.at(-1).name === "HALT",
+    `Function ${functionIndex} must terminate with HALT.`);
+  invariant(instructions.slice(0, -1).every(({ name }) => name !== "HALT"),
+    "HALT must be the final instruction of a function.");
+
+  const instructionByOffset = new Map(instructions.map((instruction) => [
+    instruction.localOffset,
+    instruction.index,
+  ]));
+  for (const instruction of instructions) {
+    if (!["JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE"].includes(instruction.name)) continue;
+    invariant(instruction.operands.target > instruction.localOffset,
+      `${instruction.name} target must be a forward instruction offset.`);
+    invariant(instructionByOffset.has(instruction.operands.target),
+      `${instruction.name} target must reference an instruction boundary.`);
+  }
+
+  const incomingTypes = Array(instructions.length).fill(null);
+  const initialTypes = Array(func.registerCount).fill("NULL");
+  initialTypes.splice(0, func.parameterTypes.length, ...func.parameterTypes);
+  incomingTypes[0] = initialTypes;
+
+  function register(operands, name, instructionName) {
+    const index = operands[name];
+    invariant(index < func.registerCount,
+      `${instructionName} ${name.replaceAll("_", " ")} register is out of range.`);
+    return index;
+  }
+
+  function mergeInto(index, types) {
+    if (incomingTypes[index] === null) {
+      incomingTypes[index] = [...types];
+      return;
+    }
+    incomingTypes[index] = incomingTypes[index].map((type, registerIndex) =>
+      (type === types[registerIndex] ? type : "UNKNOWN"));
+  }
+
+  for (const instruction of instructions) {
+    const registerTypes = incomingTypes[instruction.index];
+    invariant(registerTypes !== null,
+      `Instruction at code offset ${instruction.offset} is unreachable.`);
+    const types = [...registerTypes];
+    const { name, operands } = instruction;
+
+    if (name === "LOAD_CONST") {
+      const destination = register(operands, "destination", name);
+      invariant(operands.constant < constants.length, "LOAD_CONST constant index is out of range.");
+      types[destination] = constants[operands.constant].type;
+    } else if (name === "MOVE") {
+      const destination = register(operands, "destination", name);
+      const source = register(operands, "source", name);
+      types[destination] = types[source];
+    } else if (name === "NEGATE" || name === "BOOL_NOT") {
+      const destination = register(operands, "destination", name);
+      const operand = register(operands, "operand", name);
+      if (name === "NEGATE") {
+        invariant(NUMERIC_TYPES.has(types[operand]), "NEGATE operand must be I64 or F64.");
+        types[destination] = types[operand];
+      } else {
+        invariant(types[operand] === "BOOL", "BOOL_NOT operand must be BOOL.");
+        types[destination] = "BOOL";
+      }
+    } else if (
+      NUMERIC_BINARY_INSTRUCTIONS.has(name)
+      || EQUALITY_INSTRUCTIONS.has(name)
+      || ORDERED_COMPARISON_INSTRUCTIONS.has(name)
+      || BOOLEAN_BINARY_INSTRUCTIONS.has(name)
+    ) {
+      const destination = register(operands, "destination", name);
+      const left = register(operands, "left", name);
+      const right = register(operands, "right", name);
+      const leftType = types[left];
+      const rightType = types[right];
+      invariant(leftType !== "UNKNOWN" && leftType === rightType,
+        `${name} operands must have the same type.`);
+      if (NUMERIC_BINARY_INSTRUCTIONS.has(name)) {
+        invariant(NUMERIC_TYPES.has(leftType), `${name} operands must be I64 or F64.`);
+        types[destination] = leftType;
+      } else if (EQUALITY_INSTRUCTIONS.has(name)) {
+        types[destination] = "BOOL";
+      } else if (ORDERED_COMPARISON_INSTRUCTIONS.has(name)) {
+        invariant(NUMERIC_TYPES.has(leftType), `${name} operands must be I64 or F64.`);
+        types[destination] = "BOOL";
+      } else {
+        invariant(leftType === "BOOL", `${name} operands must be BOOL.`);
+        types[destination] = "BOOL";
+      }
+    } else if (name === "JUMP_IF_FALSE" || name === "JUMP_IF_TRUE") {
+      const condition = register(operands, "condition", name);
+      invariant(types[condition] === "BOOL", `${name} condition must be BOOL.`);
+    } else if (name === "HOST_CALL") {
+      const hostImport = imports[operands.import];
+      invariant(hostImport, "HOST_CALL import index is out of range.");
+      invariant(operands.argument_count === hostImport.parameterTypes.length,
+        "HOST_CALL argument count does not match the import signature.");
+      if (operands.argument_count === 0) {
+        invariant(operands.argument_start === 0,
+          "HOST_CALL with no arguments must use register zero as its argument start.");
+      } else {
+        invariant(operands.argument_start < func.registerCount,
+          "HOST_CALL argument start is out of range.");
+        invariant(operands.argument_start + operands.argument_count <= func.registerCount,
+          "HOST_CALL argument range is out of bounds.");
+      }
+      for (let index = 0; index < hostImport.parameterTypes.length; index += 1) {
+        invariant(types[operands.argument_start + index] === hostImport.parameterTypes[index],
+          `HOST_CALL argument ${index} type does not match the import signature.`);
+      }
+      if (hostImport.returnType === "VOID") {
+        invariant(operands.result === NO_REGISTER,
+          "A VOID HOST_CALL must use NO_REGISTER as its result.");
+      } else {
+        const result = register(operands, "result", name);
+        types[result] = hostImport.returnType;
+      }
+    }
+
+    if (name === "HALT") continue;
+    if (name === "JUMP") {
+      mergeInto(instructionByOffset.get(operands.target), types);
+      continue;
+    }
+    if (name === "JUMP_IF_FALSE" || name === "JUMP_IF_TRUE") {
+      mergeInto(instruction.index + 1, types);
+      mergeInto(instructionByOffset.get(operands.target), types);
+      continue;
+    }
+    mergeInto(instruction.index + 1, types);
+  }
+
+  return instructions.map(({ localOffset: _localOffset, ...instruction }) => instruction);
 }
 
 export function decodePortableModule(bytecode) {

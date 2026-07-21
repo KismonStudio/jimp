@@ -9,7 +9,7 @@ import {
 } from "../src/generated/isa.js";
 
 test("exposes the portable VM v1 metadata", () => {
-  assert.deepEqual(FORMAT_VERSION, { major: 2, minor: 1 });
+  assert.deepEqual(FORMAT_VERSION, { major: 2, minor: 2 });
   assert.equal(NO_REGISTER, 0xffff);
   assert.equal(VALUE_TYPES.STRING, 4);
   assert.equal(VALUE_TYPES.VOID, 255);
@@ -18,7 +18,24 @@ test("exposes the portable VM v1 metadata", () => {
   assert.equal(OPCODES.ADD, 11);
   assert.equal(OPCODES.EQUAL, 20);
   assert.equal(OPCODES.BOOL_OR, 32);
+  assert.equal(OPCODES.JUMP, 40);
+  assert.equal(OPCODES.JUMP_IF_FALSE, 41);
+  assert.equal(OPCODES.JUMP_IF_TRUE, 42);
   assert.equal(OPCODES.HALT, 255);
+});
+
+test("defines forward control-flow operands", () => {
+  const jump = INSTRUCTIONS.find(({ name }) => name === "JUMP");
+  const conditional = INSTRUCTIONS.find(({ name }) => name === "JUMP_IF_FALSE");
+
+  assert.deepEqual(jump.operands, [{ name: "target", type: "code_offset" }]);
+  assert.deepEqual(
+    conditional.operands,
+    [
+      { name: "condition", type: "register" },
+      { name: "target", type: "code_offset" },
+    ],
+  );
 });
 
 test("defines typed unary and binary expression operands", () => {

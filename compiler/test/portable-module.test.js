@@ -52,7 +52,7 @@ test("round-trips portable constants and typed host imports", () => {
 
   assert.deepEqual(module.header, {
     major: 2,
-    minor: 1,
+    minor: 2,
     entryFunction: 0,
     sectionCount: 4,
   });
@@ -131,4 +131,71 @@ test("rejects invalid typed arithmetic during portable verification", () => {
   });
 
   assert.throws(() => decodePortableModule(bytecode), /ADD operands must be I64 or F64/);
+});
+
+test("rejects backward and unaligned jump targets", () => {
+  const createModule = (target) => encodePortableModule({
+    constants: [],
+    imports: [],
+    functions: [{
+      name: null,
+      code: Buffer.concat([
+        encodeInstruction("JUMP", { target }),
+        encodeInstruction("HALT"),
+      ]),
+      registerCount: 0,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+
+  assert.throws(
+    () => decodePortableModule(createModule(0)),
+    /target must be a forward instruction offset/,
+  );
+  assert.throws(
+    () => decodePortableModule(createModule(2)),
+    /target must reference an instruction boundary/,
+  );
+});
+
+test("rejects register types that are unsafe on a conditional path", () => {
+  const code = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 2 }),
+    encodeInstruction("JUMP_IF_FALSE", { condition: 0, target: 21 }),
+    encodeInstruction("LOAD_CONST", { destination: 1, constant: 3 }),
+    encodeInstruction("HOST_CALL", {
+      import: 0,
+      argument_start: 1,
+      argument_count: 1,
+      result: NO_REGISTER,
+    }),
+    encodeInstruction("HALT"),
+  ]);
+  const bytecode = encodePortableModule({
+    constants: [
+      { type: "STRING", value: "std.console" },
+      { type: "STRING", value: "write" },
+      { type: "BOOL", value: false },
+      { type: "STRING", value: "unsafe" },
+    ],
+    imports: [{
+      namespace: 0,
+      name: 1,
+      parameterTypes: ["STRING"],
+      returnType: "VOID",
+    }],
+    functions: [{
+      name: null,
+      code,
+      registerCount: 2,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+
+  assert.throws(
+    () => decodePortableModule(bytecode),
+    /HOST_CALL argument 0 type does not match the import signature/,
+  );
 });

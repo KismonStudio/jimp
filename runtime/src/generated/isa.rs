@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 pub(crate) const FORMAT_MAJOR: u16 = 2;
-pub(crate) const FORMAT_MINOR: u16 = 1;
+pub(crate) const FORMAT_MINOR: u16 = 2;
 pub(crate) const NO_REGISTER: u16 = 65535;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,6 +53,9 @@ pub(crate) enum Opcode {
     BoolNot = 30,
     BoolAnd = 31,
     BoolOr = 32,
+    Jump = 40,
+    JumpIfFalse = 41,
+    JumpIfTrue = 42,
     Halt = 255,
 }
 
@@ -79,6 +82,9 @@ impl TryFrom<u8> for Opcode {
             30 => Ok(Self::BoolNot),
             31 => Ok(Self::BoolAnd),
             32 => Ok(Self::BoolOr),
+            40 => Ok(Self::Jump),
+            41 => Ok(Self::JumpIfFalse),
+            42 => Ok(Self::JumpIfTrue),
             255 => Ok(Self::Halt),
             _ => Err(()),
         }
@@ -98,6 +104,7 @@ pub(crate) enum OperandKind {
     ConstantIndex,
     ImportIndex,
     RegisterCount,
+    CodeOffset,
 }
 
 pub(crate) struct OperandTypeDefinition {
@@ -147,6 +154,12 @@ pub(crate) const OPERAND_TYPES: &[OperandTypeDefinition] = &[
         name: "register_count",
         kind: OperandKind::RegisterCount,
         encoding: OperandEncoding::U16,
+        allows_no_register: false,
+    },
+    OperandTypeDefinition {
+        name: "code_offset",
+        kind: OperandKind::CodeOffset,
+        encoding: OperandEncoding::U32,
         allows_no_register: false,
     },
 ];
@@ -461,6 +474,42 @@ pub(crate) const INSTRUCTIONS: &[InstructionDefinition] = &[
             OperandDefinition {
                 name: "right",
                 kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "JUMP",
+        opcode: Opcode::Jump,
+        operands: &[OperandDefinition {
+            name: "target",
+            kind: OperandKind::CodeOffset,
+        }],
+    },
+    InstructionDefinition {
+        name: "JUMP_IF_FALSE",
+        opcode: Opcode::JumpIfFalse,
+        operands: &[
+            OperandDefinition {
+                name: "condition",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "target",
+                kind: OperandKind::CodeOffset,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "JUMP_IF_TRUE",
+        opcode: Opcode::JumpIfTrue,
+        operands: &[
+            OperandDefinition {
+                name: "condition",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "target",
+                kind: OperandKind::CodeOffset,
             },
         ],
     },

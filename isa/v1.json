@@ -3,7 +3,7 @@
   "name": "jimp-portable-vm",
   "formatVersion": {
     "major": 2,
-    "minor": 1
+    "minor": 2
   },
   "endianness": "little",
   "opcodeWidth": 1,
@@ -15,7 +15,8 @@
     { "name": "optional_register", "encoding": "u16", "allowsNoRegister": true },
     { "name": "constant_index", "encoding": "u32", "allowsNoRegister": false },
     { "name": "import_index", "encoding": "u32", "allowsNoRegister": false },
-    { "name": "register_count", "encoding": "u16", "allowsNoRegister": false }
+    { "name": "register_count", "encoding": "u16", "allowsNoRegister": false },
+    { "name": "code_offset", "encoding": "u32", "allowsNoRegister": false }
   ],
   "valueTypes": [
     {
@@ -285,6 +286,41 @@
       "description": {
         "en": "Computes eager boolean disjunction.",
         "pt": "Calcula a disjunção booleana com avaliação imediata."
+      }
+    },
+    {
+      "name": "JUMP",
+      "opcode": 40,
+      "operands": [
+        { "name": "target", "type": "code_offset" }
+      ],
+      "description": {
+        "en": "Continues execution at a forward instruction offset in the current function.",
+        "pt": "Continua a execucao em um offset de instrucao posterior na funcao atual."
+      }
+    },
+    {
+      "name": "JUMP_IF_FALSE",
+      "opcode": 41,
+      "operands": [
+        { "name": "condition", "type": "register" },
+        { "name": "target", "type": "code_offset" }
+      ],
+      "description": {
+        "en": "Jumps forward when a boolean condition is false.",
+        "pt": "Desvia para frente quando uma condicao booleana e falsa."
+      }
+    },
+    {
+      "name": "JUMP_IF_TRUE",
+      "opcode": 42,
+      "operands": [
+        { "name": "condition", "type": "register" },
+        { "name": "target", "type": "code_offset" }
+      ],
+      "description": {
+        "en": "Jumps forward when a boolean condition is true.",
+        "pt": "Desvia para frente quando uma condicao booleana e verdadeira."
       }
     },
     {

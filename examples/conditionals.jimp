@@ -1,0 +1,13 @@
+let score = 84;
+var message = null;
+
+if score >= 70 {
+  message = "Approved";
+} else {
+  message = "Not approved";
+}
+
+let shouldPrint = true;
+if shouldPrint && score < 100 {
+  print message;
+}

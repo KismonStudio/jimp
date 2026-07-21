@@ -106,7 +106,10 @@ pub(crate) fn execute<H: Host>(
         .ok_or("Verified entry function is unavailable.")?;
     let mut registers = vec![Value::Null; function.register_count];
 
-    for instruction in &function.instructions {
+    let mut instruction_pointer = 0;
+    loop {
+        let instruction = &function.instructions[instruction_pointer];
+        let mut next_instruction = instruction_pointer + 1;
         match *instruction {
             Instruction::LoadConst {
                 destination,
@@ -136,6 +139,17 @@ pub(crate) fn execute<H: Host>(
                 let result = execute_binary(opcode, &registers[left], &registers[right])?;
                 registers[destination] = result;
             }
+            Instruction::Jump { target } => next_instruction = target,
+            Instruction::JumpIfFalse { condition, target } => match registers[condition] {
+                Value::Bool(false) => next_instruction = target,
+                Value::Bool(true) => {}
+                _ => return Err("JUMP_IF_FALSE condition has an invalid runtime type.".into()),
+            },
+            Instruction::JumpIfTrue { condition, target } => match registers[condition] {
+                Value::Bool(true) => next_instruction = target,
+                Value::Bool(false) => {}
+                _ => return Err("JUMP_IF_TRUE condition has an invalid runtime type.".into()),
+            },
             Instruction::HostCall {
                 import,
                 argument_start,
@@ -191,9 +205,8 @@ pub(crate) fn execute<H: Host>(
             }
             Instruction::Halt => return Ok(()),
         }
+        instruction_pointer = next_instruction;
     }
-
-    unreachable!("verified entry functions always terminate with HALT")
 }
 
 #[cfg(test)]
@@ -264,6 +277,61 @@ mod tests {
             host.arguments,
             [Value::String("Hello from the VM\n".into())]
         );
+    }
+
+    #[test]
+    fn executes_verified_conditional_jumps() {
+        let module = VerifiedPortableModule {
+            entry_function: 0,
+            constants: vec![
+                Value::Bool(false),
+                Value::String("wrong".into()),
+                Value::String("right".into()),
+            ],
+            imports: vec![HostImport {
+                symbol: "test.console.write".into(),
+                parameter_types: vec![ValueType::String],
+                return_type: ValueType::Void,
+            }],
+            functions: vec![VerifiedFunction {
+                register_count: 2,
+                instructions: vec![
+                    Instruction::LoadConst {
+                        destination: 0,
+                        constant: 0,
+                    },
+                    Instruction::JumpIfFalse {
+                        condition: 0,
+                        target: 4,
+                    },
+                    Instruction::LoadConst {
+                        destination: 1,
+                        constant: 1,
+                    },
+                    Instruction::Jump { target: 5 },
+                    Instruction::LoadConst {
+                        destination: 1,
+                        constant: 2,
+                    },
+                    Instruction::HostCall {
+                        import: 0,
+                        argument_start: 1,
+                        argument_count: 1,
+                        result: None,
+                    },
+                    Instruction::Halt,
+                ],
+            }],
+        };
+        let resolved = [ResolvedHostImport {
+            symbol: "test.console.write".into(),
+            handle: HostHandle::new(7),
+        }];
+        let mut host = RecordingHost::default();
+
+        execute(&module, &resolved, &mut host).expect("conditional module should execute");
+
+        assert_eq!(host.arguments, [Value::String("right".into())]);
     }
 
     #[test]

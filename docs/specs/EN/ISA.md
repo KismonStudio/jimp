@@ -4,7 +4,7 @@
 
 > This file is generated from [`isa/v1.json`](../../../isa/v1.json). Do not edit it manually.
 
-- Format version: `2.1`
+- Format version: `2.2`
 - Byte order: `little-endian`
 - Opcode width: `1 byte`
 - `NO_REGISTER`: `65535` (`0xffff`)
@@ -42,4 +42,7 @@
 | `30` | `BOOL_NOT` | `destination: register (u16)`<br>`operand: register (u16)` | Computes boolean negation. |
 | `31` | `BOOL_AND` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Computes eager boolean conjunction. |
 | `32` | `BOOL_OR` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Computes eager boolean disjunction. |
+| `40` | `JUMP` | `target: code_offset (u32)` | Continues execution at a forward instruction offset in the current function. |
+| `41` | `JUMP_IF_FALSE` | `condition: register (u16)`<br>`target: code_offset (u32)` | Jumps forward when a boolean condition is false. |
+| `42` | `JUMP_IF_TRUE` | `condition: register (u16)`<br>`target: code_offset (u32)` | Jumps forward when a boolean condition is true. |
 | `255` | `HALT` | — | Terminates the entry function successfully. |

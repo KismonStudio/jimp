@@ -8,7 +8,7 @@ test("compiles print statements into portable bytecode", () => {
   const module = decodePortableModule(bytecode);
   assert.equal(bytecode.subarray(0, 4).toString(), "JIMP");
   assert.equal(bytecode.readUInt16LE(4), 2);
-  assert.equal(bytecode.readUInt16LE(6), 1);
+  assert.equal(bytecode.readUInt16LE(6), 2);
   assert.equal(module.imports[0].symbol, "std.console.write");
   assert.deepEqual(
     module.functions[0].instructions.map(({ name }) => name),
@@ -132,7 +132,7 @@ test("lowers arithmetic expressions with deterministic precedence", () => {
   assert.equal(func.registerCount, 4);
 });
 
-test("lowers comparison, equality, unary, and eager boolean expressions", () => {
+test("lowers comparison, equality, unary, and short-circuit boolean expressions", () => {
   const module = decodePortableModule(compile(`
     let condition = 1 + 2 * 3 >= 7 && !false || 4 != 5;
     condition;
@@ -142,9 +142,36 @@ test("lowers comparison, equality, unary, and eager boolean expressions", () => 
   const names = module.functions[0].instructions.map(({ name }) => name);
 
   for (const expected of [
-    "MULTIPLY", "ADD", "GREATER_EQUAL", "BOOL_NOT", "BOOL_AND", "NOT_EQUAL", "BOOL_OR", "EQUAL",
+    "MULTIPLY", "ADD", "GREATER_EQUAL", "BOOL_NOT", "JUMP_IF_FALSE",
+    "NOT_EQUAL", "JUMP_IF_TRUE", "EQUAL",
   ]) {
     assert(names.includes(expected), `Expected ${expected} in ${names.join(", ")}`);
+  }
+  assert(!names.includes("BOOL_AND"));
+  assert(!names.includes("BOOL_OR"));
+});
+
+test("lowers nested if and else blocks to forward generic jumps", () => {
+  const module = decodePortableModule(compile(`
+    var message = "initial";
+    if true {
+      if false {
+        message = "wrong";
+      } else {
+        message = "nested";
+      }
+    } else {
+      message = "other";
+    }
+    print message;
+  `));
+  const instructions = module.functions[0].instructions;
+  const names = instructions.map(({ name }) => name);
+
+  assert.equal(names.filter((name) => name === "JUMP_IF_FALSE").length, 2);
+  assert.equal(names.filter((name) => name === "JUMP").length, 2);
+  for (const instruction of instructions.filter(({ name }) => name.startsWith("JUMP"))) {
+    assert(instruction.operands.target > instruction.offset);
   }
 });
 
@@ -199,6 +226,55 @@ test("rejects reassignment of immutable variables and reserved names", () => {
   assert.throws(
     () => compile("let null = 1;"),
     /Reserved word "null" cannot be used as a variable name at line 1/,
+  );
+});
+
+test("rejects non-boolean conditions and unjoined conditional type changes", () => {
+  assert.throws(
+    () => compile("if 1 {\n}\n"),
+    /if requires a BOOL condition, received I64 at line 1/,
+  );
+  assert.throws(
+    () => compile(`
+      var value = 1;
+      if true {
+        value = "changed";
+      }
+    `),
+    /Variable "value" has incompatible types across conditional paths/,
+  );
+});
+
+test("allows mutable variables to converge to a new type across if and else", () => {
+  const module = decodePortableModule(compile(`
+    var value = 1;
+    if false {
+      value = "then";
+    } else {
+      let previous = value + 1;
+      value = "else";
+    }
+    print value;
+  `));
+  const names = module.functions[0].instructions.map(({ name }) => name);
+
+  assert(names.includes("JUMP_IF_FALSE"));
+  assert(names.includes("JUMP"));
+  assert(names.includes("ADD"));
+  assert.equal(module.functions[0].registerCount >= 3, true);
+});
+
+test("rejects divergent types after if and else", () => {
+  assert.throws(
+    () => compile(`
+      var value = 1;
+      if true {
+        value = "text";
+      } else {
+        value = false;
+      }
+    `),
+    /Variable "value" has incompatible types across conditional paths/,
   );
 });
 

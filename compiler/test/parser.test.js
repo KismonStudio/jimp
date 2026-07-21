@@ -43,3 +43,67 @@ test("tracks mutable variable types in source order", () => {
   assert.equal(program.statements[1].type, "BOOL");
   assert.equal(program.statements[2].type, "BOOL");
 });
+
+test("parses nested conditional blocks and both else layouts", () => {
+  const program = parseProgram(`
+    if true {
+      if false {
+      } else {
+      }
+    }
+    else {
+      print "fallback";
+    }
+  `);
+  const conditional = program.statements[0];
+
+  assert.equal(conditional.kind, "ifStatement");
+  assert.equal(conditional.consequent.statements[0].kind, "ifStatement");
+  assert.equal(conditional.alternate.statements[0].kind, "print");
+});
+
+test("enforces lexical block scope", () => {
+  const program = analyzeProgram(parseProgram(`
+    let value = 1;
+    if true {
+      let value = "shadow";
+      print value;
+    }
+    value + 1;
+  `));
+
+  assert.notEqual(
+    program.statements[0].register,
+    program.statements[1].consequent.statements[0].register,
+  );
+  assert.equal(program.statements[2].type, "I64");
+  assert.throws(
+    () => analyzeProgram(parseProgram("if true {\n let local = 1;\n}\nlocal;")),
+    /Variable "local" is not declared at line 4/,
+  );
+});
+
+test("joins mutable variable types after conditional paths", () => {
+  const program = analyzeProgram(parseProgram(`
+    var value = 1;
+    if true {
+      value = "left";
+    } else {
+      value = "right";
+    }
+    print value;
+  `));
+
+  assert.equal(program.statements[1].kind, "ifStatement");
+  assert.equal(program.statements[2].type, "STRING");
+  assert.throws(
+    () => analyzeProgram(parseProgram(`
+      var value = 1;
+      if true {
+        value = "changed";
+      }
+      print value;
+    `)),
+    /incompatible types across conditional paths/,
+  );
+});
