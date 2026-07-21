@@ -99,6 +99,44 @@ test("derives portable IDs from an explicit project root", async () => {
   assert.deepEqual(graph.modules.map(({ id }) => id), ["src/main.jimp"]);
 });
 
+test("canonicalizes a project-root alias before resolving dependencies", async (context) => {
+  const physicalRoot = project();
+  write(
+    physicalRoot,
+    "dependency.jimp",
+    "export function value(): I64 {\n  return 42;\n}",
+  );
+  write(physicalRoot, "main.jimp", [
+    'import { value } from "./dependency.jimp";',
+    "value();",
+  ].join("\n"));
+  const aliasContainer = project();
+  const aliasRoot = join(aliasContainer, "project-alias");
+  try {
+    symlinkSync(
+      physicalRoot,
+      aliasRoot,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+  } catch (error) {
+    if (error.code === "EPERM" || error.code === "EACCES") {
+      context.skip("Directory links are unavailable in this environment.");
+      return;
+    }
+    throw error;
+  }
+
+  const graph = await resolveProject(join(aliasRoot, "main.jimp"), {
+    projectRoot: aliasRoot,
+  });
+
+  assert.equal(graph.entryId, "main.jimp");
+  assert.deepEqual(graph.modules.map(({ id }) => id), [
+    "dependency.jimp",
+    "main.jimp",
+  ]);
+});
+
 test("rejects unsupported source specifiers before filesystem lookup", () => {
   for (const specifier of [
     "math.jimp",

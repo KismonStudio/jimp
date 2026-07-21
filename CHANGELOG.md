@@ -98,6 +98,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Canonicalized project-root aliases before deriving portable module IDs, preventing Windows short and long path forms from causing false project-root escape failures.
 - Runtime now rejects bytecode whose declared instruction count continues after `HALT`.
 
 ### Changed

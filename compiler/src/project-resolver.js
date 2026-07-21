@@ -137,19 +137,22 @@ export async function resolveProject(entryPath, {
   standardLibraryMajor = DEFAULT_STANDARD_LIBRARY_MAJOR,
 } = {}) {
   standardLibraryCatalog(standardLibraryMajor);
-  const lexicalEntry = resolve(entryPath);
-  const lexicalRoot = resolve(projectRoot ?? dirname(lexicalEntry));
-  let physicalRoot;
+  const requestedEntry = resolve(entryPath);
+  const requestedRoot = resolve(projectRoot ?? dirname(requestedEntry));
+  if (!isContained(requestedRoot, requestedEntry)) {
+    throw new Error(`Entry module escapes the project root "${requestedRoot}".`);
+  }
+  const entryRelativePath = relative(requestedRoot, requestedEntry);
+  let lexicalRoot;
   try {
-    physicalRoot = await realpath(lexicalRoot);
-    const rootStat = await stat(physicalRoot);
+    lexicalRoot = await realpath(requestedRoot);
+    const rootStat = await stat(lexicalRoot);
     if (!rootStat.isDirectory()) throw new Error("project root is not a directory");
   } catch (error) {
-    throw new Error(`Cannot use project root "${lexicalRoot}": ${error.message}.`);
+    throw new Error(`Cannot use project root "${requestedRoot}": ${error.message}.`);
   }
-  if (!isContained(lexicalRoot, lexicalEntry)) {
-    throw new Error(`Entry module escapes the project root "${lexicalRoot}".`);
-  }
+  const lexicalEntry = resolve(lexicalRoot, entryRelativePath);
+  const physicalRoot = lexicalRoot;
   const caseInsensitiveFileSystem = await detectCaseInsensitiveFileSystem(physicalRoot);
 
   const modulesById = new Map();
