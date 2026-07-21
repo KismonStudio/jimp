@@ -8,7 +8,7 @@ test("compiles print statements into portable bytecode", () => {
   const module = decodePortableModule(bytecode);
   assert.equal(bytecode.subarray(0, 4).toString(), "JIMP");
   assert.equal(bytecode.readUInt16LE(4), 2);
-  assert.equal(bytecode.readUInt16LE(6), 5);
+  assert.equal(bytecode.readUInt16LE(6), 6);
   assert.equal(module.imports[0].symbol, "std.console.write");
   assert.deepEqual(
     module.functions[0].instructions.map(({ name }) => name),

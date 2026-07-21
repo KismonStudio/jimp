@@ -6,7 +6,7 @@
 
 ## Status
 
-Este documento especifica o catálogo aprovado no P4.2 e o contrato de implementações alternativas portáteis do P4.3. Os módulos ainda não são distribuídos pelo compilador nem pelo vinculador.
+Este documento especifica o catálogo da biblioteca padrão e o contrato de implementações alternativas portáteis implementados de ponta a ponta pelo P5.4. O compilador resolve esses módulos embutidos sem consultar o sistema de arquivos do projeto e vincula estaticamente apenas os exports usados.
 
 ## Arquitetura
 
@@ -25,7 +25,7 @@ Este documento especifica o catálogo aprovado no P4.2 e o contrato de implement
 | Módulo | Tipo | Assinatura do export | Implementação padrão | Capacidade nativa opcional | Contrato |
 | --- | --- | --- | --- | --- | --- |
 | `std:console` | Híbrido | `write(message: STRING): VOID` | Host ABI: `std.console.write` | — | Escreve a mensagem exatamente e não acrescenta uma quebra de linha. |
-| `std:console` | Híbrido | `writeLine(message: STRING): VOID` | JIMP portátil | — | Escreve a mensagem seguida por um caractere de quebra de linha por meio de write. |
+| `std:console` | Híbrido | `writeLine(message: STRING): VOID` | JIMP portátil: [`src/console.jimp`](../../../stdlib/src/console.jimp) | — | Escreve a mensagem seguida por um caractere de quebra de linha por meio de write. |
 | `std:math/i64` | JIMP portátil | `absolute(value: I64): I64` | JIMP portátil: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.absolute` | Retorna a magnitude não negativa; o menor valor I64 segue o comportamento de overflow da negação verificada. |
 | `std:math/i64` | JIMP portátil | `minimum(left: I64, right: I64): I64` | JIMP portátil: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.minimum` | Retorna left quando left é menor ou igual a right; caso contrário, retorna right. |
 | `std:math/i64` | JIMP portátil | `maximum(left: I64, right: I64): I64` | JIMP portátil: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.maximum` | Retorna left quando left é maior ou igual a right; caso contrário, retorna right. |
@@ -62,8 +62,8 @@ APIs de JSON, fetch/rede, arquivos, tempo, aleatoriedade, coleções e processam
 
 ## Aceitação do projeto P4.2
 
-O P4.2 está concluído porque este catálogo é a única fonte revisada da superfície pública inicial dos módulos, suas referências geradas EN/PT estão atualizadas e a fronteira de redução independente da VM está explícita. A distribuição das implementações e o suporte do vinculador permanecem como trabalho de implementação.
+O P4.2 está concluído porque este catálogo é a única fonte revisada da superfície pública inicial dos módulos, suas referências geradas EN/PT estão atualizadas e a fronteira de redução independente da VM está explícita. O P5.4 entrega o catálogo por meio do compilador e do vinculador.
 
 ## Aceitação do projeto P4.3
 
-O P4.3 está concluído quando toda capacidade nativa opcional possui um código-fonte portátil associado pelo catálogo cuja sintaxe, semântica, ausência de imports do host e assinatura pública exata passam pelas verificações de geração; as regras de seleção padrão e nativa acima são normativas; e nenhuma flag de import opcional, procura em runtime ou opcode de biblioteca padrão é adicionada ao formato portátil. O consumo deste contrato pelo compilador e vinculador permanece como trabalho de implementação posterior.
+O P4.3 e o P5.4 estão concluídos: todo export portátil possui código-fonte canônico associado pelo catálogo cuja sintaxe, semântica, imports permitidos do host e assinatura pública exata passam pelas verificações de geração; o compilador e o vinculador consomem esse contrato; e nenhuma flag de import opcional, sondagem em runtime ou opcode de biblioteca padrão é adicionada ao formato portátil.

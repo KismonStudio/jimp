@@ -4,7 +4,7 @@
 
 ## Status
 
-Este documento especifica o contrato de segurança do P4.4 para o runtime Rust oficial, o formato portátil `.jbc` `2.5` e o perfil `jimp-reference-sandbox` v1. Ele consolida as garantias definidas em [VM.md](VM.md), os limites gerados em [SANDBOX.md](SANDBOX.md), o modelo de capacidades usado por [STDLIB.md](STDLIB.md) e as classes de falha de [ERRORS.md](ERRORS.md).
+Este documento especifica o contrato de segurança do P4.4 para o runtime Rust oficial, o formato portátil `.jbc` `2.6` e o perfil `jimp-reference-sandbox` v1. Ele consolida as garantias definidas em [VM.md](VM.md), os limites gerados em [SANDBOX.md](SANDBOX.md), o modelo de capacidades usado por [STDLIB.md](STDLIB.md) e as classes de falha de [ERRORS.md](ERRORS.md).
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos. Este é um contrato de sandbox no nível da VM, não uma declaração de isolamento do sistema operacional ou do processo.
 

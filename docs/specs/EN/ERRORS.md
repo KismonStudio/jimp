@@ -22,7 +22,7 @@ Compiler tools and runtimes report failures using a stable code, phase, message,
 
 ## Locations
 
-`location` is omitted when unavailable. Source locations use `{"kind":"source","line":N}`. Bytecode locations use `{"kind":"bytecode","offset":N}`. Line numbers are one-based; byte offsets are zero-based. Runtime source locations are populated from the optional `.jbc` debug section.
+`location` is omitted when unavailable. Source locations use `{"kind":"source","line":N}` and may include a portable `moduleId` when the frontend knows it. Bytecode locations use `{"kind":"bytecode","offset":N}`. Line numbers are one-based; byte offsets are zero-based. Runtime source locations are populated from the optional `.jbc` debug section.
 
 ## Codes
 

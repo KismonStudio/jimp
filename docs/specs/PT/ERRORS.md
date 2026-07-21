@@ -22,7 +22,7 @@ As ferramentas do compilador e os runtimes relatam falhas usando código, fase, 
 
 ## Localizações
 
-`location` é omitido quando indisponível. Localizações de fonte usam `{"kind":"source","line":N}`. Localizações de bytecode usam `{"kind":"bytecode","offset":N}`. Linhas começam em um; offsets de bytecode começam em zero. Localizações de fonte do runtime são preenchidas pela seção opcional de debug do `.jbc`.
+`location` é omitido quando indisponível. Localizações de fonte usam `{"kind":"source","line":N}` e podem incluir um `moduleId` portátil quando ele é conhecido pelo frontend. Localizações de bytecode usam `{"kind":"bytecode","offset":N}`. Linhas começam em um; offsets de bytecode começam em zero. Localizações de fonte do runtime são preenchidas pela seção opcional de debug do `.jbc`.
 
 ## Códigos
 

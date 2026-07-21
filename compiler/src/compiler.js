@@ -149,21 +149,49 @@ function containsPrint(statements) {
   });
 }
 
-export function compile(source) {
-  const program = analyzeProgram(parseProgram(source));
+export function emitAnalyzedProgram(program, {
+  resolveCallTarget = (expression) => ({
+    kind: "function",
+    index: expression.functionIndex,
+  }),
+  build,
+} = {}) {
   const hasPrintStatement = containsPrint(program.statements)
     || program.functions.some((func) => containsPrint(func.body.statements));
   const constants = [];
   const imports = [];
+  const hostImports = new Map();
+  const hostStringConstants = new Map();
+
+  function ensureHostStringConstant(value) {
+    if (!hostStringConstants.has(value)) {
+      hostStringConstants.set(value, constants.length);
+      constants.push({ type: "STRING", value });
+    }
+    return hostStringConstants.get(value);
+  }
+
+  function ensureHostImport({ capability, parameterTypes, returnType }) {
+    const separator = capability.lastIndexOf(".");
+    if (separator <= 0 || separator === capability.length - 1) {
+      throw new Error(`Internal compiler error: invalid Host ABI capability "${capability}".`);
+    }
+    const key = JSON.stringify([capability, parameterTypes, returnType]);
+    if (hostImports.has(key)) return hostImports.get(key);
+    const index = imports.length;
+    imports.push({
+      namespace: ensureHostStringConstant(capability.slice(0, separator)),
+      name: ensureHostStringConstant(capability.slice(separator + 1)),
+      parameterTypes: [...parameterTypes],
+      returnType,
+    });
+    hostImports.set(key, index);
+    return index;
+  }
 
   if (hasPrintStatement) {
-    constants.push(
-      { type: "STRING", value: "std.console" },
-      { type: "STRING", value: "write" },
-    );
-    imports.push({
-      namespace: 0,
-      name: 1,
+    ensureHostImport({
+      capability: "std.console.write",
       parameterTypes: ["STRING"],
       returnType: "VOID",
     });
@@ -171,11 +199,15 @@ export function compile(source) {
 
   const functionNameConstants = new Map();
   for (const func of program.functions) {
-    functionNameConstants.set(func.index, constants.length);
-    constants.push({ type: "STRING", value: func.name });
+    functionNameConstants.set(func, constants.length);
+    constants.push({ type: "STRING", value: func.linkedName ?? func.name });
   }
 
-  function compileFunction(statements, variableCount, { entry, returnType, fallbackLine }) {
+  function compileFunction(
+    statements,
+    variableCount,
+    { entry, returnType, fallbackLine, moduleId },
+  ) {
     const assembler = new Assembler();
     const registers = new RegisterAllocator(variableCount);
     const loopStack = [];
@@ -191,12 +223,22 @@ export function compile(source) {
         registers.release(argumentsList[index]);
       }
       const result = expression.type === "VOID" ? NO_REGISTER : registers.allocate();
-      assembler.emit("CALL", {
-        function: expression.functionIndex,
-        argument_start: argumentStart,
-        argument_count: argumentsList.length,
-        result,
-      });
+      const target = resolveCallTarget(expression, moduleId);
+      if (target.kind === "host") {
+        assembler.emit("HOST_CALL", {
+          import: ensureHostImport(target),
+          argument_start: argumentStart,
+          argument_count: argumentsList.length,
+          result,
+        });
+      } else {
+        assembler.emit("CALL", {
+          function: target.index,
+          argument_start: argumentStart,
+          argument_count: argumentsList.length,
+          result,
+        });
+      }
       registers.releaseRange(argumentStart, argumentsList.length);
       return result;
     }
@@ -357,9 +399,11 @@ export function compile(source) {
     entry: true,
     returnType: "VOID",
     fallbackLine: 1,
+    moduleId: program.moduleId ?? null,
   });
   const functions = [{
     name: null,
+    moduleId: program.moduleId ?? null,
     code: entry.code,
     debug: entry.debug,
     registerCount: entry.registerCount,
@@ -372,9 +416,11 @@ export function compile(source) {
       entry: false,
       returnType: func.returnType,
       fallbackLine: func.line,
+      moduleId: func.moduleId ?? program.moduleId ?? null,
     });
     functions.push({
-      name: functionNameConstants.get(func.index),
+      name: functionNameConstants.get(func),
+      moduleId: func.moduleId ?? program.moduleId ?? null,
       code: compiled.code,
       debug: compiled.debug,
       registerCount: compiled.registerCount,
@@ -383,5 +429,15 @@ export function compile(source) {
     });
   }
 
-  return encodePortableModule({ constants, imports, functions });
+  return encodePortableModule({ constants, imports, functions, build });
+}
+
+export function compile(source) {
+  const parsed = parseProgram(source);
+  if (parsed.imports.length > 0) {
+    throw new Error(
+      `Source imports require project graph compilation at line ${parsed.imports[0].line}.`,
+    );
+  }
+  return emitAnalyzedProgram(analyzeProgram(parsed));
 }

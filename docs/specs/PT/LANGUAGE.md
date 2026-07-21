@@ -4,7 +4,7 @@
 
 ## Status
 
-Este documento define a sintaxe e a semântica da linguagem-fonte implementadas até o P3.5. O P3.5 não altera a sintaxe do código-fonte; ele adiciona metadados opcionais ao bytecode que relacionam as instruções emitidas às linhas do código-fonte para inspeção e diagnósticos do runtime. A linguagem e o formato portátil permanecem pré-estáveis.
+Este documento define a sintaxe e a semântica centrais da linguagem-fonte implementadas até o P5.5, incluindo imports nomeados, aliases, funções exportadas, grafos estáticos seguros do projeto e módulos `std:` apoiados pelo catálogo. A linguagem e o formato portátil permanecem pré-estáveis.
 
 As palavras-chave, a gramática, as regras de tipo e os exemplos são normativos. O texto explicativo é informativo, exceto quando utiliza **deve**, **não deve**, **obrigatório** ou **inválido**.
 
@@ -24,7 +24,7 @@ Comentários começam com `//` após espaços em branco opcionais e ocupam o res
 As palavras reservadas diferenciam maiúsculas de minúsculas:
 
 ```text
-break continue else false function if let null print return true var while
+as break continue else export false from function if import let null print return true var while
 ```
 
 Identificadores começam com uma letra ASCII ou sublinhado e continuam com letras ASCII, dígitos ou sublinhados. Eles diferenciam maiúsculas de minúsculas.
@@ -263,4 +263,4 @@ O compilador deve informar a linha lógica que contém sintaxe ou semântica inv
 
 ## Fora do escopo
 
-O compilador atual ainda não implementa blocos independentes, `else if`, closures, funções de primeira classe, parâmetros padrão ou variádicos, valores de heap, exceções nem módulos padrão. Os contratos-alvo dos [módulos-fonte](MODULES.md) e da [biblioteca padrão](STDLIB.md) permanecem indisponíveis até a conclusão de seus critérios de aceitação.
+O compilador atual ainda não implementa blocos independentes, `else if`, closures, funções de primeira classe, parâmetros padrão ou variádicos, valores de heap nem exceções. Grafos estáticos do projeto, chamadas importadas, a [biblioteca padrão](STDLIB.md) inicial e [perfis de destino](TARGETS.md) explícitos estão implementados.

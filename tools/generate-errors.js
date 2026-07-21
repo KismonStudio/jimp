@@ -69,8 +69,8 @@ function generateDocumentation(definition, language) {
     ? "`JIMP error JIMP-1001 (compile) at source line 3: Undefined identifier value.`"
     : "`JIMP error JIMP-1001 (compile) at source line 3: Identificador value não definido.`";
   const locationText = english
-    ? "`location` is omitted when unavailable. Source locations use `{\"kind\":\"source\",\"line\":N}`. Bytecode locations use `{\"kind\":\"bytecode\",\"offset\":N}`. Line numbers are one-based; byte offsets are zero-based. Runtime source locations are populated from the optional `.jbc` debug section."
-    : "`location` é omitido quando indisponível. Localizações de fonte usam `{\"kind\":\"source\",\"line\":N}`. Localizações de bytecode usam `{\"kind\":\"bytecode\",\"offset\":N}`. Linhas começam em um; offsets de bytecode começam em zero. Localizações de fonte do runtime são preenchidas pela seção opcional de debug do `.jbc`.";
+    ? "`location` is omitted when unavailable. Source locations use `{\"kind\":\"source\",\"line\":N}` and may include a portable `moduleId` when the frontend knows it. Bytecode locations use `{\"kind\":\"bytecode\",\"offset\":N}`. Line numbers are one-based; byte offsets are zero-based. Runtime source locations are populated from the optional `.jbc` debug section."
+    : "`location` é omitido quando indisponível. Localizações de fonte usam `{\"kind\":\"source\",\"line\":N}` e podem incluir um `moduleId` portátil quando ele é conhecido pelo frontend. Localizações de bytecode usam `{\"kind\":\"bytecode\",\"offset\":N}`. Linhas começam em um; offsets de bytecode começam em zero. Localizações de fonte do runtime são preenchidas pela seção opcional de debug do `.jbc`.";
   const tableHeader = english
     ? "| Code | Phase | CLI exit | Meaning |\n| --- | --- | ---: | --- |"
     : "| Código | Fase | Saída CLI | Significado |\n| --- | --- | ---: | --- |";

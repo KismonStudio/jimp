@@ -6,7 +6,7 @@
 
 ## Status
 
-This document specifies the approved P4.2 catalog and the P4.3 portable-fallback contract. The modules are not yet shipped by the compiler or linker.
+This document specifies the standard-library catalog and portable-fallback contract implemented end to end by P5.4. The compiler resolves these embedded modules without project-filesystem lookup and statically links only used exports.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ This document specifies the approved P4.2 catalog and the P4.3 portable-fallback
 | Module | Kind | Export signature | Default implementation | Optional native capability | Contract |
 | --- | --- | --- | --- | --- | --- |
 | `std:console` | Hybrid | `write(message: STRING): VOID` | Host ABI: `std.console.write` | — | Writes the message exactly and does not append a line feed. |
-| `std:console` | Hybrid | `writeLine(message: STRING): VOID` | Portable JIMP | — | Writes the message followed by one line-feed character through write. |
+| `std:console` | Hybrid | `writeLine(message: STRING): VOID` | Portable JIMP: [`src/console.jimp`](../../../stdlib/src/console.jimp) | — | Writes the message followed by one line-feed character through write. |
 | `std:math/i64` | Portable JIMP | `absolute(value: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.absolute` | Returns the non-negative magnitude; the minimum I64 value follows checked-negation overflow behavior. |
 | `std:math/i64` | Portable JIMP | `minimum(left: I64, right: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.minimum` | Returns left when left is less than or equal to right; otherwise returns right. |
 | `std:math/i64` | Portable JIMP | `maximum(left: I64, right: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.maximum` | Returns left when left is greater than or equal to right; otherwise returns right. |
@@ -62,8 +62,8 @@ JSON, fetch/networking, files, time, randomness, collections, and text-processin
 
 ## P4.2 design acceptance
 
-P4.2 is complete because this catalog is the single reviewed source for the initial public module surface, its generated EN/PT references are current, and the VM-independent lowering boundary is explicit. Shipping implementations and linker support remain implementation work.
+P4.2 is complete because this catalog is the single reviewed source for the initial public module surface, its generated EN/PT references are current, and the VM-independent lowering boundary is explicit. P5.4 delivers the catalog through the compiler and linker.
 
 ## P4.3 design acceptance
 
-P4.3 is complete when every optional native capability has a catalog-linked portable source whose syntax, semantics, lack of host imports, and exact public signature pass generation checks; the default and native selection rules above are normative; and no optional-import flag, runtime probe, or standard-library opcode is added to the portable format. Compiler/linker consumption of this contract remains subsequent implementation work.
+P4.3 and P5.4 are complete: every portable export has catalog-linked canonical source whose syntax, semantics, allowed host imports, and exact public signature pass generation checks; the compiler/linker consume that contract; and no optional-import flag, runtime probe, or standard-library opcode is added to the portable format.

@@ -7,7 +7,7 @@ use crate::{
         },
     },
     host::{Host, ResolvedHostImport},
-    portable::{Instruction, Value, VerifiedPortableModule},
+    portable::{Instruction, SourceLocation, Value, VerifiedPortableModule},
 };
 
 struct Frame {
@@ -21,18 +21,24 @@ struct Frame {
 pub(crate) struct RuntimeError {
     message: String,
     source_line: Option<u32>,
+    source_module_id: Option<String>,
 }
 
 impl RuntimeError {
-    fn new(message: impl Into<String>, source_line: Option<u32>) -> Self {
+    fn new(
+        message: impl Into<String>,
+        source_line: Option<u32>,
+        source_module_id: Option<String>,
+    ) -> Self {
         Self {
             message: message.into(),
             source_line,
+            source_module_id,
         }
     }
 
-    pub(crate) fn into_parts(self) -> (String, Option<u32>) {
-        (self.message, self.source_line)
+    pub(crate) fn into_parts(self) -> (String, Option<u32>, Option<String>) {
+        (self.message, self.source_line, self.source_module_id)
     }
 
     #[cfg(test)]
@@ -43,14 +49,30 @@ impl RuntimeError {
 
 impl From<String> for RuntimeError {
     fn from(message: String) -> Self {
-        Self::new(message, None)
+        Self::new(message, None, None)
     }
 }
 
 impl From<&str> for RuntimeError {
     fn from(message: &str) -> Self {
-        Self::new(message, None)
+        Self::new(message, None, None)
     }
+}
+
+fn runtime_error(
+    message: impl Into<String>,
+    module: &VerifiedPortableModule,
+    location: Option<SourceLocation>,
+) -> RuntimeError {
+    let source_module_id = location
+        .and_then(|location| location.source_index)
+        .and_then(|index| module.debug_sources.get(index))
+        .cloned();
+    RuntimeError::new(
+        message,
+        location.map(|location| location.source_line),
+        source_module_id,
+    )
 }
 
 struct RuntimeResources {
@@ -273,15 +295,15 @@ pub(crate) fn execute<H: Host>(
         let frame = frames.last().expect("execution always has an active frame");
         let function = frame.function;
         let instruction_pointer = frame.instruction_pointer;
-        let source_line = module
-            .source_lines
+        let source_location = module
+            .source_locations
             .get(function)
-            .and_then(|lines| lines.get(instruction_pointer))
+            .and_then(|locations| locations.get(instruction_pointer))
             .copied()
             .flatten();
         resources
             .step()
-            .map_err(|message| RuntimeError::new(message, source_line))?;
+            .map_err(|message| runtime_error(message, module, source_location))?;
         let instruction = module.functions[function].instructions[instruction_pointer].clone();
         frames
             .last_mut()
@@ -501,7 +523,7 @@ pub(crate) fn execute<H: Host>(
         match step {
             Ok(true) => return Ok(()),
             Ok(false) => {}
-            Err(message) => return Err(RuntimeError::new(message, source_line)),
+            Err(message) => return Err(runtime_error(message, module, source_location)),
         }
     }
 }
@@ -536,6 +558,7 @@ mod tests {
     fn executes_generic_register_and_host_call_instructions() {
         let module = VerifiedPortableModule {
             entry_function: 0,
+            build: None,
             constants: vec![Value::String("Hello from the VM\n".into())],
             imports: vec![HostImport {
                 symbol: "test.console.write".into(),
@@ -564,7 +587,8 @@ mod tests {
                     Instruction::Halt,
                 ],
             }],
-            source_lines: vec![],
+            debug_sources: vec![],
+            source_locations: vec![],
         };
         let resolved = [ResolvedHostImport {
             symbol: "test.console.write".into(),
@@ -584,6 +608,7 @@ mod tests {
     fn executes_verified_conditional_jumps() {
         let module = VerifiedPortableModule {
             entry_function: 0,
+            build: None,
             constants: vec![
                 Value::Bool(false),
                 Value::String("wrong".into()),
@@ -625,7 +650,8 @@ mod tests {
                     Instruction::Halt,
                 ],
             }],
-            source_lines: vec![],
+            debug_sources: vec![],
+            source_locations: vec![],
         };
         let resolved = [ResolvedHostImport {
             symbol: "test.console.write".into(),
@@ -703,6 +729,7 @@ mod tests {
     fn attaches_the_current_source_line_to_runtime_failures() {
         let module = VerifiedPortableModule {
             entry_function: 0,
+            build: None,
             constants: vec![Value::I64(1), Value::I64(0)],
             imports: vec![],
             functions: vec![VerifiedFunction {
@@ -727,7 +754,25 @@ mod tests {
                     Instruction::Halt,
                 ],
             }],
-            source_lines: vec![vec![Some(8), Some(8), Some(9), Some(9)]],
+            debug_sources: vec!["lib/math.jimp".into()],
+            source_locations: vec![vec![
+                Some(SourceLocation {
+                    source_index: Some(0),
+                    source_line: 8,
+                }),
+                Some(SourceLocation {
+                    source_index: Some(0),
+                    source_line: 8,
+                }),
+                Some(SourceLocation {
+                    source_index: Some(0),
+                    source_line: 9,
+                }),
+                Some(SourceLocation {
+                    source_index: Some(0),
+                    source_line: 9,
+                }),
+            ]],
         };
 
         let error =
@@ -735,12 +780,14 @@ mod tests {
 
         assert_eq!(error.message(), "I64 division by zero.");
         assert_eq!(error.source_line, Some(9));
+        assert_eq!(error.source_module_id.as_deref(), Some("lib/math.jimp"));
     }
 
     #[test]
     fn enforces_the_active_register_budget_before_the_call_frame_budget() {
         let module = VerifiedPortableModule {
             entry_function: 0,
+            build: None,
             constants: vec![],
             imports: vec![],
             functions: vec![
@@ -773,7 +820,8 @@ mod tests {
                     ],
                 },
             ],
-            source_lines: vec![],
+            debug_sources: vec![],
+            source_locations: vec![],
         };
 
         let error = execute(&module, &[], &mut RecordingHost::default())
@@ -789,6 +837,7 @@ mod tests {
     fn enforces_logical_runtime_value_memory_for_recursive_strings() {
         let module = VerifiedPortableModule {
             entry_function: 0,
+            build: None,
             constants: vec![Value::String("x".repeat(MAX_CONSTANT_STRING_BYTES))],
             imports: vec![],
             functions: vec![
@@ -825,7 +874,8 @@ mod tests {
                     ],
                 },
             ],
-            source_lines: vec![],
+            debug_sources: vec![],
+            source_locations: vec![],
         };
 
         let error = execute(&module, &[], &mut RecordingHost::default())

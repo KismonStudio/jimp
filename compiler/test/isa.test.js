@@ -9,7 +9,7 @@ import {
 } from "../src/generated/isa.js";
 
 test("exposes the portable VM v1 metadata", () => {
-  assert.deepEqual(FORMAT_VERSION, { major: 2, minor: 5 });
+  assert.deepEqual(FORMAT_VERSION, { major: 2, minor: 6 });
   assert.equal(NO_REGISTER, 0xffff);
   assert.equal(VALUE_TYPES.STRING, 4);
   assert.equal(VALUE_TYPES.VOID, 255);

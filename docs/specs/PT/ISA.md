@@ -4,7 +4,7 @@
 
 > Este arquivo é gerado a partir de [`isa/v1.json`](../../../isa/v1.json). Não o edite manualmente.
 
-- Versão do formato: `2.5`
+- Versão do formato: `2.6`
 - Ordem dos bytes: `little-endian`
 - Tamanho do opcode: `1 byte`
 - `NO_REGISTER`: `65535` (`0xffff`)

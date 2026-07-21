@@ -1,0 +1,28 @@
+{
+  "$schema": "./schema.json",
+  "name": "jimp-target-profiles",
+  "version": 1,
+  "profiles": [
+    {
+      "name": "portable",
+      "description": {
+        "en": "Portable baseline with no optional native standard-library capabilities.",
+        "pt": "Base portável sem capacidades nativas opcionais da biblioteca padrão."
+      },
+      "guaranteedCapabilities": []
+    },
+    {
+      "name": "reference-native-i64",
+      "description": {
+        "en": "Reference runtime profile with native, semantically equivalent signed-I64 helpers.",
+        "pt": "Perfil do runtime de referência com funções I64 nativas e semanticamente equivalentes."
+      },
+      "guaranteedCapabilities": [
+        { "symbol": "std.math.i64.absolute", "parameterTypes": ["I64"], "returnType": "I64" },
+        { "symbol": "std.math.i64.maximum", "parameterTypes": ["I64", "I64"], "returnType": "I64" },
+        { "symbol": "std.math.i64.minimum", "parameterTypes": ["I64", "I64"], "returnType": "I64" },
+        { "symbol": "std.math.i64.sign", "parameterTypes": ["I64"], "returnType": "I64" }
+      ]
+    }
+  ]
+}

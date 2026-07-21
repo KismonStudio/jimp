@@ -1,8 +1,9 @@
 import { SANDBOX_LIMITS } from "./generated/sandbox.js";
+import { withModuleContext } from "./module-context.js";
 
 const RESERVED_WORDS = new Set([
-  "break", "continue", "else", "false", "function", "if", "let", "null",
-  "print", "return", "true", "var", "while",
+  "as", "break", "continue", "else", "export", "false", "from", "function",
+  "if", "import", "let", "null", "print", "return", "true", "var", "while",
 ]);
 const PARAMETER_TYPES = new Set(["BOOL", "I64", "F64", "STRING"]);
 const RETURN_TYPES = new Set(["NULL", "BOOL", "I64", "F64", "STRING", "VOID"]);
@@ -17,7 +18,12 @@ function assertName(name, line, kind, functions) {
     throw new Error(`Reserved word "${name}" cannot be used as a ${kind} name at line ${line}.`);
   }
   if (kind === "variable" && functions.has(name)) {
-    throw new Error(`Variable "${name}" conflicts with a function name at line ${line}.`);
+    const binding = functions.get(name);
+    const target = binding.kind === "imported" ? "an imported function binding" : "a function name";
+    throw new Error(`Variable "${name}" conflicts with ${target} at line ${line}.`);
+  }
+  if (kind === "parameter" && functions.get(name)?.kind === "imported") {
+    throw new Error(`Parameter "${name}" conflicts with an imported function binding at line ${line}.`);
   }
 }
 
@@ -77,7 +83,8 @@ function analyzeCall(expression, state) {
   return {
     ...expression,
     arguments: argumentsList,
-    functionIndex: signature.index,
+    functionIndex: signature.kind === "local" ? signature.index : null,
+    functionIdentity: signature.kind === "imported" ? signature.identity : null,
     type: signature.returnType,
   };
 }
@@ -332,8 +339,95 @@ function analyzeStatements(statements, state) {
   return { statements: analyzed, terminates };
 }
 
-function collectFunctions(program) {
+function validateImportedSignature(resolution, declaration, item) {
+  if (!Array.isArray(resolution.parameterTypes)
+    || resolution.parameterTypes.some((type) => !PARAMETER_TYPES.has(type))) {
+    throw new Error(
+      `Import "${item.imported}" from "${declaration.specifier}" has an invalid parameter contract at line ${item.line}.`,
+    );
+  }
+  if (!RETURN_TYPES.has(resolution.returnType)) {
+    throw new Error(
+      `Import "${item.imported}" from "${declaration.specifier}" has an invalid return contract at line ${item.line}.`,
+    );
+  }
+  if (typeof resolution.moduleId !== "string" || resolution.moduleId.length === 0) {
+    throw new Error(
+      `Import "${item.imported}" from "${declaration.specifier}" has no module identity at line ${item.line}.`,
+    );
+  }
+}
+
+function importResolutionKey({ specifier, imported, local }) {
+  return JSON.stringify([specifier, imported, local]);
+}
+
+function collectImportedFunctions(program, resolvedImports) {
+  const resolutions = new Map();
+  for (const resolution of resolvedImports) {
+    const key = importResolutionKey(resolution);
+    if (resolutions.has(key)) {
+      throw new Error(
+        `Import resolution for "${resolution.local}" from "${resolution.specifier}" is duplicated.`,
+      );
+    }
+    resolutions.set(key, resolution);
+  }
+
   const functions = new Map();
+  const imports = [];
+  for (const declaration of program.imports) {
+    for (const item of declaration.items) {
+      assertName(item.imported, item.line, "import", functions);
+      assertName(item.local, item.line, "import", functions);
+      const previous = functions.get(item.local);
+      if (previous) {
+        throw new Error(
+          `Imported binding "${item.local}" is already declared at line ${item.line}; `
+          + `the first declaration is at line ${previous.line}.`,
+        );
+      }
+      const key = importResolutionKey({
+        specifier: declaration.specifier,
+        imported: item.imported,
+        local: item.local,
+      });
+      const resolution = resolutions.get(key);
+      if (!resolution) {
+        throw new Error(
+          `Import "${item.imported}" from "${declaration.specifier}" is unresolved at line ${item.line}.`,
+        );
+      }
+      validateImportedSignature(resolution, declaration, item);
+      resolutions.delete(key);
+      const signature = {
+        kind: "imported",
+        line: item.line,
+        localName: item.local,
+        importedName: item.imported,
+        specifier: declaration.specifier,
+        identity: {
+          moduleId: resolution.moduleId,
+          exportName: item.imported,
+        },
+        parameterTypes: [...resolution.parameterTypes],
+        returnType: resolution.returnType,
+      };
+      functions.set(item.local, signature);
+      imports.push(signature);
+    }
+  }
+  if (resolutions.size > 0) {
+    const resolution = resolutions.values().next().value;
+    throw new Error(
+      `Resolved import "${resolution.local}" from "${resolution.specifier}" is not declared by the module.`,
+    );
+  }
+  return { functions, imports };
+}
+
+function collectFunctions(program, resolvedImports) {
+  const { functions, imports } = collectImportedFunctions(program, resolvedImports);
   let index = 1;
   for (const declaration of program.statements.filter(({ kind }) => kind === "functionDeclaration")) {
     if (index >= SANDBOX_LIMITS.MAX_FUNCTIONS) {
@@ -343,6 +437,12 @@ function collectFunctions(program) {
     }
     assertName(declaration.name, declaration.line, "function", functions);
     if (functions.has(declaration.name)) {
+      const previous = functions.get(declaration.name);
+      if (previous.kind === "imported") {
+        throw new Error(
+          `Function "${declaration.name}" conflicts with an imported function binding at line ${declaration.line}.`,
+        );
+      }
       throw new Error(`Function "${declaration.name}" is already declared at line ${declaration.line}.`);
     }
     if (!RETURN_TYPES.has(declaration.returnType)) {
@@ -367,6 +467,7 @@ function collectFunctions(program) {
       parameterNames.add(parameter.name);
     }
     functions.set(declaration.name, {
+      kind: "local",
       declaration,
       index,
       parameterTypes: declaration.parameters.map(({ type }) => type),
@@ -374,7 +475,7 @@ function collectFunctions(program) {
     });
     index += 1;
   }
-  return functions;
+  return { functions, imports };
 }
 
 function analyzeFunction(signature, functions) {
@@ -413,8 +514,11 @@ function analyzeFunction(signature, functions) {
   };
 }
 
-export function analyzeProgram(program) {
-  const functions = collectFunctions(program);
+function analyzeProgramInternal(program, { resolvedImports = [] } = {}) {
+  if (!Array.isArray(resolvedImports)) {
+    throw new Error("resolvedImports must be an array.");
+  }
+  const { functions, imports } = collectFunctions(program, resolvedImports);
   const entryContext = { nextRegister: 0 };
   const entryState = {
     context: entryContext,
@@ -425,13 +529,40 @@ export function analyzeProgram(program) {
     loopTypeGuards: [],
   };
   const entryStatements = program.statements.filter(({ kind }) => kind !== "functionDeclaration");
+  if (program.isEntry === false && entryStatements.length > 0) {
+    throw new Error(
+      `Executable statements are only valid in the entry module at line ${entryStatements[0].line}.`,
+    );
+  }
   const entry = analyzeStatements(entryStatements, entryState);
-  const analyzedFunctions = [...functions.values()].map((signature) =>
+  const localFunctions = [...functions.values()].filter(({ kind }) => kind === "local");
+  const analyzedFunctions = localFunctions.map((signature) =>
     analyzeFunction(signature, functions));
+  const exports = localFunctions
+    .filter(({ declaration }) => declaration.exported)
+    .map((signature) => ({
+      name: signature.declaration.name,
+      moduleId: program.moduleId,
+      functionIndex: signature.index,
+      parameterTypes: [...signature.parameterTypes],
+      returnType: signature.returnType,
+    }));
   return {
     kind: "analyzedProgram",
+    moduleId: program.moduleId,
+    isEntry: program.isEntry,
+    imports,
+    exports,
     statements: entry.statements,
     functions: analyzedFunctions,
     variableCount: entryContext.nextRegister,
   };
+}
+
+export function analyzeProgram(program, options) {
+  try {
+    return analyzeProgramInternal(program, options);
+  } catch (error) {
+    throw withModuleContext(error, program.moduleId);
+  }
 }

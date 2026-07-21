@@ -4,9 +4,9 @@
 
 ## Status
 
-This document specifies the implemented portable JIMP VM v1 through P3.5. Format `2.5` adds optional, non-authoritative source-line debug metadata to the resource-bounded execution and standard-error foundation completed through P3.4.
+This document specifies the implemented portable JIMP VM v1 through P5.5. Format `2.6` includes independently validated optional debug and reproducible-build metadata while preserving the resource-bounded execution and standard-error foundation.
 
-The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.5` remains pre-stable while the language and VM continue to evolve.
+The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.6` remains pre-stable while the language and VM continue to evolve.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -62,7 +62,7 @@ A portable `.jbc` file consists of a header, a section directory, and section pa
 | --- | --- | --- |
 | magic | 4 bytes | ASCII `JIMP` |
 | format major | `u16` | `2` |
-| format minor | `u16` | `5` |
+| format minor | `u16` | `6` |
 | module flags | `u32` | `0`; other bits are reserved |
 | entry function | `u32` | Index in the function section |
 | section count | `u16` | Number of directory entries |
@@ -92,6 +92,7 @@ Sections must be fully inside the file, must not overlap the header, directory, 
 | functions | `3` | Exactly one, required |
 | code | `4` | Exactly one, required |
 | debug | `5` | Zero or one, optional |
+| build metadata | `6` | Zero or one, optional |
 
 Duplicate singleton sections are invalid.
 
@@ -159,19 +160,29 @@ The code section contains function instruction streams. Every instruction starts
 
 ## Debug section
 
-The debug section maps encoded instruction offsets back to source lines. Its directory entry must set the `OPTIONAL` flag. A valid format `2.5` module may omit this section without changing execution semantics.
+The debug section maps encoded instruction offsets back to portable source-module IDs and source lines. Its directory entry must set the `OPTIONAL` flag. A valid format `2.6` module may omit this section without changing execution semantics.
 
 | Field | Encoding | Meaning |
 | --- | --- | --- |
-| debug version | `u16` | `1` |
+| debug version | `u16` | `2` |
 | debug flags | `u16` | `0`; other bits are reserved |
+| source count | `u32` | Number of source-module IDs that follow |
 | mapping count | `u32` | Number of mappings that follow |
-| code offset | `u32` | Offset relative to the start of the complete code section |
-| source line | `u32` | One-based source line |
+| source byte length | `u32` | UTF-8 length of one portable module ID |
+| source bytes | byte array | Non-empty portable module ID |
+| code offset | `u32` | Mapping field: offset relative to the complete code section |
+| source index | `u32` | Mapping field: source-table index, or `0xffffffff` when unavailable |
+| source line | `u32` | Mapping field: one-based source line |
 
-Each mapping contains one `code offset` followed by one `source line`. Code offsets must be strictly increasing and must reference decoded instruction boundaries. A mapping count above the sandbox instruction limit, a zero source line, duplicate offsets, incomplete mappings, or trailing data is invalid. Mappings may be omitted for individual instructions.
+The source table precedes the mappings. Source IDs must be unique, valid UTF-8, non-empty, and no longer than the sandbox symbol limit. Each mapping contains one `code offset`, one `source index`, and one `source line`. Code offsets must be strictly increasing and must reference decoded instruction boundaries. Source indices must reference the source table or use `0xffffffff`. Counts above the sandbox instruction limit, zero source lines, duplicate offsets or sources, incomplete data, and trailing data are invalid. Mappings may be omitted for individual instructions.
 
 Debug metadata is non-authoritative: it must not change instruction decoding, verification, control flow, values, host authorization, or any other execution behavior. The official runtime uses a valid mapping for the current instruction when reporting an execution failure; without a mapping, the same failure is reported without a source location.
+
+## Build-metadata section
+
+The optional build-metadata section records build metadata version `1`, zero flags, the selected standard-library major (`u16`), a zero reserved field, the target-profile name, the portable entry-module ID, and a sorted unique list of target-guaranteed capabilities. Each string is encoded as a `u32` byte length followed by non-empty UTF-8 bytes and is bounded by `MAX_SYMBOL_BYTES`; the capability count is bounded by `MAX_HOST_IMPORTS`.
+
+This section is descriptive, not authority. A runtime selecting a non-portable target must receive that target explicitly, require an exact metadata match, independently verify the profile and host signatures, and then apply its own capability policy. It must never grant a capability merely because bytecode metadata names it. Modules without build metadata are compatible only with the portable baseline.
 
 The initial generic instruction set has these semantic operations. Numeric opcodes and operand encodings are defined by the machine-readable [`isa/v1.json`](../../../isa/v1.json) source and summarized in the generated [ISA reference](ISA.md).
 
@@ -302,8 +313,8 @@ Exceeding a load or verification limit rejects the complete module before execut
 
 Failures are exposed through the [JIMP Standard Error Format v1](ERRORS.md). Decode, verification, host-import resolution, and execution failures have separate stable codes. Diagnostic wording is implementation detail and may improve without changing the error code.
 
-The module must never contain trusted native addresses. Debug data is non-authoritative and must not affect execution. Hosts expose capabilities explicitly and remain responsible for platform authorization and sandbox policy. The complete threat model, trust boundary, host obligations, and explicit non-guarantees are specified in the [JIMP Sandbox and Security Model v1](SECURITY.md).
+The module must never contain trusted native addresses. Debug and build metadata are non-authoritative and must not grant capabilities or otherwise alter authorization. Hosts expose capabilities explicitly and remain responsible for platform authorization and sandbox policy. The complete threat model, trust boundary, host obligations, and explicit non-guarantees are specified in the [JIMP Sandbox and Security Model v1](SECURITY.md).
 
 ## Deferred decisions
 
-The following items require later specifications: heap values, collections, binary buffers, asynchronous host operations, exceptions, module imports and exports, source-file identity, column-level debug locations, and AOT/JIT execution.
+The following items require later specifications: heap values, collections, binary buffers, asynchronous host operations, exceptions, runtime module imports and exports, column-level debug locations, and AOT/JIT execution.

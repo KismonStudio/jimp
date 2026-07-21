@@ -4,7 +4,7 @@
 
 ## Status
 
-This document defines the source-language syntax and semantics implemented through P3.5. P3.5 does not change source syntax; it adds optional bytecode metadata that maps emitted instructions to source lines for inspection and runtime diagnostics. The language and portable format remain pre-stable.
+This document defines the core source-language syntax and semantics implemented through P5.5, including named imports, aliases, exported functions, secure static project graphs, and catalog-backed `std:` modules. The language and portable format remain pre-stable.
 
 The keywords, grammar, type rules, and examples are normative. Explanatory prose is informative unless it uses **must**, **must not**, **required**, or **invalid**.
 
@@ -24,7 +24,7 @@ Comments begin with `//` after optional leading whitespace and occupy the rest o
 Reserved words are case-sensitive:
 
 ```text
-break continue else false function if let null print return true var while
+as break continue else export false from function if import let null print return true var while
 ```
 
 Identifiers begin with an ASCII letter or underscore and continue with ASCII letters, digits, or underscores. They are case-sensitive.
@@ -263,4 +263,4 @@ The compiler must report the logical source line containing invalid syntax or se
 
 ## Out of scope
 
-The current compiler does not yet implement standalone blocks, `else if`, closures, first-class functions, default or variadic parameters, heap values, exceptions, or standard modules. The target contracts for [source modules](MODULES.md) and the [standard library](STDLIB.md) remain unavailable until their implementation acceptance criteria are complete.
+The current compiler does not yet implement standalone blocks, `else if`, closures, first-class functions, default or variadic parameters, heap values, or exceptions. Static project graphs, imported calls, the initial [standard library](STDLIB.md), and explicit [target profiles](TARGETS.md) are implemented.

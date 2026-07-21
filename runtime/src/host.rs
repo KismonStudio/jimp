@@ -102,26 +102,67 @@ pub(crate) trait Host {
 pub(crate) struct ConsoleHost;
 
 const CONSOLE_WRITE_PARAMETERS: &[ValueType] = &[ValueType::String];
-const CONSOLE_CAPABILITIES: &[HostCapability] = &[HostCapability {
-    symbol: "std.console.write",
-    parameter_types: CONSOLE_WRITE_PARAMETERS,
-    return_type: ValueType::Void,
-    handle: HostHandle::new(0),
-}];
+const I64_UNARY_PARAMETERS: &[ValueType] = &[ValueType::I64];
+const I64_BINARY_PARAMETERS: &[ValueType] = &[ValueType::I64, ValueType::I64];
+const CONSOLE_CAPABILITIES: &[HostCapability] = &[
+    HostCapability {
+        symbol: "std.console.write",
+        parameter_types: CONSOLE_WRITE_PARAMETERS,
+        return_type: ValueType::Void,
+        handle: HostHandle::new(0),
+    },
+    HostCapability {
+        symbol: "std.math.i64.absolute",
+        parameter_types: I64_UNARY_PARAMETERS,
+        return_type: ValueType::I64,
+        handle: HostHandle::new(1),
+    },
+    HostCapability {
+        symbol: "std.math.i64.maximum",
+        parameter_types: I64_BINARY_PARAMETERS,
+        return_type: ValueType::I64,
+        handle: HostHandle::new(2),
+    },
+    HostCapability {
+        symbol: "std.math.i64.minimum",
+        parameter_types: I64_BINARY_PARAMETERS,
+        return_type: ValueType::I64,
+        handle: HostHandle::new(3),
+    },
+    HostCapability {
+        symbol: "std.math.i64.sign",
+        parameter_types: I64_UNARY_PARAMETERS,
+        return_type: ValueType::I64,
+        handle: HostHandle::new(4),
+    },
+];
 
 impl Host for ConsoleHost {
     fn invoke(&mut self, handle: HostHandle, arguments: &[Value]) -> Result<Option<Value>, String> {
-        if handle != HostHandle::new(0) {
-            return Err("Console host received an unknown capability handle.".into());
+        match (handle, arguments) {
+            (handle, [Value::String(value)]) if handle == HostHandle::new(0) => {
+                io::stdout()
+                    .lock()
+                    .write_all(value.as_bytes())
+                    .map_err(|error| format!("Console host error: {error}"))?;
+                Ok(None)
+            }
+            (handle, [Value::I64(value)]) if handle == HostHandle::new(1) => value
+                .checked_abs()
+                .map(Value::I64)
+                .map(Some)
+                .ok_or_else(|| "I64 negation overflow.".into()),
+            (handle, [Value::I64(left), Value::I64(right)]) if handle == HostHandle::new(2) => {
+                Ok(Some(Value::I64((*left).max(*right))))
+            }
+            (handle, [Value::I64(left), Value::I64(right)]) if handle == HostHandle::new(3) => {
+                Ok(Some(Value::I64((*left).min(*right))))
+            }
+            (handle, [Value::I64(value)]) if handle == HostHandle::new(4) => {
+                Ok(Some(Value::I64(value.signum())))
+            }
+            _ => Err("Reference host received an unknown capability handle or arguments.".into()),
         }
-        let [Value::String(value)] = arguments else {
-            return Err("std.console.write requires exactly one STRING argument.".into());
-        };
-        io::stdout()
-            .lock()
-            .write_all(value.as_bytes())
-            .map_err(|error| format!("Console host error: {error}"))?;
-        Ok(None)
     }
 
     fn capabilities(&self) -> &[HostCapability] {

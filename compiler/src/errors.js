@@ -40,8 +40,13 @@ export class JimpError extends Error {
 export function normalizeError(error, definition) {
   if (error instanceof JimpError) return error;
   const message = error instanceof Error ? error.message : String(error);
+  const inferredLocation = inferLocation(message, definition.phase);
+  const location = inferredLocation?.kind === "source"
+    && typeof error?.moduleId === "string"
+    ? { ...inferredLocation, moduleId: error.moduleId }
+    : inferredLocation;
   return new JimpError(definition, message, {
-    location: inferLocation(message, definition.phase),
+    location,
     cause: error,
   });
 }
@@ -49,7 +54,9 @@ export function normalizeError(error, definition) {
 export function formatError(error, format = "human") {
   if (format === "json") return `${JSON.stringify(error.toJSON())}\n`;
   const location = error.location?.kind === "source"
-    ? ` at source line ${error.location.line}`
+    ? error.location.moduleId
+      ? ` at source ${error.location.moduleId}:${error.location.line}`
+      : ` at source line ${error.location.line}`
     : error.location?.kind === "bytecode"
       ? ` at bytecode offset ${error.location.offset}`
       : "";

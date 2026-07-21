@@ -1,12 +1,12 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
-import { compile } from "./compiler.js";
+import { compileProject } from "./linker.js";
 import { ERROR_CODES, JimpError, formatError, normalizeError } from "./errors.js";
 import { decodeBytecode, formatInspection } from "./inspector.js";
 import { SANDBOX_LIMITS } from "./generated/sandbox.js";
 
 function usage() {
-  return "Usage: jimp compile <input.jimp> [-o <output.jbc>] [--error-format=json] | jimp inspect <input.jbc> [--json] [--error-format=json]";
+  return "Usage: jimp compile <input.jimp> [-o <output.jbc>] [--project-root=<path>] [--stdlib-major=<number>] [--target-profile=<profile>] [--error-format=json] | jimp inspect <input.jbc> [--json] [--error-format=json]";
 }
 
 function usageError() {
@@ -49,15 +49,38 @@ async function main(args) {
   }
 
   if (command !== "compile") throw usageError();
-  if (args.length !== 2 && (args.length !== 4 || args[2] !== "-o")) throw usageError();
+  const compileArguments = args.slice(2);
+  let outputValue;
+  let projectRoot;
+  let standardLibraryMajor;
+  let targetProfile;
+  for (let index = 0; index < compileArguments.length; index += 1) {
+    const argument = compileArguments[index];
+    if (argument === "-o" && outputValue === undefined && compileArguments[index + 1]) {
+      outputValue = compileArguments[index + 1];
+      index += 1;
+    } else if (argument.startsWith("--project-root=") && projectRoot === undefined) {
+      projectRoot = resolve(argument.slice("--project-root=".length));
+    } else if (argument.startsWith("--stdlib-major=") && standardLibraryMajor === undefined) {
+      standardLibraryMajor = Number(argument.slice("--stdlib-major=".length));
+      if (!Number.isInteger(standardLibraryMajor) || standardLibraryMajor <= 0) throw usageError();
+    } else if (argument.startsWith("--target-profile=") && targetProfile === undefined) {
+      targetProfile = argument.slice("--target-profile=".length);
+      if (targetProfile.length === 0) throw usageError();
+    } else {
+      throw usageError();
+    }
+  }
   const inputPath = resolve(input);
-  const outputOption = args.indexOf("-o");
-  const outputPath = outputOption >= 0
-    ? resolve(args[outputOption + 1])
+  const outputPath = outputValue !== undefined
+    ? resolve(outputValue)
     : resolve(`${basename(inputPath, extname(inputPath))}.jbc`);
 
-  const source = await withError(ERROR_CODES.IO, () => readFile(inputPath, "utf8"));
-  const bytecode = await withError(ERROR_CODES.COMPILE, () => compile(source));
+  const bytecode = await withError(ERROR_CODES.COMPILE, () => compileProject(inputPath, {
+    ...(projectRoot === undefined ? {} : { projectRoot }),
+    ...(standardLibraryMajor === undefined ? {} : { standardLibraryMajor }),
+    ...(targetProfile === undefined ? {} : { targetProfile }),
+  }));
   await withError(ERROR_CODES.IO, () => writeFile(outputPath, bytecode));
   process.stdout.write(`Compiled ${inputPath} to ${outputPath}\n`);
 }

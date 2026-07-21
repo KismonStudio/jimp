@@ -29,6 +29,12 @@ export function formatInspection(module) {
     `Format: ${module.header.format}`,
     `Entry function: ${module.header.entryFunction}`,
     `Sections: ${module.header.sectionCount}`,
+    ...(module.build === null ? ["Build metadata: none"] : [
+      `Build target: ${module.build.targetProfile}`,
+      `Standard library: v${module.build.standardLibraryMajor}`,
+      `Entry module: ${module.build.entryModuleId}`,
+      `Guaranteed capabilities: ${module.build.guaranteedCapabilities.join(", ") || "none"}`,
+    ]),
     `Constants (${module.constants.length}):`,
   ];
 
@@ -49,7 +55,9 @@ export function formatInspection(module) {
       const operands = Object.entries(instruction.operands)
         .map(([name, value]) => `${name}=${value}`)
         .join(" ");
-      const source = instruction.sourceLine === null ? "" : ` @source:${instruction.sourceLine}`;
+      const source = instruction.sourceLine === null
+        ? ""
+        : ` @source:${instruction.sourceModuleId === null ? "" : `${instruction.sourceModuleId}:`}${instruction.sourceLine}`;
       lines.push(`    [${index}] @code+0x${offset} ${instruction.name}${operands ? ` ${operands}` : ""}${source}`);
     }
   });

@@ -4,7 +4,7 @@
 
 ## Status
 
-Este documento especifica o contrato-alvo do P4.1 para módulos-fonte, imports nomeados de funções, exports nomeados de funções, resolução do grafo e vinculação estática. O contrato está aprovado para implementação, mas ainda não é aceito pelo compilador descrito em [LANGUAGE.md](LANGUAGE.md).
+Este documento especifica o contrato implementado do P4.1 para módulos-fonte, imports nomeados de funções, exports nomeados de funções, resolução do grafo e vinculação estática. O P5.1 ao P5.3 implementam o caminho completo de módulos do projeto: a CLI carrega com segurança um grafo acíclico de fontes, valida contratos exatos de funções, vincula identidades qualificadas por módulo deterministicamente e gera um único arquivo `.jbc` 2.6 autocontido com metadados de debug cientes do módulo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -249,9 +249,15 @@ entry-statement     = statement ;
 
 Uma lista vazia de imports é inválida. `entry-statement` é permitido somente no módulo de entrada. O prefixo `export` e o cabeçalho da função devem ocupar a mesma linha lógica.
 
+## Implementação atual
+
+O frontend representa imports separadamente das instruções executáveis e marca a visibilidade diretamente nas declarações de funções. O resolvedor do projeto fornece para cada item importado seu especificador, nomes importado e local, ID portátil do módulo de dependência, tipos exatos dos parâmetros e tipo de retorno. A análise rejeita descritores não resolvidos ou excedentes, contratos inválidos, bindings locais duplicados, conflitos com funções, variáveis, parâmetros ou palavras reservadas e instruções executáveis em um módulo que não seja o de entrada.
+
+Uma chamada importada analisada mantém sua identidade de função qualificada por módulo até o vinculador atribuir índices globais com dependências primeiro. A CLI usa a semântica de `compileProject(entryPath)` e aceita grafos completos de projetos. A API de baixo nível `compile(source)` permanece intencionalmente restrita a um único fonte e rejeita imports porque não possui raiz de projeto nem autoridade sobre o sistema de arquivos.
+
 ## Critérios de aceitação da implementação
 
-A implementação do P4.1 estará concluída quando:
+A implementação do P4.1 está concluída até o P5.3:
 
 - o parser e o analisador implementarem essa sintaxe e esse modelo de visibilidade;
 - o resolvedor aplicar identidade canônica e contenção na raiz do projeto;

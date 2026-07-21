@@ -10,7 +10,7 @@ use crate::generated::{
         MAX_VERIFICATION_TYPE_CELLS,
     },
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 const MAGIC: &[u8; 4] = b"JIMP";
 const HEADER_SIZE: usize = 20;
@@ -21,8 +21,11 @@ const HOST_IMPORTS: u16 = 2;
 const FUNCTIONS: u16 = 3;
 const CODE: u16 = 4;
 const DEBUG: u16 = 5;
-const DEBUG_VERSION: u16 = 1;
+const BUILD: u16 = 6;
+const DEBUG_VERSION: u16 = 2;
+const BUILD_VERSION: u16 = 1;
 const NO_NAME: u32 = u32::MAX;
+const NO_SOURCE: u32 = u32::MAX;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Value {
@@ -76,12 +79,29 @@ pub(crate) struct PortableModule {
     pub(crate) imports: Vec<HostImport>,
     pub(crate) functions: Vec<Function>,
     pub(crate) code: Vec<u8>,
+    pub(crate) debug_sources: Vec<String>,
     pub(crate) debug: Vec<DebugMapping>,
+    pub(crate) build: Option<BuildMetadata>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct BuildMetadata {
+    pub(crate) target_profile: String,
+    pub(crate) standard_library_major: u16,
+    pub(crate) entry_module_id: String,
+    pub(crate) guaranteed_capabilities: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct DebugMapping {
     pub(crate) code_offset: u32,
+    pub(crate) source_index: Option<usize>,
+    pub(crate) source_line: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct SourceLocation {
+    pub(crate) source_index: Option<usize>,
     pub(crate) source_line: u32,
 }
 
@@ -149,7 +169,9 @@ pub(crate) struct VerifiedPortableModule {
     pub(crate) constants: Vec<Value>,
     pub(crate) imports: Vec<HostImport>,
     pub(crate) functions: Vec<VerifiedFunction>,
-    pub(crate) source_lines: Vec<Vec<Option<u32>>>,
+    pub(crate) debug_sources: Vec<String>,
+    pub(crate) source_locations: Vec<Vec<Option<SourceLocation>>>,
+    pub(crate) build: Option<BuildMetadata>,
 }
 
 struct Cursor<'a> {
@@ -484,9 +506,9 @@ fn decode_functions(
 fn decode_debug(
     section: Option<Section<'_>>,
     code_length: usize,
-) -> Result<Vec<DebugMapping>, String> {
+) -> Result<(Vec<String>, Vec<DebugMapping>), String> {
     let Some(section) = section else {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     };
     if section.flags != SECTION_OPTIONAL {
         return Err("Debug section must be optional.".into());
@@ -498,6 +520,13 @@ fn decode_debug(
     if cursor.read_u16("debug flags")? != 0 {
         return Err("Debug flags must be zero.".into());
     }
+    let source_count = usize::try_from(cursor.read_u32("debug source count")?)
+        .map_err(|_| "Debug source count is unsupported.".to_owned())?;
+    if source_count > MAX_TOTAL_INSTRUCTIONS {
+        return Err(format!(
+            "Debug source count exceeds the sandbox instruction limit of {MAX_TOTAL_INSTRUCTIONS}."
+        ));
+    }
     let count = usize::try_from(cursor.read_u32("debug mapping count")?)
         .map_err(|_| "Debug mapping count is unsupported.".to_owned())?;
     if count > MAX_TOTAL_INSTRUCTIONS {
@@ -505,10 +534,30 @@ fn decode_debug(
             "Debug mapping count exceeds the sandbox instruction limit of {MAX_TOTAL_INSTRUCTIONS}."
         ));
     }
-    let mut mappings = Vec::with_capacity(count.min(section.payload.len() / 8));
+    let mut sources = Vec::with_capacity(source_count.min(section.payload.len() / 4));
+    let mut source_set = HashSet::with_capacity(source_count.min(section.payload.len() / 4));
+    for index in 0..source_count {
+        let length = usize::try_from(cursor.read_u32(&format!("debug source {index} length"))?)
+            .map_err(|_| format!("Debug source {index} length is unsupported."))?;
+        if length == 0 || length > MAX_SYMBOL_BYTES {
+            return Err(format!(
+                "Debug source {index} must contain between 1 and {MAX_SYMBOL_BYTES} UTF-8 bytes."
+            ));
+        }
+        let bytes = cursor.read_exact(length, &format!("debug source {index}"))?;
+        let source = std::str::from_utf8(bytes)
+            .map_err(|_| format!("Debug source {index} contains invalid UTF-8."))?
+            .to_owned();
+        if !source_set.insert(source.clone()) {
+            return Err(format!("Debug source {index} is duplicated."));
+        }
+        sources.push(source);
+    }
+    let mut mappings = Vec::with_capacity(count.min(section.payload.len() / 12));
     let mut previous_offset = None;
     for index in 0..count {
         let code_offset = cursor.read_u32(&format!("debug mapping {index} code offset"))?;
+        let encoded_source = cursor.read_u32(&format!("debug mapping {index} source index"))?;
         let source_line = cursor.read_u32(&format!("debug mapping {index} source line"))?;
         if previous_offset.is_some_and(|previous| code_offset <= previous) {
             return Err("Debug mapping code offsets must be strictly increasing.".into());
@@ -523,14 +572,91 @@ fn decode_debug(
                 "Debug mapping {index} source line must be one-based."
             ));
         }
+        let source_index = if encoded_source == NO_SOURCE {
+            None
+        } else {
+            let source_index = usize::try_from(encoded_source)
+                .map_err(|_| format!("Debug mapping {index} source index is unsupported."))?;
+            if source_index >= sources.len() {
+                return Err(format!(
+                    "Debug mapping {index} source index is out of range."
+                ));
+            }
+            Some(source_index)
+        };
         mappings.push(DebugMapping {
             code_offset,
+            source_index,
             source_line,
         });
         previous_offset = Some(code_offset);
     }
     cursor.finish("debug section")?;
-    Ok(mappings)
+    Ok((sources, mappings))
+}
+
+fn decode_build(section: Option<Section<'_>>) -> Result<Option<BuildMetadata>, String> {
+    let Some(section) = section else {
+        return Ok(None);
+    };
+    if section.flags != SECTION_OPTIONAL {
+        return Err("Build section must be optional.".into());
+    }
+    let mut cursor = Cursor::new(section.payload, section.offset);
+    if cursor.read_u16("build version")? != BUILD_VERSION {
+        return Err("Unsupported build metadata version.".into());
+    }
+    if cursor.read_u16("build flags")? != 0 {
+        return Err("Build flags must be zero.".into());
+    }
+    let standard_library_major = cursor.read_u16("build standard-library major")?;
+    if standard_library_major == 0 {
+        return Err("Build standard-library major must be positive.".into());
+    }
+    if cursor.read_u16("build reserved")? != 0 {
+        return Err("Build reserved field must be zero.".into());
+    }
+    fn read_string(cursor: &mut Cursor<'_>, context: &str) -> Result<String, String> {
+        let length = usize::try_from(cursor.read_u32(&format!("{context} length"))?)
+            .map_err(|_| format!("{context} length is unsupported."))?;
+        if length == 0 || length > MAX_SYMBOL_BYTES {
+            return Err(format!(
+                "{context} must contain between 1 and {MAX_SYMBOL_BYTES} UTF-8 bytes."
+            ));
+        }
+        std::str::from_utf8(cursor.read_exact(length, context)?)
+            .map(str::to_owned)
+            .map_err(|_| format!("{context} contains invalid UTF-8."))
+    }
+    let target_profile = read_string(&mut cursor, "build target profile")?;
+    let entry_module_id = read_string(&mut cursor, "build entry module ID")?;
+    let count = usize::try_from(cursor.read_u32("build capability count")?)
+        .map_err(|_| "Build capability count is unsupported.".to_owned())?;
+    if count > MAX_HOST_IMPORTS {
+        return Err(format!(
+            "Build capability count exceeds the sandbox limit of {MAX_HOST_IMPORTS}."
+        ));
+    }
+    let mut guaranteed_capabilities = Vec::with_capacity(count);
+    for index in 0..count {
+        guaranteed_capabilities.push(read_string(
+            &mut cursor,
+            &format!("build capability {index}"),
+        )?);
+    }
+    if guaranteed_capabilities
+        .windows(2)
+        .any(|pair| pair[0] >= pair[1])
+    {
+        return Err("Build guaranteed capabilities must be sorted and unique.".into());
+    }
+    cursor.finish("build section")?;
+    Ok(Some(BuildMetadata {
+        target_profile,
+        standard_library_major,
+        entry_module_id,
+        guaranteed_capabilities,
+    }))
 }
 
 fn decode_instruction_operands(
@@ -796,9 +922,9 @@ fn verify_function(
     function: &Function,
     function_index: usize,
     total_instruction_count: &mut usize,
-    debug: &HashMap<u32, u32>,
+    debug: &HashMap<u32, SourceLocation>,
     matched_debug_mappings: &mut usize,
-) -> Result<(VerifiedFunction, Vec<Option<u32>>), String> {
+) -> Result<(VerifiedFunction, Vec<Option<SourceLocation>>), String> {
     let register_count = usize::from(function.register_count);
     if function.parameter_types.len() > register_count {
         return Err(format!(
@@ -1107,16 +1233,16 @@ fn verify_function(
             .ok_or_else(|| format!("{name} target must reference an instruction boundary."))?;
     }
     verify_instruction_flow(module, function, function_index, &instructions)?;
-    let source_lines = instruction_offsets
+    let source_locations = instruction_offsets
         .iter()
         .map(|local_offset| {
             let global_offset = u32::try_from(code_start + local_offset)
                 .expect("validated code offsets fit in u32");
-            let source_line = debug.get(&global_offset).copied();
-            if source_line.is_some() {
+            let source_location = debug.get(&global_offset).copied();
+            if source_location.is_some() {
                 *matched_debug_mappings += 1;
             }
-            source_line
+            source_location
         })
         .collect();
     Ok((
@@ -1126,7 +1252,7 @@ fn verify_function(
             return_type: function.return_type,
             instructions,
         },
-        source_lines,
+        source_locations,
     ))
 }
 
@@ -1137,11 +1263,19 @@ pub(crate) fn verify_portable_module(
     let debug: HashMap<_, _> = module
         .debug
         .iter()
-        .map(|mapping| (mapping.code_offset, mapping.source_line))
+        .map(|mapping| {
+            (
+                mapping.code_offset,
+                SourceLocation {
+                    source_index: mapping.source_index,
+                    source_line: mapping.source_line,
+                },
+            )
+        })
         .collect();
     let mut matched_debug_mappings = 0_usize;
     let mut functions = Vec::with_capacity(module.functions.len());
-    let mut source_lines = Vec::with_capacity(module.functions.len());
+    let mut source_locations = Vec::with_capacity(module.functions.len());
     for (index, function) in module.functions.iter().enumerate() {
         let (verified, lines) = verify_function(
             &module,
@@ -1152,7 +1286,7 @@ pub(crate) fn verify_portable_module(
             &mut matched_debug_mappings,
         )?;
         functions.push(verified);
-        source_lines.push(lines);
+        source_locations.push(lines);
     }
     if matched_debug_mappings != module.debug.len() {
         return Err("Debug mappings must reference instruction boundaries.".into());
@@ -1164,12 +1298,17 @@ pub(crate) fn verify_portable_module(
         constants: module.constants,
         imports: module.imports,
         functions,
-        source_lines,
+        debug_sources: module.debug_sources,
+        source_locations,
+        build: module.build,
     })
 }
 
 fn is_known_section(kind: u16) -> bool {
-    matches!(kind, CONSTANTS | HOST_IMPORTS | FUNCTIONS | CODE | DEBUG)
+    matches!(
+        kind,
+        CONSTANTS | HOST_IMPORTS | FUNCTIONS | CODE | DEBUG | BUILD
+    )
 }
 
 fn required_section<'a>(section: Option<Section<'a>>, kind: u16) -> Result<Section<'a>, String> {
@@ -1225,6 +1364,7 @@ pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, Str
     let mut functions = None;
     let mut code = None;
     let mut debug = None;
+    let mut build = None;
     let mut ranges = Vec::with_capacity(section_count);
 
     for index in 0..section_count {
@@ -1261,6 +1401,7 @@ pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, Str
                 FUNCTIONS => &mut functions,
                 CODE => &mut code,
                 DEBUG => &mut debug,
+                BUILD => &mut build,
                 _ => unreachable!(),
             };
             if slot.replace(section).is_some() {
@@ -1300,7 +1441,8 @@ pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, Str
         &constants,
         code.len(),
     )?;
-    let debug = decode_debug(debug, code.len())?;
+    let (debug_sources, debug) = decode_debug(debug, code.len())?;
+    let build = decode_build(build)?;
     let entry_index = usize::try_from(entry_function)
         .map_err(|_| "Entry function index is unsupported.".to_owned())?;
     let entry = functions
@@ -1319,6 +1461,8 @@ pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, Str
         imports,
         functions,
         code,
+        debug_sources,
         debug,
+        build,
     })
 }

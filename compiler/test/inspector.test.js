@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { compile } from "../src/compiler.js";
 import { decodeBytecode, formatInspection } from "../src/inspector.js";
+import { encodeInstruction, encodePortableModule } from "../src/portable/module.js";
 
 function sectionOffset(bytecode, expectedKind) {
   const sectionCount = bytecode.readUInt16LE(16);
@@ -18,7 +19,7 @@ test("decodes portable headers, imports, and instructions", () => {
   const module = decodeBytecode(compile('print "Hello!";'));
 
   assert.equal(module.header.magic, "JIMP");
-  assert.equal(module.header.format, "2.5");
+  assert.equal(module.header.format, "2.6");
   assert.equal(module.header.sectionCount, 5);
   assert.equal(module.imports[0].symbol, "std.console.write");
   assert.deepEqual(module.functions[0].instructions[0], {
@@ -29,17 +30,43 @@ test("decodes portable headers, imports, and instructions", () => {
     name: "LOAD_CONST",
     operands: { destination: 0, constant: 2 },
     sourceLine: 1,
+    sourceModuleId: null,
   });
 });
 
 test("formats a readable portable disassembly", () => {
   const output = formatInspection(decodeBytecode(compile('print "Hello!";')));
-  assert.match(output, /Format: 2\.5/);
+  assert.match(output, /Format: 2\.6/);
   assert.match(output, /std\.console\.write\(STRING\) -> VOID/);
   assert.match(output, /\[0000\] @code\+0x00000000 LOAD_CONST destination=0 constant=2/);
   assert.match(output, /HOST_CALL import=0 argument_start=0 argument_count=1 result=65535/);
   assert.match(output, /@source:1/);
   assert.match(output, /HALT/);
+});
+
+test("displays reproducible build metadata", () => {
+  const bytecode = encodePortableModule({
+    constants: [],
+    imports: [],
+    functions: [{
+      name: null,
+      code: encodeInstruction("HALT"),
+      registerCount: 0,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+    build: {
+      targetProfile: "portable",
+      standardLibraryMajor: 1,
+      entryModuleId: "main.jimp",
+      guaranteedCapabilities: [],
+    },
+  });
+  const output = formatInspection(decodeBytecode(bytecode));
+  assert.match(output, /Build target: portable/);
+  assert.match(output, /Standard library: v1/);
+  assert.match(output, /Entry module: main\.jimp/);
+  assert.match(output, /Guaranteed capabilities: none/);
 });
 
 test("maps instructions in different functions back to source lines", () => {

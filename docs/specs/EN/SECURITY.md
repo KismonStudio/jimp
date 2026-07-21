@@ -4,7 +4,7 @@
 
 ## Status
 
-This document specifies the P4.4 security contract for the official Rust runtime, portable `.jbc` format `2.5`, and `jimp-reference-sandbox` profile v1. It consolidates the guarantees defined by [VM.md](VM.md), the generated limits in [SANDBOX.md](SANDBOX.md), the capability model used by [STDLIB.md](STDLIB.md), and the failure classes in [ERRORS.md](ERRORS.md).
+This document specifies the P4.4 security contract for the official Rust runtime, portable `.jbc` format `2.6`, and `jimp-reference-sandbox` profile v1. It consolidates the guarantees defined by [VM.md](VM.md), the generated limits in [SANDBOX.md](SANDBOX.md), the capability model used by [STDLIB.md](STDLIB.md), and the failure classes in [ERRORS.md](ERRORS.md).
 
 The terms **must**, **must not**, **required**, and **invalid** are normative. This is a VM-level sandbox contract, not a claim of operating-system or process isolation.
 

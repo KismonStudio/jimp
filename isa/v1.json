@@ -3,7 +3,7 @@
   "name": "jimp-portable-vm",
   "formatVersion": {
     "major": 2,
-    "minor": 5
+    "minor": 6
   },
   "endianness": "little",
   "opcodeWidth": 1,

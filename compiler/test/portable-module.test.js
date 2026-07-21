@@ -52,7 +52,7 @@ test("round-trips portable constants and typed host imports", () => {
 
   assert.deepEqual(module.header, {
     major: 2,
-    minor: 5,
+    minor: 6,
     entryFunction: 0,
     sectionCount: 4,
   });
@@ -74,6 +74,48 @@ test("round-trips portable constants and typed host imports", () => {
   }]);
   assert.equal(module.functions[0].registerCount, 2);
   assert(module.code.length > 0);
+});
+
+test("round-trips validated optional build metadata", () => {
+  const bytecode = encodePortableModule({
+    constants: [],
+    imports: [],
+    functions: [{
+      name: null,
+      code: encodeInstruction("HALT"),
+      registerCount: 0,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+    build: {
+      targetProfile: "reference-native-i64",
+      standardLibraryMajor: 1,
+      entryModuleId: "src/main.jimp",
+      guaranteedCapabilities: [
+        "std.math.i64.absolute",
+        "std.math.i64.sign",
+      ],
+    },
+  });
+  const module = decodePortableModule(bytecode);
+  assert.equal(module.header.sectionCount, 5);
+  assert.deepEqual(module.build, {
+    targetProfile: "reference-native-i64",
+    standardLibraryMajor: 1,
+    entryModuleId: "src/main.jimp",
+    guaranteedCapabilities: [
+      "std.math.i64.absolute",
+      "std.math.i64.sign",
+    ],
+  });
+
+  const buildDirectory = 20 + 4 * 12;
+  const buildOffset = bytecode.readUInt32LE(buildDirectory + 4);
+  bytecode.writeUInt16LE(0, buildOffset + 4);
+  assert.throws(
+    () => decodePortableModule(bytecode),
+    /standard-library major must be positive/,
+  );
 });
 
 test("round-trips optional source-line debug mappings", () => {
@@ -98,8 +140,8 @@ test("round-trips optional source-line debug mappings", () => {
 
   assert.equal(module.header.sectionCount, 5);
   assert.deepEqual(module.debug, [
-    { offset: 0, line: 3 },
-    { offset: load.length, line: 4 },
+    { offset: 0, moduleId: null, line: 3 },
+    { offset: load.length, moduleId: null, line: 4 },
   ]);
   assert.deepEqual(
     module.functions[0].instructions.map(({ sourceLine }) => sourceLine),
@@ -142,13 +184,18 @@ test("rejects invalid debug mappings without affecting modules that omit them", 
 
   const invalidLine = createDebugModule();
   const lineSection = debugSection(invalidLine);
-  invalidLine.writeUInt32LE(0, lineSection.payloadOffset + 12);
+  invalidLine.writeUInt32LE(0, lineSection.payloadOffset + 20);
   assert.throws(() => decodePortableModule(invalidLine), /source line must be one-based/);
 
   const invalidBoundary = createDebugModule();
   const boundarySection = debugSection(invalidBoundary);
-  invalidBoundary.writeUInt32LE(1, boundarySection.payloadOffset + 8);
+  invalidBoundary.writeUInt32LE(1, boundarySection.payloadOffset + 12);
   assert.throws(() => decodePortableModule(invalidBoundary), /instruction boundary/);
+
+  const invalidSource = createDebugModule();
+  const sourceSection = debugSection(invalidSource);
+  invalidSource.writeUInt32LE(0, sourceSection.payloadOffset + 16);
+  assert.throws(() => decodePortableModule(invalidSource), /source index is out of range/);
 
   assert.throws(() => encodePortableModule({
     constants: [],

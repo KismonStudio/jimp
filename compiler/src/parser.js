@@ -1,3 +1,5 @@
+import { withModuleContext } from "./module-context.js";
+
 const IDENTIFIER_SOURCE = String.raw`[A-Za-z_][A-Za-z0-9_]*`;
 const VALUE_TYPE_SOURCE = String.raw`(?:NULL|BOOL|I64|F64|STRING|VOID)`;
 const VARIABLE_DECLARATION = new RegExp(
@@ -323,13 +325,48 @@ function parseParameters(source, line) {
   });
 }
 
+function parseImportDeclaration(source, line) {
+  const match = source.match(/^import\s+\{([^}]*)\}\s+from\s+(.+)$/);
+  if (!match) throw new Error(`Invalid import declaration at line ${line}.`);
+  const itemSource = match[1].trim();
+  if (itemSource === "") throw new Error(`Import list cannot be empty at line ${line}.`);
+  const items = itemSource.split(",").map((item) => {
+    const itemMatch = item.trim().match(
+      new RegExp(String.raw`^(${IDENTIFIER_SOURCE})(?:\s+as\s+(${IDENTIFIER_SOURCE}))?$`),
+    );
+    if (!itemMatch) throw new Error(`Invalid import item at line ${line}.`);
+    return {
+      imported: itemMatch[1],
+      local: itemMatch[2] ?? itemMatch[1],
+      line,
+    };
+  });
+  const specifierSource = match[2].trim();
+  if (!specifierSource.startsWith('"')) {
+    throw new Error(`Import specifier must be a string at line ${line}.`);
+  }
+  const specifier = readString(specifierSource, 0, line);
+  const remainder = specifierSource.slice(specifier.nextOffset).trim();
+  if (remainder !== "" && remainder !== ";") {
+    throw new Error(`Invalid import declaration at line ${line}.`);
+  }
+  return {
+    kind: "importDeclaration",
+    line,
+    specifier: specifier.value,
+    items,
+  };
+}
+
 class ProgramParser {
-  constructor(source) {
+  constructor(source, { moduleId = null, isEntry = true } = {}) {
     this.lines = source.replaceAll("\r\n", "\n").split("\n").map((text, index) => ({
       line: index + 1,
       text: text.trim(),
     }));
     this.offset = 0;
+    this.moduleId = moduleId;
+    this.isEntry = isEntry;
   }
 
   skipTrivia() {
@@ -363,13 +400,23 @@ class ProgramParser {
         throw new Error(`Unexpected else at line ${current.line}.`);
       }
 
-      const functionMatch = current.text.match(FUNCTION_HEADER);
+      if (/^import(?:\s|$)/.test(current.text)) {
+        const scope = openingLine === null ? "before every declaration or statement" : "at program scope";
+        throw new Error(`Imports must appear ${scope} at line ${current.line}.`);
+      }
+
+      const exportMatch = current.text.match(/^export\s+(.+)$/);
+      const functionSource = exportMatch ? exportMatch[1] : current.text;
+      const functionMatch = functionSource.match(FUNCTION_HEADER);
       if (functionMatch) {
         if (openingLine !== null) {
           throw new Error(`Functions must be declared at program scope at line ${current.line}.`);
         }
-        statements.push(this.parseFunction(current, functionMatch));
+        statements.push(this.parseFunction(current, functionMatch, exportMatch !== null));
         continue;
+      }
+      if (/^export(?:\s|$)/.test(current.text)) {
+        throw new Error(`Only a top-level function declaration may be exported at line ${current.line}.`);
       }
       if (/^function(?:\s|$)/.test(current.text)) {
         throw new Error(`Invalid function declaration at line ${current.line}.`);
@@ -398,7 +445,7 @@ class ProgramParser {
     }
   }
 
-  parseFunction(opening, match) {
+  parseFunction(opening, match, exported) {
     this.offset += 1;
     const body = this.parseStatementList(opening.line);
     if (body.terminator === "else") {
@@ -408,6 +455,7 @@ class ProgramParser {
       kind: "functionDeclaration",
       line: opening.line,
       name: match[1],
+      exported,
       parameters: parseParameters(match[2], opening.line),
       returnType: match[3],
       body: { kind: "block", line: opening.line, statements: body.statements },
@@ -459,11 +507,30 @@ class ProgramParser {
   }
 
   parse() {
+    const imports = [];
+    while (true) {
+      this.skipTrivia();
+      const current = this.lines[this.offset];
+      if (!current || !/^import(?:\s|$)/.test(current.text)) break;
+      imports.push(parseImportDeclaration(current.text, current.line));
+      this.offset += 1;
+    }
     const result = this.parseStatementList();
-    return { kind: "program", statements: result.statements };
+    return {
+      kind: "program",
+      moduleId: this.moduleId,
+      isEntry: this.isEntry,
+      imports,
+      statements: result.statements,
+    };
   }
 }
 
-export function parseProgram(source) {
-  return new ProgramParser(source).parse();
+export function parseProgram(source, options) {
+  const parser = new ProgramParser(source, options);
+  try {
+    return parser.parse();
+  } catch (error) {
+    throw withModuleContext(error, parser.moduleId);
+  }
 }

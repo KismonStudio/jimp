@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import { compile } from "../compiler/src/compiler.js";
+import { compileProject } from "../compiler/src/linker.js";
 import { NO_REGISTER, OPCODES } from "../compiler/src/generated/isa.js";
 import { SANDBOX_LIMITS } from "../compiler/src/generated/sandbox.js";
 import {
@@ -212,7 +213,11 @@ test("reports compiler failures through the standard JSON error contract", () =>
     { cwd: repositoryRoot, encoding: "utf8", windowsHide: true },
   );
   const error = assertStandardError(result, "JIMP-1001", "compile");
-  assert.deepEqual(error.location, { kind: "source", line: 1 });
+  assert.deepEqual(error.location, {
+    kind: "source",
+    line: 1,
+    moduleId: "invalid-" + programCounter + ".jimp",
+  });
 
   const usageResult = spawnSync(
     process.execPath,
@@ -353,6 +358,57 @@ test("executes typed, forward, recursive, and VOID function calls", () => {
   assert.equal(result.stderr, "");
 });
 
+test("executes statically linked source modules with module-qualified failures", async () => {
+  const projectDirectory = join(temporaryDirectory, "linked-project");
+  const libraryDirectory = join(projectDirectory, "lib");
+  mkdirSync(libraryDirectory, { recursive: true });
+  const entryPath = join(projectDirectory, "main.jimp");
+  const libraryPath = join(libraryDirectory, "math.jimp");
+  writeFileSync(entryPath, [
+    'import { divide, double } from "./lib/math.jimp";',
+    "if double(21) == 42 {",
+    '  print "Modules executed";',
+    "}",
+  ].join("\n"));
+  writeFileSync(libraryPath, [
+    "export function double(value: I64): I64 {",
+    "  return value + value;",
+    "}",
+    "export function divide(left: I64, right: I64): I64 {",
+    "  return left / right;",
+    "}",
+  ].join("\n"));
+
+  const bytecode = await compileProject(entryPath);
+  const result = runBytecode(bytecode);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Modules executed\n");
+
+  const cliOutputPath = join(projectDirectory, "linked.jbc");
+  const compileResult = spawnSync(
+    process.execPath,
+    [compilerCli, "compile", entryPath, "-o", cliOutputPath],
+    { cwd: repositoryRoot, encoding: "utf8", windowsHide: true },
+  );
+  assert.equal(compileResult.status, 0, compileResult.stderr);
+  const cliResult = runBytecode(readFileSync(cliOutputPath));
+  assert.equal(cliResult.status, 0, cliResult.stderr);
+  assert.equal(cliResult.stdout.replaceAll("\r\n", "\n"), "Modules executed\n");
+
+  writeFileSync(entryPath, [
+    'import { divide } from "./lib/math.jimp";',
+    "divide(1, 0);",
+  ].join("\n"));
+  const failingBytecode = await compileProject(entryPath);
+  const failingResult = runBytecode(failingBytecode, ["--error-format=json"]);
+  const error = assertStandardError(failingResult, "JIMP-4001", "execute");
+  assert.deepEqual(error.location, {
+    kind: "source",
+    line: 5,
+    moduleId: "lib/math.jimp",
+  });
+});
+
 test("executes while loops with break and continue", () => {
   const bytecode = compile(`
     var value = 0;
@@ -391,6 +447,65 @@ test("executes the canonical portable i64 standard-library fallbacks", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Portable fallbacks executed\n");
   assert.equal(result.stderr, "");
+});
+
+test("executes standard-library imports with portable and native target parity", async () => {
+  const projectDirectory = join(temporaryDirectory, "stdlib-target-project");
+  mkdirSync(projectDirectory, { recursive: true });
+  const entryPath = join(projectDirectory, "main.jimp");
+  writeFileSync(entryPath, [
+    'import { absolute, maximum, minimum, sign } from "std:math/i64";',
+    'import { writeLine } from "std:console";',
+    "if absolute(-7) == 7 && minimum(-2, 5) == -2 && maximum(-2, 5) == 5 && sign(-9) == -1 {",
+    '  writeLine("Standard library executed");',
+    "}",
+  ].join("\n"));
+
+  const portable = await compileProject(entryPath);
+  const native = await compileProject(entryPath, { targetProfile: "reference-native-i64" });
+  const portableResult = runBytecode(portable);
+  const nativeResult = runBytecode(native, ["--target-profile=reference-native-i64"]);
+  assert.equal(portableResult.status, 0, portableResult.stderr);
+  assert.equal(nativeResult.status, 0, nativeResult.stderr);
+  assert.equal(portableResult.stdout.replaceAll("\r\n", "\n"), "Standard library executed\n");
+  assert.equal(nativeResult.stdout.replaceAll("\r\n", "\n"), portableResult.stdout.replaceAll("\r\n", "\n"));
+
+  const cliOutputPath = join(projectDirectory, "native.jbc");
+  const compileResult = spawnSync(process.execPath, [
+    compilerCli,
+    "compile",
+    entryPath,
+    "-o",
+    cliOutputPath,
+    `--project-root=${projectDirectory}`,
+    "--stdlib-major=1",
+    "--target-profile=reference-native-i64",
+  ], { cwd: repositoryRoot, encoding: "utf8", windowsHide: true });
+  assert.equal(compileResult.status, 0, compileResult.stderr);
+  const cliResult = runBytecode(readFileSync(cliOutputPath), ["--target-profile=reference-native-i64"]);
+  assert.equal(cliResult.status, 0, cliResult.stderr);
+  assert.equal(cliResult.stdout.replaceAll("\r\n", "\n"), portableResult.stdout.replaceAll("\r\n", "\n"));
+
+  const mismatched = runBytecode(native, ["--error-format=json"]);
+  assertStandardError(mismatched, "JIMP-3001", "resolve");
+});
+
+test("preserves native and portable checked-i64 error parity", async () => {
+  const projectDirectory = join(temporaryDirectory, "stdlib-overflow-project");
+  mkdirSync(projectDirectory, { recursive: true });
+  const entryPath = join(projectDirectory, "main.jimp");
+  writeFileSync(entryPath, [
+    'import { absolute } from "std:math/i64";',
+    "absolute(-9223372036854775808);",
+  ].join("\n"));
+  const portable = runBytecode(await compileProject(entryPath), ["--error-format=json"]);
+  const native = runBytecode(
+    await compileProject(entryPath, { targetProfile: "reference-native-i64" }),
+    ["--target-profile=reference-native-i64", "--error-format=json"],
+  );
+  const portableError = assertStandardError(portable, "JIMP-4001", "execute");
+  const nativeError = assertStandardError(native, "JIMP-4001", "execute");
+  assert.equal(nativeError.message, portableError.message);
 });
 
 test("preserves checked i64 overflow in the portable absolute fallback", () => {
@@ -500,15 +615,33 @@ test("rejects a truncated operand", () => {
 test("rejects malformed debug metadata before execution", () => {
   const zeroLine = compile("1;");
   const zeroLineDebug = findSection(zeroLine, 5);
-  zeroLine.writeUInt32LE(0, zeroLineDebug.offset + 12);
+  zeroLine.writeUInt32LE(0, zeroLineDebug.offset + 20);
   const decodeResult = runBytecode(zeroLine, ["--error-format=json"]);
   assertStandardError(decodeResult, "JIMP-2001", "decode");
 
   const unalignedOffset = compile("1;");
   const unalignedDebug = findSection(unalignedOffset, 5);
-  unalignedOffset.writeUInt32LE(1, unalignedDebug.offset + 8);
+  unalignedOffset.writeUInt32LE(1, unalignedDebug.offset + 12);
   const verifyResult = runBytecode(unalignedOffset, ["--error-format=json"]);
   assertStandardError(verifyResult, "JIMP-2002", "verify");
+
+  const invalidSource = compile("1;");
+  const invalidSourceDebug = findSection(invalidSource, 5);
+  invalidSource.writeUInt32LE(0, invalidSourceDebug.offset + 16);
+  const sourceResult = runBytecode(invalidSource, ["--error-format=json"]);
+  assertStandardError(sourceResult, "JIMP-2001", "decode");
+});
+
+test("rejects malformed build metadata before capability resolution", async () => {
+  const projectDirectory = join(temporaryDirectory, "malformed-build-project");
+  mkdirSync(projectDirectory, { recursive: true });
+  const entryPath = join(projectDirectory, "main.jimp");
+  writeFileSync(entryPath, "1;");
+  const bytecode = await compileProject(entryPath);
+  const build = findSection(bytecode, 6);
+  bytecode.writeUInt16LE(0, build.offset + 4);
+  const result = runBytecode(bytecode, ["--error-format=json"]);
+  assertStandardError(result, "JIMP-2001", "decode");
 });
 
 test("resolves portable host imports across JavaScript and Rust", () => {

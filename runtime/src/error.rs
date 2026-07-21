@@ -2,7 +2,10 @@ use crate::generated::errors::{ERROR_SCHEMA, ErrorDefinition};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ErrorLocation {
-    SourceLine(usize),
+    Source {
+        line: usize,
+        module_id: Option<String>,
+    },
     BytecodeOffset(usize),
 }
 
@@ -28,16 +31,27 @@ impl JimpError {
         self.definition.exit_code
     }
 
-    pub(crate) fn with_source_line(mut self, source_line: Option<u32>) -> Self {
+    pub(crate) fn with_source_location(
+        mut self,
+        source_line: Option<u32>,
+        module_id: Option<String>,
+    ) -> Self {
         if let Some(line) = source_line.and_then(|line| usize::try_from(line).ok()) {
-            self.location = Some(ErrorLocation::SourceLine(line));
+            self.location = Some(ErrorLocation::Source { line, module_id });
         }
         self
     }
 
     pub(crate) fn human(&self) -> String {
-        let location = match self.location {
-            Some(ErrorLocation::SourceLine(line)) => format!(" at source line {line}"),
+        let location = match &self.location {
+            Some(ErrorLocation::Source {
+                line,
+                module_id: Some(module_id),
+            }) => format!(" at source {module_id}:{line}"),
+            Some(ErrorLocation::Source {
+                line,
+                module_id: None,
+            }) => format!(" at source line {line}"),
             Some(ErrorLocation::BytecodeOffset(offset)) => {
                 format!(" at bytecode offset {offset}")
             }
@@ -53,8 +67,18 @@ impl JimpError {
     }
 
     pub(crate) fn json(&self) -> String {
-        let location = match self.location {
-            Some(ErrorLocation::SourceLine(line)) => {
+        let location = match &self.location {
+            Some(ErrorLocation::Source {
+                line,
+                module_id: Some(module_id),
+            }) => format!(
+                r#","location":{{"kind":"source","line":{line},"moduleId":"{}"}}"#,
+                json_escape(module_id)
+            ),
+            Some(ErrorLocation::Source {
+                line,
+                module_id: None,
+            }) => {
                 format!(r#","location":{{"kind":"source","line":{line}}}"#)
             }
             Some(ErrorLocation::BytecodeOffset(offset)) => {
@@ -75,7 +99,10 @@ impl JimpError {
 
 fn infer_location(message: &str, phase: &str) -> Option<ErrorLocation> {
     match phase {
-        "compile" => parse_number_after(message, "at line ").map(ErrorLocation::SourceLine),
+        "compile" => parse_number_after(message, "at line ").map(|line| ErrorLocation::Source {
+            line,
+            module_id: None,
+        }),
         "decode" | "verify" => {
             parse_number_after(message, "offset ").map(ErrorLocation::BytecodeOffset)
         }
@@ -129,7 +156,13 @@ mod tests {
         let source = JimpError::new(COMPILE, "Failure at line 7.");
         let bytecode = JimpError::new(DECODE, "Failure at code offset 12.");
 
-        assert_eq!(source.location, Some(ErrorLocation::SourceLine(7)));
+        assert_eq!(
+            source.location,
+            Some(ErrorLocation::Source {
+                line: 7,
+                module_id: None,
+            })
+        );
         assert_eq!(bytecode.location, Some(ErrorLocation::BytecodeOffset(12)));
     }
 

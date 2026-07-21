@@ -69,6 +69,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Canonical portable JIMP implementations for `std:math/i64`, validated for syntax, semantics, exact catalog signatures, and absence of host imports during documentation generation.
 - Optional `std.math.i64.*` Host ABI replacement contracts that preserve portable behavior without runtime capability probing or standard-library VM instructions.
 - English and Portuguese P4.4 sandbox-security specifications covering the untrusted-bytecode threat model, pre-effect validation order, capability confinement, host requirements, deployment guidance, and explicit non-guarantees.
+- P5.1 parsing for named function imports, local aliases, function exports, import placement, and entry-module restrictions.
+- Semantic import bindings backed by resolver-supplied exact signatures and module-qualified identities, plus generated export tables for later static linking.
+- Module-qualified compiler diagnostics and optional `moduleId` metadata in `jimp-error-v1` source locations.
+- Secure project-root resolver with strict relative `.jimp` specifiers, UTF-8 source snapshots, real-path containment, physical and case-alias detection, source-order graph traversal, mutation checks, and cycle rejection.
+- Deterministic static linker for module-qualified function identities, exact export contracts, topological function allocation, and cross-module lowering through generic `CALL`.
+- Portable `.jbc` 2.6 debug metadata carrying portable module IDs with source lines, independently validated and reported by the inspector and Rust runtime.
+- Compiler CLI support for compiling acyclic multi-file projects into one self-contained bytecode file.
+- Embedded, generator-validated standard-library sources resolved exclusively through the reserved `std:` namespace.
+- Standard-library tree shaking and deduplicated lowering of portable exports through generic `CALL` and catalog-declared host bridges through typed `HOST_CALL`.
+- Canonical `std:console.writeLine` implementation and end-to-end imports for `std:console` and `std:math/i64`.
+- Machine-readable target profiles with generated JavaScript, Rust, English, and Portuguese artifacts.
+- Explicit compiler options for project root, standard-library major, and target profile, plus explicit runtime target selection.
+- Optional `.jbc` 2.6 build metadata for the target profile, standard-library major, entry module, and sorted target guarantees.
+- Independent Rust validation that build metadata matches the selected runtime target and cannot grant host authority.
+- Native `std.math.i64.*` reference capabilities with portable/native semantic and checked-overflow parity coverage.
 
 ### Fixed
 
@@ -80,7 +95,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Runtime decoding and verification now complete before VM execution begins.
 - Console effects are isolated behind a host interface and are unavailable to the bytecode decoder.
 - Runtime code is separated into portable decoding, VM, and host modules.
-- The active compiler and runtime now use portable `.jbc` format `2.5`; legacy format `1` and portable formats `2.0` through `2.4` are no longer accepted.
+- The active compiler and runtime now use portable `.jbc` format `2.6`; legacy format `1` and portable formats `2.0` through `2.5` are no longer accepted.
 - Source-level `print` is lowered to `LOAD_CONST` plus the typed `std.console.write` host import instead of a hardcoded VM opcode.
 - Host effects are dispatched through resolved numeric capability handles and runtime-checked value arrays.
 - The bytecode inspector now disassembles the portable module structure and generic ISA instructions.

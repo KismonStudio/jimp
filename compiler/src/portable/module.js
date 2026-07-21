@@ -27,8 +27,10 @@ const MAGIC = Buffer.from("JIMP");
 const HEADER_SIZE = 20;
 const DIRECTORY_ENTRY_SIZE = 12;
 const NO_NAME = 0xffffffff;
-const DEBUG_VERSION = 1;
+const DEBUG_VERSION = 2;
+const BUILD_VERSION = 1;
 const SECTION_OPTIONAL = 1;
+const NO_SOURCE = 0xffffffff;
 
 export const SECTION_KINDS = Object.freeze({
   CONSTANTS: 1,
@@ -36,6 +38,7 @@ export const SECTION_KINDS = Object.freeze({
   FUNCTIONS: 3,
   CODE: 4,
   DEBUG: 5,
+  BUILD: 6,
 });
 
 const requiredSectionKinds = new Set([
@@ -224,10 +227,25 @@ function encodeFunctions(functions, constants) {
 function encodeDebug(functions) {
   if (!functions.some((func) => Object.hasOwn(func, "debug"))) return null;
   const entries = [];
+  const sources = [];
+  const sourceIndices = new Map();
   let functionCodeOffset = 0;
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex += 1) {
     const func = functions[functionIndex];
     invariant(Array.isArray(func.debug), `Function ${functionIndex} debug mappings must be an array.`);
+    let source = NO_SOURCE;
+    if (func.moduleId !== null && func.moduleId !== undefined) {
+      invariant(typeof func.moduleId === "string" && func.moduleId.length > 0,
+        `Function ${functionIndex} module ID must be a non-empty string.`);
+      const encodedSource = Buffer.from(func.moduleId, "utf8");
+      invariant(encodedSource.length <= MAX_SYMBOL_BYTES,
+        `Function ${functionIndex} module ID exceeds the sandbox symbol limit of ${MAX_SYMBOL_BYTES} UTF-8 bytes.`);
+      if (!sourceIndices.has(func.moduleId)) {
+        sourceIndices.set(func.moduleId, sources.length);
+        sources.push(encodedSource);
+      }
+      source = sourceIndices.get(func.moduleId);
+    }
     let previousOffset = -1;
     for (const [mappingIndex, mapping] of func.debug.entries()) {
       const context = `Function ${functionIndex} debug mapping ${mappingIndex}`;
@@ -236,7 +254,7 @@ function encodeDebug(functions) {
       invariant(mapping.offset > previousOffset, `${context} code offsets must be strictly increasing.`);
       assertUnsigned(mapping.line, 0xffffffff, `${context} source line`);
       invariant(mapping.line > 0, `${context} source line must be one-based.`);
-      entries.push({ offset: functionCodeOffset + mapping.offset, line: mapping.line });
+      entries.push({ offset: functionCodeOffset + mapping.offset, source, line: mapping.line });
       previousOffset = mapping.offset;
     }
     functionCodeOffset += func.code.length;
@@ -246,8 +264,50 @@ function encodeDebug(functions) {
   return Buffer.concat([
     encodeU16(DEBUG_VERSION),
     encodeU16(0),
+    encodeU32(sources.length),
     encodeU32(entries.length),
-    ...entries.flatMap(({ offset, line }) => [encodeU32(offset), encodeU32(line)]),
+    ...sources.flatMap((source) => [encodeU32(source.length), source]),
+    ...entries.flatMap(({ offset, source, line }) => [
+      encodeU32(offset),
+      encodeU32(source),
+      encodeU32(line),
+    ]),
+  ]);
+}
+
+function encodeBuild(build) {
+  if (build === undefined) return null;
+  invariant(build !== null && typeof build === "object", "Build metadata must be an object.");
+  assertUnsigned(build.standardLibraryMajor, 0xffff, "Build standard-library major");
+  invariant(build.standardLibraryMajor > 0, "Build standard-library major must be positive.");
+  const strings = [build.targetProfile, build.entryModuleId, ...(build.guaranteedCapabilities ?? [])];
+  for (const [index, value] of strings.entries()) {
+    invariant(typeof value === "string" && value.length > 0,
+      `Build string ${index} must be non-empty.`);
+    invariant(Buffer.byteLength(value, "utf8") <= MAX_SYMBOL_BYTES,
+      `Build string ${index} exceeds the sandbox symbol limit of ${MAX_SYMBOL_BYTES} UTF-8 bytes.`);
+  }
+  const capabilities = build.guaranteedCapabilities ?? [];
+  invariant(Array.isArray(capabilities), "Build guaranteed capabilities must be an array.");
+  invariant(capabilities.length <= MAX_HOST_IMPORTS,
+    `Build capability count exceeds the sandbox limit of ${MAX_HOST_IMPORTS}.`);
+  invariant(new Set(capabilities).size === capabilities.length,
+    "Build guaranteed capabilities must be unique.");
+  invariant(capabilities.join() === [...capabilities].sort().join(),
+    "Build guaranteed capabilities must be sorted.");
+  const encodeString = (value) => {
+    const bytes = Buffer.from(value, "utf8");
+    return Buffer.concat([encodeU32(bytes.length), bytes]);
+  };
+  return Buffer.concat([
+    encodeU16(BUILD_VERSION),
+    encodeU16(0),
+    encodeU16(build.standardLibraryMajor),
+    encodeU16(0),
+    encodeString(build.targetProfile),
+    encodeString(build.entryModuleId),
+    encodeU32(capabilities.length),
+    ...capabilities.map(encodeString),
   ]);
 }
 
@@ -274,7 +334,7 @@ export function encodeInstruction(name, operands = {}) {
   return Buffer.concat(chunks);
 }
 
-export function encodePortableModule({ constants, imports, functions, entryFunction = 0 }) {
+export function encodePortableModule({ constants, imports, functions, entryFunction = 0, build }) {
   invariant(Array.isArray(constants), "constants must be an array.");
   invariant(Array.isArray(imports), "imports must be an array.");
   invariant(Array.isArray(functions) && functions.length > 0, "functions must be a non-empty array.");
@@ -285,6 +345,7 @@ export function encodePortableModule({ constants, imports, functions, entryFunct
 
   const encodedFunctions = encodeFunctions(functions, constants);
   const encodedDebug = encodeDebug(functions);
+  const encodedBuild = encodeBuild(build);
   const sections = [
     { kind: SECTION_KINDS.CONSTANTS, payload: encodeConstants(constants) },
     { kind: SECTION_KINDS.HOST_IMPORTS, payload: encodeImports(imports, constants) },
@@ -294,6 +355,11 @@ export function encodePortableModule({ constants, imports, functions, entryFunct
       kind: SECTION_KINDS.DEBUG,
       flags: SECTION_OPTIONAL,
       payload: encodedDebug,
+    }]),
+    ...(encodedBuild === null ? [] : [{
+      kind: SECTION_KINDS.BUILD,
+      flags: SECTION_OPTIONAL,
+      payload: encodedBuild,
     }]),
   ];
   invariant(sections.length <= MAX_SECTION_COUNT,
@@ -493,25 +559,82 @@ function decodeDebug(section, functions) {
   invariant(cursor.u16("debug version") === DEBUG_VERSION,
     `Unsupported debug metadata version.`);
   invariant(cursor.u16("debug flags") === 0, "Debug flags must be zero.");
+  const sourceCount = cursor.u32("debug source count");
+  invariant(sourceCount <= MAX_TOTAL_INSTRUCTIONS,
+    `Debug source count exceeds the sandbox instruction limit of ${MAX_TOTAL_INSTRUCTIONS}.`);
   const count = cursor.u32("debug mapping count");
   invariant(count <= MAX_TOTAL_INSTRUCTIONS,
     `Debug mapping count exceeds the sandbox instruction limit of ${MAX_TOTAL_INSTRUCTIONS}.`);
+  const sources = [];
+  const sourceSet = new Set();
+  for (let index = 0; index < sourceCount; index += 1) {
+    const length = cursor.u32(`debug source ${index} length`);
+    invariant(length > 0 && length <= MAX_SYMBOL_BYTES,
+      `Debug source ${index} must contain between 1 and ${MAX_SYMBOL_BYTES} UTF-8 bytes.`);
+    const encoded = cursor.read(length, `debug source ${index}`);
+    let source;
+    try {
+      source = new TextDecoder("utf-8", { fatal: true }).decode(encoded);
+    } catch {
+      throw new Error(`Debug source ${index} contains invalid UTF-8.`);
+    }
+    invariant(!sourceSet.has(source), `Debug source ${index} is duplicated.`);
+    sourceSet.add(source);
+    sources.push(source);
+  }
   const instructionOffsets = new Set(functions.flatMap((func) =>
     func.instructions.map(({ offset }) => offset)));
   const mappings = [];
   let previousOffset = -1;
   for (let index = 0; index < count; index += 1) {
     const offset = cursor.u32(`debug mapping ${index} code offset`);
+    const source = cursor.u32(`debug mapping ${index} source index`);
     const line = cursor.u32(`debug mapping ${index} source line`);
     invariant(offset > previousOffset, "Debug mapping code offsets must be strictly increasing.");
     invariant(instructionOffsets.has(offset),
       `Debug mapping ${index} must reference an instruction boundary.`);
     invariant(line > 0, `Debug mapping ${index} source line must be one-based.`);
-    mappings.push({ offset, line });
+    invariant(source === NO_SOURCE || source < sources.length,
+      `Debug mapping ${index} source index is out of range.`);
+    mappings.push({ offset, moduleId: source === NO_SOURCE ? null : sources[source], line });
     previousOffset = offset;
   }
   cursor.finish("debug section");
   return mappings;
+}
+
+function decodeBuild(section) {
+  if (section === undefined) return null;
+  invariant(section.flags === SECTION_OPTIONAL, "Build section must be optional.");
+  const cursor = new Cursor(section.payload, section.offset);
+  invariant(cursor.u16("build version") === BUILD_VERSION, "Unsupported build metadata version.");
+  invariant(cursor.u16("build flags") === 0, "Build flags must be zero.");
+  const standardLibraryMajor = cursor.u16("build standard-library major");
+  invariant(standardLibraryMajor > 0, "Build standard-library major must be positive.");
+  invariant(cursor.u16("build reserved") === 0, "Build reserved field must be zero.");
+  const decodeString = (context) => {
+    const length = cursor.u32(`${context} length`);
+    invariant(length > 0 && length <= MAX_SYMBOL_BYTES,
+      `${context} must contain between 1 and ${MAX_SYMBOL_BYTES} UTF-8 bytes.`);
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(cursor.read(length, context));
+    } catch {
+      throw new Error(`${context} contains invalid UTF-8.`);
+    }
+  };
+  const targetProfile = decodeString("build target profile");
+  const entryModuleId = decodeString("build entry module ID");
+  const count = cursor.u32("build capability count");
+  invariant(count <= MAX_HOST_IMPORTS,
+    `Build capability count exceeds the sandbox limit of ${MAX_HOST_IMPORTS}.`);
+  const guaranteedCapabilities = Array.from({ length: count }, (_, index) =>
+    decodeString(`build capability ${index}`));
+  invariant(new Set(guaranteedCapabilities).size === guaranteedCapabilities.length,
+    "Build guaranteed capabilities must be unique.");
+  invariant(guaranteedCapabilities.join() === [...guaranteedCapabilities].sort().join(),
+    "Build guaranteed capabilities must be sorted.");
+  cursor.finish("build section");
+  return { targetProfile, standardLibraryMajor, entryModuleId, guaranteedCapabilities };
 }
 
 function decodeFunctionInstructions(
@@ -830,12 +953,17 @@ export function decodePortableModule(bytecode) {
       ),
     }));
   const debug = decodeDebug(sections.get(SECTION_KINDS.DEBUG), decodedFunctions);
-  const sourceLineByOffset = new Map(debug.map(({ offset, line }) => [offset, line]));
+  const build = decodeBuild(sections.get(SECTION_KINDS.BUILD));
+  const sourceLocationByOffset = new Map(debug.map(({ offset, moduleId, line }) => [
+    offset,
+    { moduleId, line },
+  ]));
   const functions = decodedFunctions.map((func) => ({
     ...func,
     instructions: func.instructions.map((instruction) => ({
       ...instruction,
-      sourceLine: sourceLineByOffset.get(instruction.offset) ?? null,
+      sourceLine: sourceLocationByOffset.get(instruction.offset)?.line ?? null,
+      sourceModuleId: sourceLocationByOffset.get(instruction.offset)?.moduleId ?? null,
     })),
   }));
   invariant(entryFunction < functions.length, "Entry function index is out of range.");
@@ -848,6 +976,7 @@ export function decodePortableModule(bytecode) {
     imports,
     functions,
     debug,
+    build,
     code: Buffer.from(code),
   };
 }

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jimp.dev/schemas/targets-v1.json",
+  "title": "JIMP target profiles",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "profiles"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "const": "jimp-target-profiles" },
+    "version": { "const": 1 },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description", "guaranteedCapabilities"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+          "description": { "$ref": "#/$defs/localizedText" },
+          "guaranteedCapabilities": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/capability" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en", "pt"],
+      "properties": {
+        "en": { "type": "string", "minLength": 1 },
+        "pt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "parameterTypes", "returnType"],
+      "properties": {
+        "symbol": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$" },
+        "parameterTypes": { "type": "array", "items": { "enum": ["BOOL", "I64", "F64", "STRING"] } },
+        "returnType": { "enum": ["NULL", "BOOL", "I64", "F64", "STRING", "VOID"] }
+      }
+    }
+  }
+}

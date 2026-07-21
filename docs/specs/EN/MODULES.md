@@ -4,7 +4,7 @@
 
 ## Status
 
-This document specifies the P4.1 target contract for source modules, named function imports, named function exports, graph resolution, and static linking. The contract is approved for implementation but is not yet accepted by the compiler described in [LANGUAGE.md](LANGUAGE.md).
+This document specifies the implemented P4.1 contract for source modules, named function imports, named function exports, graph resolution, and static linking. P5.1 through P5.3 implement the complete project-module path: the CLI securely loads an acyclic source graph, validates exact function contracts, links module-qualified identities deterministically, and emits one self-contained `.jbc` 2.6 file with module-aware debug metadata.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -249,9 +249,15 @@ entry-statement     = statement ;
 
 An empty import list is invalid. `entry-statement` is permitted only in the entry module. The `export` prefix and the function header must occupy the same logical line.
 
+## Current implementation
+
+The frontend represents imports separately from executable statements and marks visibility directly on function declarations. The project resolver supplies each imported item with its specifier, imported and local names, portable dependency module ID, exact parameter types, and return type. Analysis rejects unresolved or extraneous descriptors, invalid contracts, duplicate local bindings, conflicts with functions, variables, parameters, or reserved words, and executable statements in a non-entry module.
+
+An analyzed imported call retains its module-qualified function identity until the linker assigns dependency-first global indices. The CLI uses `compileProject(entryPath)` semantics and supports complete project graphs. The lower-level `compile(source)` embedding API remains intentionally single-source and rejects imports because it has no project root or filesystem authority.
+
 ## Implementation acceptance criteria
 
-P4.1 implementation is complete when:
+P4.1 implementation is complete through P5.3:
 
 - the parser and analyzer implement this syntax and visibility model;
 - the resolver enforces canonical identity and project-root containment;

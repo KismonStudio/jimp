@@ -4,9 +4,9 @@
 
 ## Status
 
-Este documento especifica a VM portátil JIMP v1 implementada até o P3.5. O formato `2.5` adiciona metadados opcionais e não autoritativos de linhas do código-fonte à base de execução com recursos limitados e erros padronizados concluída até o P3.4.
+Este documento especifica a VM portátil JIMP v1 implementada até o P5.5. O formato `2.6` inclui metadados opcionais de debug e compilação reproduzível validados independentemente, preservando a base de execução com recursos limitados e erros padronizados.
 
-O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.5` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
+O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.6` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -62,7 +62,7 @@ Um arquivo `.jbc` portátil consiste em um cabeçalho, um diretório de seções
 | --- | --- | --- |
 | magic | 4 bytes | ASCII `JIMP` |
 | versão principal do formato | `u16` | `2` |
-| versão secundária do formato | `u16` | `5` |
+| versão secundária do formato | `u16` | `6` |
 | flags do módulo | `u32` | `0`; demais bits são reservados |
 | função de entrada | `u32` | Índice na seção de funções |
 | quantidade de seções | `u16` | Quantidade de entradas do diretório |
@@ -92,6 +92,7 @@ As seções devem estar completamente dentro do arquivo, não devem sobrepor o c
 | funções | `3` | Exatamente uma, obrigatória |
 | código | `4` | Exatamente uma, obrigatória |
 | debug | `5` | Zero ou uma, opcional |
+| metadados de compilação | `6` | Zero ou uma, opcional |
 
 Seções únicas duplicadas são inválidas.
 
@@ -159,19 +160,29 @@ A seção de código contém os fluxos de instruções das funções. Cada instr
 
 ## Seção de debug
 
-A seção de debug relaciona offsets de instruções codificadas às linhas do código-fonte. Sua entrada no diretório deve definir a flag `OPTIONAL`. Um módulo válido no formato `2.5` pode omitir essa seção sem alterar a semântica da execução.
+A seção de debug relaciona offsets de instruções codificadas aos IDs portáteis dos módulos-fonte e às linhas do código-fonte. Sua entrada no diretório deve definir a flag `OPTIONAL`. Um módulo válido no formato `2.6` pode omitir essa seção sem alterar a semântica da execução.
 
 | Campo | Codificação | Significado |
 | --- | --- | --- |
-| versão do debug | `u16` | `1` |
+| versão do debug | `u16` | `2` |
 | flags do debug | `u16` | `0`; demais bits são reservados |
+| quantidade de fontes | `u32` | Quantidade de IDs de módulos-fonte seguintes |
 | quantidade de mapeamentos | `u32` | Quantidade de mapeamentos seguintes |
-| offset do código | `u32` | Offset relativo ao início da seção completa de código |
-| linha do código-fonte | `u32` | Linha do código-fonte iniciada em um |
+| tamanho do fonte em bytes | `u32` | Tamanho UTF-8 de um ID portátil de módulo |
+| bytes do fonte | array de bytes | ID portátil não vazio do módulo |
+| offset do código | `u32` | Campo do mapeamento: offset relativo à seção completa de código |
+| índice do fonte | `u32` | Campo do mapeamento: índice da tabela de fontes, ou `0xffffffff` quando indisponível |
+| linha do código-fonte | `u32` | Campo do mapeamento: linha iniciada em um |
 
-Cada mapeamento contém um `offset do código` seguido por uma `linha do código-fonte`. Os offsets devem estar em ordem estritamente crescente e devem referenciar limites de instruções decodificadas. Uma quantidade acima do limite de instruções do sandbox, uma linha zero, offsets duplicados, mapeamentos incompletos ou dados residuais tornam a seção inválida. Mapeamentos podem ser omitidos para instruções individuais.
+A tabela de fontes precede os mapeamentos. Os IDs de fonte devem ser únicos, UTF-8 válidos, não vazios e não podem exceder o limite de símbolos do sandbox. Cada mapeamento contém um `offset do código`, um `índice do fonte` e uma `linha do código-fonte`. Os offsets devem estar em ordem estritamente crescente e referenciar limites de instruções decodificadas. Os índices devem referenciar a tabela ou usar `0xffffffff`. Quantidades acima do limite de instruções do sandbox, linhas zero, offsets ou fontes duplicados, dados incompletos e dados residuais tornam a seção inválida. Mapeamentos podem ser omitidos para instruções individuais.
 
 Os metadados de debug não são autoritativos: eles não devem alterar a decodificação, a verificação, o fluxo de controle, os valores, a autorização do host nem qualquer outro comportamento da execução. O runtime oficial usa um mapeamento válido da instrução atual ao relatar uma falha de execução; sem mapeamento, a mesma falha é relatada sem localização no código-fonte.
+
+## Seção de metadados de compilação
+
+A seção opcional de metadados de compilação registra a versão de metadados `1`, flags zero, a versão principal selecionada da biblioteca padrão (`u16`), um campo reservado zero, o nome do perfil de destino, o ID portátil do módulo de entrada e uma lista ordenada e sem duplicatas das capacidades garantidas pelo destino. Cada string é codificada com um tamanho `u32` seguido por bytes UTF-8 não vazios e limitada por `MAX_SYMBOL_BYTES`; a quantidade de capacidades é limitada por `MAX_HOST_IMPORTS`.
+
+Essa seção é descritiva, não concede autoridade. Um runtime que selecione um destino não portátil deve receber esse destino explicitamente, exigir correspondência exata com os metadados, verificar de forma independente o perfil e as assinaturas do host e então aplicar sua própria política de capacidades. Ele nunca deve conceder uma capacidade apenas porque os metadados do bytecode a nomeiam. Módulos sem metadados de compilação são compatíveis somente com a base portátil.
 
 O conjunto inicial de instruções genéricas possui as seguintes operações semânticas. Os opcodes numéricos e as codificações dos operandos são definidos pela fonte [`isa/v1.json`](../../../isa/v1.json), legível por máquina, e resumidos na [referência da ISA](ISA.md) gerada.
 
@@ -302,8 +313,8 @@ Ultrapassar um limite de carregamento ou verificação rejeita o módulo complet
 
 As falhas são expostas por meio do [Formato Padrão de Erros JIMP v1](ERRORS.md). Falhas de decodificação, verificação, resolução de imports do host e execução possuem códigos estáveis distintos. O texto do diagnóstico é um detalhe de implementação e pode melhorar sem alterar o código do erro.
 
-O módulo nunca deve conter endereços nativos considerados confiáveis. Dados de debug não são autoritativos e não devem afetar a execução. Hosts expõem capacidades explicitamente e permanecem responsáveis pela autorização da plataforma e pela política de sandbox. O modelo completo de ameaça, a fronteira de confiança, as obrigações do host e as não garantias explícitas são especificados no [Modelo de Sandbox e Segurança JIMP v1](SECURITY.md).
+O módulo nunca deve conter endereços nativos considerados confiáveis. Metadados de debug e compilação não são autoritativos e não devem conceder capacidades nem alterar a autorização. Hosts expõem capacidades explicitamente e permanecem responsáveis pela autorização da plataforma e pela política de sandbox. O modelo completo de ameaça, a fronteira de confiança, as obrigações do host e as não garantias explícitas são especificados no [Modelo de Sandbox e Segurança JIMP v1](SECURITY.md).
 
 ## Decisões adiadas
 
-Os seguintes itens exigem especificações posteriores: valores de heap, coleções, buffers binários, operações assíncronas do host, exceções, imports e exports de módulos, identidade do arquivo-fonte, localizações de debug por coluna e execução AOT/JIT.
+Os seguintes itens exigem especificações posteriores: valores de heap, coleções, buffers binários, operações assíncronas do host, exceções, imports e exports de módulos em runtime, localizações de debug por coluna e execução AOT/JIT.

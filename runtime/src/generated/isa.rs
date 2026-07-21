@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 pub(crate) const FORMAT_MAJOR: u16 = 2;
-pub(crate) const FORMAT_MINOR: u16 = 5;
+pub(crate) const FORMAT_MINOR: u16 = 6;
 pub(crate) const NO_REGISTER: u16 = 65535;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
