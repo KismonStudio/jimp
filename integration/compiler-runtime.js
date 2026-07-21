@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,10 @@ import {
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const runtimeManifest = join(repositoryRoot, "runtime", "Cargo.toml");
 const compilerCli = join(repositoryRoot, "compiler", "src", "cli.js");
+const portableMathSource = readFileSync(
+  join(repositoryRoot, "stdlib", "src", "math", "i64.jimp"),
+  "utf8",
+).replace(/^(\s*)export\s+(?=function\b)/gm, "$1");
 const runtimeBinary = join(
   repositoryRoot,
   "runtime",
@@ -372,6 +376,31 @@ test("executes while loops with break and continue", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Loops executed\n");
   assert.equal(result.stderr, "");
+});
+
+test("executes the canonical portable i64 standard-library fallbacks", () => {
+  const bytecode = compile(`${portableMathSource}
+    if absolute(-7) == 7 && minimum(-2, 5) == -2 && maximum(-2, 5) == 5 && sign(-9) == -1 && sign(0) == 0 && sign(9) == 1 {
+      print "Portable fallbacks executed";
+    } else {
+      print "wrong result";
+    }
+  `);
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Portable fallbacks executed\n");
+  assert.equal(result.stderr, "");
+});
+
+test("preserves checked i64 overflow in the portable absolute fallback", () => {
+  const bytecode = compile(`${portableMathSource}
+    absolute(-9223372036854775808);
+  `);
+  const result = runBytecode(bytecode, ["--error-format=json"]);
+  const error = assertStandardError(result, "JIMP-4001", "execute");
+
+  assert.match(error.message, /overflow/i);
 });
 
 test("stops recursive programs at the call-stack limit", () => {

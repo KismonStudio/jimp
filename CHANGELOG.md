@@ -61,6 +61,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Independent JavaScript and Rust validation for debug-section flags, versions, ordering, source lines, and instruction boundaries.
 - Runtime execution diagnostics enriched with the mapped source line of the failing instruction.
 - End-to-end coverage carrying source locations from `.jimp` compilation into Rust JSON errors.
+- English and Portuguese P4.1 target specifications for static source imports, named function exports, canonical project-root resolution, cycle rejection, and deterministic linking.
+- Machine-readable P4.2 standard-library v1 catalog with generated English and Portuguese references.
+- Initial `std:console` and `std:math/i64` API contracts separated into portable JIMP functions and declarative Host ABI bridges.
+- Generated-artifact validation for the standard-library catalog in the project quality gate.
+- Machine-readable P4.3 fallback policy with portable-by-default, link-time selection and target-guaranteed native replacements.
+- Canonical portable JIMP implementations for `std:math/i64`, validated for syntax, semantics, exact catalog signatures, and absence of host imports during documentation generation.
+- Optional `std.math.i64.*` Host ABI replacement contracts that preserve portable behavior without runtime capability probing or standard-library VM instructions.
+- English and Portuguese P4.4 sandbox-security specifications covering the untrusted-bytecode threat model, pre-effect validation order, capability confinement, host requirements, deployment guidance, and explicit non-guarantees.
 
 ### Fixed
 
@@ -68,6 +76,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Extended the implementation roadmap with P5 milestones for module parsing, secure graph resolution, deterministic linking, module-aware debug identity, standard-library delivery, and explicit native target profiles.
 - Runtime decoding and verification now complete before VM execution begins.
 - Console effects are isolated behind a host interface and are unavailable to the bytecode decoder.
 - Runtime code is separated into portable decoding, VM, and host modules.

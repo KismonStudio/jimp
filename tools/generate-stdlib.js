@@ -1,0 +1,298 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { analyzeProgram } from "../compiler/src/analyzer.js";
+import { compile } from "../compiler/src/compiler.js";
+import { parseProgram } from "../compiler/src/parser.js";
+import { decodePortableModule } from "../compiler/src/portable/module.js";
+
+const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
+const standardLibraryRoot = resolve(repositoryRoot, "stdlib");
+const definitionPath = resolve(repositoryRoot, "stdlib/v1.json");
+const checkOnly = process.argv.slice(2).includes("--check");
+const parameterTypes = new Set(["BOOL", "I64", "F64", "STRING"]);
+const returnTypes = new Set([...parameterTypes, "NULL", "VOID"]);
+
+function invariant(condition, message) {
+  if (!condition) throw new Error(`Invalid standard library definition: ${message}`);
+}
+
+function validatePortableSources(sourceExports) {
+  for (const [sourcePath, expectedExports] of sourceExports) {
+    const absolutePath = resolve(standardLibraryRoot, sourcePath);
+    invariant(existsSync(absolutePath), `portable source does not exist: ${sourcePath}`);
+    const source = readFileSync(absolutePath, "utf8");
+    const exportedNames = [...source.matchAll(/^\s*export\s+function\s+([A-Za-z_][A-Za-z0-9_]*)/gm)]
+      .map((match) => match[1]);
+    const compilerSource = source.replace(/^(\s*)export\s+(?=function\b)/gm, "$1");
+    let analyzed;
+    let module;
+    try {
+      analyzed = analyzeProgram(parseProgram(compilerSource));
+      module = decodePortableModule(compile(compilerSource));
+    } catch (error) {
+      throw new Error(`Invalid standard library definition: portable source ${sourcePath} does not compile: ${error.message}`);
+    }
+    invariant(analyzed.statements.length === 0,
+      `portable source ${sourcePath} cannot contain entry statements`);
+    invariant(module.imports.length === 0,
+      `portable source ${sourcePath} cannot depend on host imports`);
+    invariant(new Set(exportedNames).size === exportedNames.length,
+      `portable source ${sourcePath} contains duplicate exports`);
+    invariant(exportedNames.length === expectedExports.size
+      && exportedNames.every((name) => expectedExports.has(name)),
+    `portable source ${sourcePath} exports do not match its catalog fallbacks`);
+    const analyzedFunctions = new Map(analyzed.functions.map((func) => [func.name, func]));
+    for (const [name, expected] of expectedExports) {
+      const actual = analyzedFunctions.get(name);
+      invariant(actual, `portable source ${sourcePath} does not define ${name}`);
+      invariant(actual.returnType === expected.returnType,
+        `portable source ${sourcePath} has the wrong return type for ${name}`);
+      invariant(actual.parameters.length === expected.parameters.length,
+        `portable source ${sourcePath} has the wrong parameter count for ${name}`);
+      for (let index = 0; index < expected.parameters.length; index += 1) {
+        invariant(actual.parameters[index].name === expected.parameters[index].name
+          && actual.parameters[index].type === expected.parameters[index].type,
+        `portable source ${sourcePath} has the wrong parameter ${index} for ${name}`);
+      }
+    }
+  }
+}
+
+function validateDefinition(definition) {
+  invariant(definition.name === "jimp-standard-library", "unexpected catalog name");
+  invariant(definition.version === 1, "unsupported catalog version");
+  invariant(definition.fallbackPolicy?.selection === "link-time",
+    "fallback selection must be link-time");
+  invariant(definition.fallbackPolicy?.defaultImplementation === "portable",
+    "fallback default must be portable");
+  invariant(definition.fallbackPolicy?.nativeEligibility === "target-guaranteed",
+    "native implementations must require a target guarantee");
+  invariant(definition.fallbackPolicy?.runtimeFallback === false,
+    "runtime fallback must be disabled");
+  invariant(Array.isArray(definition.modules) && definition.modules.length > 0,
+    "modules must be a non-empty array");
+  const moduleSpecifiers = new Set();
+  const capabilities = new Set();
+  const sourceExports = new Map();
+  for (const module of definition.modules) {
+    invariant(/^std:[a-z][a-z0-9]*(?:\/[a-z][a-z0-9]*)*$/.test(module.specifier),
+      `invalid module specifier ${module.specifier}`);
+    invariant(!moduleSpecifiers.has(module.specifier), `duplicate module ${module.specifier}`);
+    moduleSpecifiers.add(module.specifier);
+    invariant(["portable", "host-bridge", "hybrid"].includes(module.kind),
+      `invalid kind for ${module.specifier}`);
+    invariant(module.description?.en && module.description?.pt,
+      `missing descriptions for ${module.specifier}`);
+    invariant(Array.isArray(module.exports) && module.exports.length > 0,
+      `${module.specifier} must export at least one function`);
+    const exportNames = new Set();
+    let hasPortable = false;
+    let hasHost = false;
+    for (const exported of module.exports) {
+      invariant(/^[a-z][A-Za-z0-9]*$/.test(exported.name),
+        `invalid export name ${module.specifier}.${exported.name}`);
+      invariant(!exportNames.has(exported.name),
+        `duplicate export ${module.specifier}.${exported.name}`);
+      exportNames.add(exported.name);
+      invariant(Array.isArray(exported.parameters),
+        `missing parameters for ${module.specifier}.${exported.name}`);
+      const parameterNames = new Set();
+      for (const parameter of exported.parameters) {
+        invariant(/^[a-z][A-Za-z0-9]*$/.test(parameter.name),
+          `invalid parameter ${module.specifier}.${exported.name}.${parameter.name}`);
+        invariant(!parameterNames.has(parameter.name),
+          `duplicate parameter ${module.specifier}.${exported.name}.${parameter.name}`);
+        parameterNames.add(parameter.name);
+        invariant(parameterTypes.has(parameter.type),
+          `invalid parameter type for ${module.specifier}.${exported.name}.${parameter.name}`);
+      }
+      invariant(returnTypes.has(exported.returnType),
+        `invalid return type for ${module.specifier}.${exported.name}`);
+      invariant(exported.description?.en && exported.description?.pt,
+        `missing descriptions for ${module.specifier}.${exported.name}`);
+      const implementation = exported.implementation;
+      invariant(["portable", "host"].includes(implementation?.kind),
+        `invalid implementation for ${module.specifier}.${exported.name}`);
+      if (implementation.kind === "host") {
+        hasHost = true;
+        invariant(/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$/.test(implementation.capability ?? ""),
+          `invalid host capability for ${module.specifier}.${exported.name}`);
+        invariant(!capabilities.has(implementation.capability),
+          `duplicate capability ${implementation.capability}`);
+        capabilities.add(implementation.capability);
+        invariant(implementation.source === undefined && implementation.optionalNative === undefined,
+          `host export ${module.specifier}.${exported.name} cannot declare portable source or optional native replacement`);
+      } else {
+        hasPortable = true;
+        invariant(implementation.capability === undefined,
+          `portable export ${module.specifier}.${exported.name} cannot declare a host capability`);
+        if (implementation.source !== undefined) {
+          invariant(/^src\/[a-z][a-z0-9]*(?:\/[a-z][a-z0-9]*)*\.jimp$/.test(implementation.source),
+            `invalid portable source for ${module.specifier}.${exported.name}`);
+        }
+        if (implementation.optionalNative !== undefined) {
+          invariant(implementation.source !== undefined,
+            `optional native export ${module.specifier}.${exported.name} requires a portable source`);
+          const capability = implementation.optionalNative.capability;
+          invariant(/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$/.test(capability ?? ""),
+            `invalid optional native capability for ${module.specifier}.${exported.name}`);
+          invariant(!capabilities.has(capability), `duplicate capability ${capability}`);
+          capabilities.add(capability);
+          const exports = sourceExports.get(implementation.source) ?? new Map();
+          invariant(!exports.has(exported.name),
+            `duplicate fallback ${implementation.source}:${exported.name}`);
+          exports.set(exported.name, exported);
+          sourceExports.set(implementation.source, exports);
+        }
+      }
+    }
+    invariant(module.kind === (hasPortable && hasHost ? "hybrid" : hasHost ? "host-bridge" : "portable"),
+      `${module.specifier} kind does not match its implementations`);
+  }
+  validatePortableSources(sourceExports);
+}
+
+function signature(exported) {
+  const parameters = exported.parameters
+    .map((parameter) => `${parameter.name}: ${parameter.type}`)
+    .join(", ");
+  return `${exported.name}(${parameters}): ${exported.returnType}`;
+}
+
+function generateDocumentation(definition, language) {
+  const english = language === "en";
+  const title = english ? "# JIMP Standard Library v1" : "# Biblioteca Padrão JIMP v1";
+  const alternate = english
+    ? "[Portuguese version](../PT/STDLIB.md)"
+    : "[Versão em inglês](../EN/STDLIB.md)";
+  const warning = english
+    ? "This file is generated from [`stdlib/v1.json`](../../../stdlib/v1.json). Do not edit it manually."
+    : "Este arquivo é gerado a partir de [`stdlib/v1.json`](../../../stdlib/v1.json). Não o edite manualmente.";
+  const status = english
+    ? "This document specifies the approved P4.2 catalog and the P4.3 portable-fallback contract. The modules are not yet shipped by the compiler or linker."
+    : "Este documento especifica o catálogo aprovado no P4.2 e o contrato de implementações alternativas portáteis do P4.3. Os módulos ainda não são distribuídos pelo compilador nem pelo vinculador.";
+  const principles = english
+    ? [
+      "Standard modules are resolved by the compiler from a selected toolchain catalog; they are never searched in the project filesystem.",
+      "Portable exports are ordinary JIMP functions statically linked into the output module.",
+      "Host-backed exports lower through typed Host ABI imports and generic `HOST_CALL`; the VM contains no console, math, JSON, network, or standard-library opcode.",
+      "Importing a standard module includes only the transitively used exports and their dependencies.",
+      "A compiled `.jbc` does not require the standard-library source package at runtime.",
+      "Portable implementations are the default; optional native replacements are a link-time optimization selected only for an explicitly compatible target.",
+    ]
+    : [
+      "Módulos padrão são resolvidos pelo compilador a partir de um catálogo selecionado do conjunto de ferramentas; eles nunca são pesquisados no sistema de arquivos do projeto.",
+      "Exports portáteis são funções JIMP comuns vinculadas estaticamente ao módulo de saída.",
+      "Exports apoiados pelo host são reduzidos a imports tipados da Host ABI e `HOST_CALL` genérico; a VM não contém opcode de console, matemática, JSON, rede ou biblioteca padrão.",
+      "Importar um módulo padrão inclui somente os exports usados transitivamente e suas dependências.",
+      "Um `.jbc` compilado não exige o pacote de fontes da biblioteca padrão em runtime.",
+      "Implementações portáteis são o padrão; substituições nativas opcionais são uma otimização de vinculação selecionada somente para um destino explicitamente compatível.",
+    ];
+  const moduleKinds = english
+    ? { portable: "Portable JIMP", "host-bridge": "Host ABI bridge", hybrid: "Hybrid" }
+    : { portable: "JIMP portátil", "host-bridge": "Ponte da Host ABI", hybrid: "Híbrido" };
+  const implementation = (exported) => {
+    if (exported.implementation.kind === "host") {
+      return `Host ABI: \`${exported.implementation.capability}\``;
+    }
+    if (exported.implementation.source === undefined) {
+      return english ? "Portable JIMP" : "JIMP portátil";
+    }
+    const source = `[\`${exported.implementation.source}\`](../../../stdlib/${exported.implementation.source})`;
+    return `${english ? "Portable JIMP" : "JIMP portátil"}: ${source}`;
+  };
+  const optionalNative = (exported) => exported.implementation.optionalNative
+    ? `\`${exported.implementation.optionalNative.capability}\``
+    : "—";
+  const tableHeader = english
+    ? "| Module | Kind | Export signature | Default implementation | Optional native capability | Contract |\n| --- | --- | --- | --- | --- | --- |"
+    : "| Módulo | Tipo | Assinatura do export | Implementação padrão | Capacidade nativa opcional | Contrato |\n| --- | --- | --- | --- | --- | --- |";
+  const rows = definition.modules.flatMap((module) => module.exports.map((exported) =>
+    `| \`${module.specifier}\` | ${moduleKinds[module.kind]} | \`${signature(exported)}\` | ${implementation(exported)} | ${optionalNative(exported)} | ${exported.description[language]} |`)).join("\n");
+  const sections = english
+    ? {
+      status: "## Status", principles: "## Architecture", catalog: "## Initial catalog",
+      resolution: "## Resolution and versioning", behavior: "## Linking and behavior",
+      fallbacks: "## Portable fallback selection", equivalence: "## Native equivalence requirements",
+      security: "## Security and capability policy", exclusions: "## Deliberate exclusions",
+      acceptanceP42: "## P4.2 design acceptance", acceptanceP43: "## P4.3 design acceptance",
+    }
+    : {
+      status: "## Status", principles: "## Arquitetura", catalog: "## Catálogo inicial",
+      resolution: "## Resolução e versionamento", behavior: "## Vinculação e comportamento",
+      fallbacks: "## Seleção de implementações alternativas portáteis",
+      equivalence: "## Requisitos de equivalência nativa",
+      security: "## Segurança e política de capacidades", exclusions: "## Exclusões intencionais",
+      acceptanceP42: "## Aceitação do projeto P4.2", acceptanceP43: "## Aceitação do projeto P4.3",
+    };
+  const resolution = english
+    ? "The `std:` namespace is reserved by the source-module contract. Specifiers have no inline version. A compiler selects exactly one standard-library major profile through its toolchain or lock configuration and records that choice in reproducible build metadata. Unknown modules and exports are compile errors. Project files cannot shadow `std:` modules. Catalog major versions may remove or incompatibly change exports; compatible additions remain in the same major profile."
+    : "O namespace `std:` é reservado pelo contrato de módulos-fonte. Os especificadores não possuem versão embutida. Um compilador seleciona exatamente um perfil principal da biblioteca padrão por meio do conjunto de ferramentas ou da configuração de versões e registra essa escolha nos metadados de compilação reproduzível. Módulos e exports desconhecidos são erros de compilação. Arquivos do projeto não podem sobrescrever módulos `std:`. Versões principais do catálogo podem remover ou alterar exports de forma incompatível; adições compatíveis permanecem no mesmo perfil principal.";
+  const behavior = english
+    ? "Standard-library calls obey the same exact parameter and return typing as project-module calls. Portable implementations use existing language semantics and sandbox budgets. Host bridges declare their capability and signature as catalog data, so compiler lowering does not identify APIs by hardcoded function names. The linker deduplicates one implementation per selected export identity and emits ordinary functions, constants, typed host imports, and generic instructions."
+    : "Chamadas da biblioteca padrão seguem a mesma tipagem exata de parâmetros e retorno das chamadas entre módulos do projeto. Implementações portáteis usam a semântica existente da linguagem e os limites do sandbox. Pontes do host declaram sua capacidade e assinatura como dados do catálogo, portanto a redução do compilador não identifica APIs por nomes de funções codificados diretamente. O vinculador elimina duplicações por identidade de export selecionado e emite funções, constantes, imports tipados do host e instruções genéricas comuns.";
+  const fallbacks = english
+    ? [
+      "The linker selects the portable source by default and emits ordinary JIMP functions and `CALL` instructions.",
+      "A native replacement may be selected only when an explicit target profile guarantees the catalog capability with the exact declared signature and semantics.",
+      "Selection occurs before `.jbc` emission. Exactly one implementation of each export is linked; unused alternatives and host imports are omitted.",
+      "The runtime does not probe for an optional import, retry a failed host call, or switch implementations during execution.",
+      "If a native-targeted `.jbc` reaches a host without the promised capability, normal Host ABI resolution rejects the module before execution. It does not fall back dynamically.",
+      "Build metadata must record the selected target profile. The default portable target remains independent of optional native capabilities.",
+    ]
+    : [
+      "O vinculador seleciona o código-fonte portátil por padrão e emite funções JIMP comuns e instruções `CALL`.",
+      "Uma substituição nativa pode ser selecionada somente quando um perfil de destino explícito garante a capacidade do catálogo com a assinatura e a semântica exatas declaradas.",
+      "A seleção ocorre antes da emissão do `.jbc`. Exatamente uma implementação de cada export é vinculada; alternativas e imports do host não utilizados são omitidos.",
+      "O runtime não procura um import opcional, não repete uma chamada ao host que falhou e não troca implementações durante a execução.",
+      "Se um `.jbc` direcionado a uma implementação nativa chegar a um host sem a capacidade prometida, a resolução normal da Host ABI rejeita o módulo antes da execução. Não ocorre substituição dinâmica.",
+      "Os metadados de compilação devem registrar o perfil de destino selecionado. O destino portátil padrão permanece independente de capacidades nativas opcionais.",
+    ];
+  const equivalence = english
+    ? "A native replacement must preserve the public signature, returned value, checked-I64 overflow behavior, deterministic error boundary, and absence of observable side effects of its portable source. It may use fewer execution steps, but it remains subject to Host ABI authorization and runtime policy. Native replacement is forbidden for an export whose behavior cannot be made observably equivalent, including inherently external effects such as console output. The standard-library major catalog pins this semantic contract."
+    : "Uma substituição nativa deve preservar a assinatura pública, o valor retornado, o comportamento de overflow verificado de I64, o limite determinístico de erros e a ausência de efeitos colaterais observáveis do seu código-fonte portátil. Ela pode usar menos passos de execução, mas continua sujeita à autorização da Host ABI e à política do runtime. A substituição nativa é proibida para um export cujo comportamento não possa ser observavelmente equivalente, incluindo efeitos inerentemente externos, como saída no console. O catálogo principal da biblioteca padrão fixa esse contrato semântico.";
+  const security = english
+    ? "Importing a host-backed export does not grant authority. The resulting Host ABI import must still be available, signature-compatible, and allowed by runtime policy before execution. Portable functions receive no ambient authority. Unused host bridges must not appear in the linked `.jbc`. The complete trust and effect boundary is defined by the [sandbox and security model](SECURITY.md)."
+    : "Importar um export apoiado pelo host não concede autoridade. O import resultante da Host ABI ainda deve estar disponível, possuir assinatura compatível e ser permitido pela política do runtime antes da execução. Funções portáteis não recebem autoridade implícita. Pontes do host não utilizadas não devem aparecer no `.jbc` vinculado. A fronteira completa de confiança e efeitos é definida pelo [modelo de sandbox e segurança](SECURITY.md).";
+  const exclusions = english
+    ? "JSON, fetch/networking, files, time, randomness, collections, and text-processing APIs are not in the first catalog. Their contracts require structured or binary values, explicit capability models, deterministic limits, or asynchronous behavior that the current language does not yet define. They must not be simulated through new VM opcodes."
+    : "APIs de JSON, fetch/rede, arquivos, tempo, aleatoriedade, coleções e processamento de texto não fazem parte do primeiro catálogo. Seus contratos exigem valores estruturados ou binários, modelos explícitos de capacidades, limites determinísticos ou comportamento assíncrono que a linguagem atual ainda não define. Elas não devem ser simuladas por novos opcodes da VM.";
+  const acceptanceP42 = english
+    ? "P4.2 is complete because this catalog is the single reviewed source for the initial public module surface, its generated EN/PT references are current, and the VM-independent lowering boundary is explicit. Shipping implementations and linker support remain implementation work."
+    : "O P4.2 está concluído porque este catálogo é a única fonte revisada da superfície pública inicial dos módulos, suas referências geradas EN/PT estão atualizadas e a fronteira de redução independente da VM está explícita. A distribuição das implementações e o suporte do vinculador permanecem como trabalho de implementação.";
+  const acceptanceP43 = english
+    ? "P4.3 is complete when every optional native capability has a catalog-linked portable source whose syntax, semantics, lack of host imports, and exact public signature pass generation checks; the default and native selection rules above are normative; and no optional-import flag, runtime probe, or standard-library opcode is added to the portable format. Compiler/linker consumption of this contract remains subsequent implementation work."
+    : "O P4.3 está concluído quando toda capacidade nativa opcional possui um código-fonte portátil associado pelo catálogo cuja sintaxe, semântica, ausência de imports do host e assinatura pública exata passam pelas verificações de geração; as regras de seleção padrão e nativa acima são normativas; e nenhuma flag de import opcional, procura em runtime ou opcode de biblioteca padrão é adicionada ao formato portátil. O consumo deste contrato pelo compilador e vinculador permanece como trabalho de implementação posterior.";
+  const moduleDescriptions = definition.modules.map((module) =>
+    `- \`${module.specifier}\`: ${module.description[language]}`).join("\n");
+  return `${title}\n\n${alternate}\n\n> ${warning}\n\n${sections.status}\n\n${status}\n\n${sections.principles}\n\n${principles.map((principle) => `- ${principle}`).join("\n")}\n\n${sections.catalog}\n\n${moduleDescriptions}\n\n${tableHeader}\n${rows}\n\n${sections.resolution}\n\n${resolution}\n\n${sections.behavior}\n\n${behavior}\n\n${sections.fallbacks}\n\n${fallbacks.map((rule) => `- ${rule}`).join("\n")}\n\n${sections.equivalence}\n\n${equivalence}\n\n${sections.security}\n\n${security}\n\n${sections.exclusions}\n\n${exclusions}\n\n${sections.acceptanceP42}\n\n${acceptanceP42}\n\n${sections.acceptanceP43}\n\n${acceptanceP43}\n`;
+}
+
+const definition = JSON.parse(readFileSync(definitionPath, "utf8"));
+validateDefinition(definition);
+
+const outputs = new Map([
+  [resolve(repositoryRoot, "docs/specs/EN/STDLIB.md"), generateDocumentation(definition, "en")],
+  [resolve(repositoryRoot, "docs/specs/PT/STDLIB.md"), generateDocumentation(definition, "pt")],
+]);
+
+const staleFiles = [];
+for (const [outputPath, content] of outputs) {
+  if (checkOnly) {
+    if (!existsSync(outputPath) || readFileSync(outputPath, "utf8") !== content) {
+      staleFiles.push(relative(repositoryRoot, outputPath));
+    }
+    continue;
+  }
+  mkdirSync(dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, content);
+}
+
+if (staleFiles.length > 0) {
+  throw new Error(`Generated standard library files are stale:\n${staleFiles.join("\n")}\nRun npm run generate:stdlib.`);
+}
+
+process.stdout.write(checkOnly
+  ? "Generated standard library files are up to date.\n"
+  : "Generated standard library files updated.\n");

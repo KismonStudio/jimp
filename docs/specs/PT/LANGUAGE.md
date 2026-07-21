@@ -263,4 +263,4 @@ O compilador deve informar a linha lógica que contém sintaxe ou semântica inv
 
 ## Fora do escopo
 
-O JIMP ainda não define blocos independentes, `else if`, closures, funções de primeira classe, parâmetros padrão ou variádicos, módulos, imports no código-fonte, valores de heap, exceções ou uma biblioteca padrão geral.
+O compilador atual ainda não implementa blocos independentes, `else if`, closures, funções de primeira classe, parâmetros padrão ou variádicos, valores de heap, exceções nem módulos padrão. Os contratos-alvo dos [módulos-fonte](MODULES.md) e da [biblioteca padrão](STDLIB.md) permanecem indisponíveis até a conclusão de seus critérios de aceitação.

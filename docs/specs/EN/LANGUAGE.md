@@ -263,4 +263,4 @@ The compiler must report the logical source line containing invalid syntax or se
 
 ## Out of scope
 
-JIMP does not yet define standalone blocks, `else if`, closures, first-class functions, default or variadic parameters, modules, source-level imports, heap values, exceptions, or a general standard library.
+The current compiler does not yet implement standalone blocks, `else if`, closures, first-class functions, default or variadic parameters, heap values, exceptions, or standard modules. The target contracts for [source modules](MODULES.md) and the [standard library](STDLIB.md) remain unavailable until their implementation acceptance criteria are complete.

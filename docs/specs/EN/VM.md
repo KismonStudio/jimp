@@ -302,7 +302,7 @@ Exceeding a load or verification limit rejects the complete module before execut
 
 Failures are exposed through the [JIMP Standard Error Format v1](ERRORS.md). Decode, verification, host-import resolution, and execution failures have separate stable codes. Diagnostic wording is implementation detail and may improve without changing the error code.
 
-The module must never contain trusted native addresses. Debug data is non-authoritative and must not affect execution. Hosts expose capabilities explicitly and remain responsible for platform authorization and sandbox policy.
+The module must never contain trusted native addresses. Debug data is non-authoritative and must not affect execution. Hosts expose capabilities explicitly and remain responsible for platform authorization and sandbox policy. The complete threat model, trust boundary, host obligations, and explicit non-guarantees are specified in the [JIMP Sandbox and Security Model v1](SECURITY.md).
 
 ## Deferred decisions
 

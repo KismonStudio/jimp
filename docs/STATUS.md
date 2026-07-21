@@ -5,7 +5,7 @@
 
 This document tracks the JIMP implementation. The conceptual project definition lives under `docs/specs`; this file records only executable work and the subsequent delivery plan.
 
-## Current milestone: P3 structured execution complete
+## Current milestone: P5 module linker and standard-library delivery ready
 
 The project has a complete, tested path from source code to execution:
 
@@ -189,10 +189,35 @@ Acceptance criterion: a program can declare values, calculate an expression, and
 
 ### P4 — modules and standard library
 
-1. [ ] Specify imports, exports, and module resolution.
-2. [ ] Design the first standard library independent from the VM.
-3. [ ] Define portable fallback implementations for optional native host capabilities.
-4. [ ] Document the sandbox model and security guarantees.
+1. [x] Specify imports, exports, and module resolution.
+   - The approved target is static, function-only source modules linked into one `.jbc`; compiler implementation remains subsequent work.
+2. [x] Design the first standard library independent from the VM.
+   - The generated v1 catalog starts with portable `std:math/i64` helpers and a data-defined `std:console` Host ABI bridge; shipping implementations remain subsequent work.
+3. [x] Define portable fallback implementations for optional native host capabilities.
+   - Link-time selection defaults to compiler-validated portable JIMP sources; native Host ABI replacements require an explicit compatible target profile and never trigger runtime probing.
+4. [x] Document the sandbox model and security guarantees.
+   - The P4.4 contract defines the untrusted-bytecode threat model, pre-effect validation boundary, capability confinement, deterministic VM budgets, host obligations, deployment guidance, and explicit non-guarantees.
+
+### P5 — module linker and standard-library delivery
+
+1. [ ] Implement source-module syntax and semantic symbols.
+   - Parse the P4.1 `import`, `export`, `from`, and `as` grammar, enforce import placement and function-only exports, and represent imported and exported bindings without changing existing single-file behavior.
+   - Acceptance criterion: parser and analyzer tests cover valid declarations, aliases, visibility, name conflicts, exact call signatures, reserved words, and module-qualified source diagnostics.
+2. [ ] Implement the secure project resolver and dependency graph loader.
+   - Resolve relative `.jimp` specifiers from a canonical project root, snapshot UTF-8 sources, enforce real-path containment, detect physical and case aliases, and reject dependency cycles before semantic lowering.
+   - Acceptance criterion: traversal, symlink escape, missing or non-regular files, invalid UTF-8, ambiguous identity, source mutation, and cycle tests emit no `.jbc`.
+3. [ ] Implement deterministic static linking and module-aware debug identity.
+   - Bind imported functions to module-qualified export identities, assign functions in deterministic topological order, and lower cross-module calls to the existing generic `CALL` instruction.
+   - Extend the pre-stable portable format to `2.6` with the minimum source-identity metadata required to report a portable module ID and line without introducing runtime module loading.
+   - Acceptance criterion: JavaScript and Rust independently validate the new metadata; the inspector and runtime identify the originating module; identical source graphs produce identical linked bytes.
+4. [ ] Integrate the standard-library catalog and portable implementations.
+   - Resolve `std:` imports only from the selected catalog, complete any required canonical portable sources, link only transitively used exports, deduplicate implementations, and prevent project files from shadowing standard modules.
+   - Acceptance criterion: a program imports and executes `std:math/i64` and `std:console` through ordinary `CALL` and typed Host ABI lowering; the default portable target emits no optional `std.math.i64.*` host import.
+5. [ ] Add explicit native target profiles and complete cross-language hardening.
+   - Add reproducible compiler options and build metadata for the project root, standard-library major profile, and target-guaranteed native capabilities; native replacement remains link-time only with no runtime probing.
+   - Acceptance criterion: portable and native-selected implementations pass semantic parity tests; denied, unavailable, or incompatible capabilities fail before execution; graph, linker, sandbox, inspector, and Rust runtime integration cases run in the complete quality gate.
+
+P5 acceptance criterion: a multi-file entry program can import project functions and standard-library exports, compile reproducibly into one self-contained portable `.jbc`, execute in the Rust runtime, and report module-qualified failures. The VM gains no source resolver, dynamic module loader, hardcoded standard-library API, or native pointer mechanism.
 
 ## Current decisions
 
@@ -206,6 +231,9 @@ Acceptance criterion: a program can declare values, calculate an expression, and
 | Portable VM specification | P3 functions, loops, sandbox, standard errors, and debug metadata implemented    |
 | Sandbox profile           | Generated `jimp-reference-sandbox` v1 with deterministic logical budgets        |
 | Error contract            | Generated `jimp-error-v1` codes with human and one-line JSON CLI output          |
+| Source modules            | Acyclic relative imports and named function exports, statically linked           |
+| Standard library          | Versioned `std:` catalog with validated portable fallbacks and target-only native replacements |
+| Security boundary         | VM-level validation and capability confinement; OS/process isolation remains external |
 | Compatibility             | Legacy format 1 and portable 2.0–2.4 are not accepted; format 2.5 is pre-stable |
 
 ## Validating the current milestone

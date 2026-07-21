@@ -1,0 +1,136 @@
+{
+  "$schema": "./schema.json",
+  "name": "jimp-standard-library",
+  "version": 1,
+  "fallbackPolicy": {
+    "selection": "link-time",
+    "defaultImplementation": "portable",
+    "nativeEligibility": "target-guaranteed",
+    "runtimeFallback": false
+  },
+  "modules": [
+    {
+      "specifier": "std:console",
+      "kind": "hybrid",
+      "description": {
+        "en": "Explicit console output through a typed Host ABI bridge and portable wrappers.",
+        "pt": "Saída explícita no console por uma ponte tipada da Host ABI e funções auxiliares portáteis."
+      },
+      "exports": [
+        {
+          "name": "write",
+          "parameters": [
+            { "name": "message", "type": "STRING" }
+          ],
+          "returnType": "VOID",
+          "implementation": {
+            "kind": "host",
+            "capability": "std.console.write"
+          },
+          "description": {
+            "en": "Writes the message exactly and does not append a line feed.",
+            "pt": "Escreve a mensagem exatamente e não acrescenta uma quebra de linha."
+          }
+        },
+        {
+          "name": "writeLine",
+          "parameters": [
+            { "name": "message", "type": "STRING" }
+          ],
+          "returnType": "VOID",
+          "implementation": {
+            "kind": "portable"
+          },
+          "description": {
+            "en": "Writes the message followed by one line-feed character through write.",
+            "pt": "Escreve a mensagem seguida por um caractere de quebra de linha por meio de write."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:math/i64",
+      "kind": "portable",
+      "description": {
+        "en": "Deterministic helpers for signed 64-bit integers implemented in portable JIMP.",
+        "pt": "Funções determinísticas para inteiros de 64 bits com sinal implementadas em JIMP portátil."
+      },
+      "exports": [
+        {
+          "name": "absolute",
+          "parameters": [
+            { "name": "value", "type": "I64" }
+          ],
+          "returnType": "I64",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/math/i64.jimp",
+            "optionalNative": {
+              "capability": "std.math.i64.absolute"
+            }
+          },
+          "description": {
+            "en": "Returns the non-negative magnitude; the minimum I64 value follows checked-negation overflow behavior.",
+            "pt": "Retorna a magnitude não negativa; o menor valor I64 segue o comportamento de overflow da negação verificada."
+          }
+        },
+        {
+          "name": "minimum",
+          "parameters": [
+            { "name": "left", "type": "I64" },
+            { "name": "right", "type": "I64" }
+          ],
+          "returnType": "I64",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/math/i64.jimp",
+            "optionalNative": {
+              "capability": "std.math.i64.minimum"
+            }
+          },
+          "description": {
+            "en": "Returns left when left is less than or equal to right; otherwise returns right.",
+            "pt": "Retorna left quando left é menor ou igual a right; caso contrário, retorna right."
+          }
+        },
+        {
+          "name": "maximum",
+          "parameters": [
+            { "name": "left", "type": "I64" },
+            { "name": "right", "type": "I64" }
+          ],
+          "returnType": "I64",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/math/i64.jimp",
+            "optionalNative": {
+              "capability": "std.math.i64.maximum"
+            }
+          },
+          "description": {
+            "en": "Returns left when left is greater than or equal to right; otherwise returns right.",
+            "pt": "Retorna left quando left é maior ou igual a right; caso contrário, retorna right."
+          }
+        },
+        {
+          "name": "sign",
+          "parameters": [
+            { "name": "value", "type": "I64" }
+          ],
+          "returnType": "I64",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/math/i64.jimp",
+            "optionalNative": {
+              "capability": "std.math.i64.sign"
+            }
+          },
+          "description": {
+            "en": "Returns -1 for negative values, 0 for zero, and 1 for positive values.",
+            "pt": "Retorna -1 para valores negativos, 0 para zero e 1 para valores positivos."
+          }
+        }
+      ]
+    }
+  ]
+}

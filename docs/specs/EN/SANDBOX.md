@@ -4,7 +4,7 @@
 
 > This file is generated from [`sandbox/v1.json`](../../../sandbox/v1.json). Do not edit it manually.
 
-These limits define the mandatory resource profile implemented by the official compiler tools and Rust runtime. Load and verification limits are checked before execution. Execution limits terminate the program with an error and do not roll back earlier authorized host effects. Runtime value memory is a portable logical charge, not a promise about process RSS or allocator overhead.
+These limits define the mandatory resource profile implemented by the official compiler tools and Rust runtime. Load and verification limits are checked before execution. Execution limits terminate the program with an error and do not roll back earlier authorized host effects. Runtime value memory is a portable logical charge, not a promise about process RSS or allocator overhead. The trust boundary, guarantees, and explicit non-guarantees are defined by the [sandbox and security model](SECURITY.md).
 
 | Phase | Limit | Value | Unit | Meaning |
 | --- | --- | ---: | --- | --- |

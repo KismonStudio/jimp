@@ -302,7 +302,7 @@ Ultrapassar um limite de carregamento ou verificação rejeita o módulo complet
 
 As falhas são expostas por meio do [Formato Padrão de Erros JIMP v1](ERRORS.md). Falhas de decodificação, verificação, resolução de imports do host e execução possuem códigos estáveis distintos. O texto do diagnóstico é um detalhe de implementação e pode melhorar sem alterar o código do erro.
 
-O módulo nunca deve conter endereços nativos considerados confiáveis. Dados de debug não são autoritativos e não devem afetar a execução. Hosts expõem capacidades explicitamente e permanecem responsáveis pela autorização da plataforma e pela política de sandbox.
+O módulo nunca deve conter endereços nativos considerados confiáveis. Dados de debug não são autoritativos e não devem afetar a execução. Hosts expõem capacidades explicitamente e permanecem responsáveis pela autorização da plataforma e pela política de sandbox. O modelo completo de ameaça, a fronteira de confiança, as obrigações do host e as não garantias explícitas são especificados no [Modelo de Sandbox e Segurança JIMP v1](SECURITY.md).
 
 ## Decisões adiadas
 

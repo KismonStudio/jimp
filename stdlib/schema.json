@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jimp.dev/schemas/stdlib-v1.json",
+  "title": "JIMP standard library catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "fallbackPolicy", "modules"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "const": "jimp-standard-library" },
+    "version": { "const": 1 },
+    "fallbackPolicy": { "$ref": "#/$defs/fallbackPolicy" },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["specifier", "kind", "description", "exports"],
+        "properties": {
+          "specifier": {
+            "type": "string",
+            "pattern": "^std:[a-z][a-z0-9]*(?:/[a-z][a-z0-9]*)*$"
+          },
+          "kind": { "enum": ["portable", "host-bridge", "hybrid"] },
+          "description": { "$ref": "#/$defs/localizedText" },
+          "exports": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/export" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "fallbackPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selection", "defaultImplementation", "nativeEligibility", "runtimeFallback"],
+      "properties": {
+        "selection": { "const": "link-time" },
+        "defaultImplementation": { "const": "portable" },
+        "nativeEligibility": { "const": "target-guaranteed" },
+        "runtimeFallback": { "const": false }
+      }
+    },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en", "pt"],
+      "properties": {
+        "en": { "type": "string", "minLength": 1 },
+        "pt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
+        "type": { "enum": ["BOOL", "I64", "F64", "STRING"] }
+      }
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["portable", "host"] },
+        "source": {
+          "type": "string",
+          "pattern": "^src/[a-z][a-z0-9]*(?:/[a-z][a-z0-9]*)*\\.jimp$"
+        },
+        "capability": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$"
+        },
+        "optionalNative": { "$ref": "#/$defs/optionalNative" }
+      }
+    },
+    "optionalNative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability"],
+      "properties": {
+        "capability": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$"
+        }
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "parameters", "returnType", "implementation", "description"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/parameter" }
+        },
+        "returnType": { "enum": ["NULL", "BOOL", "I64", "F64", "STRING", "VOID"] },
+        "implementation": { "$ref": "#/$defs/implementation" },
+        "description": { "$ref": "#/$defs/localizedText" }
+      }
+    }
+  }
+}

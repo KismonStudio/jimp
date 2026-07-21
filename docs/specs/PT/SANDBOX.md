@@ -4,7 +4,7 @@
 
 > Este arquivo é gerado a partir de [`sandbox/v1.json`](../../../sandbox/v1.json). Não o edite manualmente.
 
-Estes limites definem o perfil obrigatório de recursos implementado pelas ferramentas oficiais do compilador e pelo runtime Rust. Limites de carregamento e verificação são checados antes da execução. Limites de execução encerram o programa com erro e não revertem efeitos autorizados anteriores no host. A memória de valores do runtime é uma cobrança lógica portátil, não uma garantia sobre RSS do processo ou overhead do alocador.
+Estes limites definem o perfil obrigatório de recursos implementado pelas ferramentas oficiais do compilador e pelo runtime Rust. Limites de carregamento e verificação são checados antes da execução. Limites de execução encerram o programa com erro e não revertem efeitos autorizados anteriores no host. A memória de valores do runtime é uma cobrança lógica portátil, não uma garantia sobre RSS do processo ou overhead do alocador. A fronteira de confiança, as garantias e as não garantias explícitas são definidas pelo [modelo de sandbox e segurança](SECURITY.md).
 
 | Fase | Limite | Valor | Unidade | Significado |
 | --- | --- | ---: | --- | --- |
