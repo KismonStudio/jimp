@@ -5,7 +5,7 @@
 
 This document tracks the JIMP implementation. The conceptual project definition lives under `docs/specs`; this file records only executable work and the subsequent delivery plan.
 
-## Current milestone: P5 module linker and standard-library delivery complete
+## Current milestone: P5 complete; P6 developer toolchain planned
 
 The project has a complete, tested path from source code to execution:
 
@@ -224,6 +224,69 @@ Acceptance criterion: a program can declare values, calculate an expression, and
 
 P5 acceptance criterion: a multi-file entry program can import project functions and standard-library exports, compile reproducibly into one self-contained portable `.jbc`, execute in the Rust runtime, and report module-qualified failures. The VM gains no source resolver, dynamic module loader, hardcoded standard-library API, or native pointer mechanism.
 
+### P6 — developer toolchain and distribution
+
+P6 turns the validated compiler/runtime foundation into a toolchain that can be installed and used through one consistent command surface. It does not expand the language semantics or weaken the existing compiler/runtime trust boundary.
+
+1. [ ] Add a unified `jimp` command surface.
+   - Provide `jimp run`, `jimp compile`, `jimp inspect`, and `jimp check` with consistent option parsing, exit codes, human diagnostics, and `--error-format=json` behavior.
+   - `jimp run` must compile through the existing project resolver, execute the selected Rust runtime, forward standard-library and target-profile options explicitly, and clean up temporary output deterministically.
+   - Acceptance criterion: a source project can be compiled, inspected, validated, or executed without invoking Node.js and Cargo commands separately; compilation failures never start the runtime.
+2. [ ] Package the CLI and define runtime discovery.
+   - Expose an installable CLI entry point, define the supported compiler/runtime version handshake, support an explicit runtime-path override, and reject missing or incompatible runtimes with an actionable diagnostic.
+   - Installation must not perform an undeclared network download or silently select an arbitrary executable from the working directory.
+   - Acceptance criterion: a clean supported environment can install the toolchain and run `jimp --version` and `jimp run examples/hello.jimp` from outside the repository.
+3. [ ] Build a practical examples and project-start workflow.
+   - Add reviewed examples for functions, loops, project modules, `std:console`, portable `std:math/i64`, native target selection, structured errors, and bytecode inspection.
+   - Add a minimal project template or `jimp init` only after its generated layout and overwrite policy are specified.
+   - Acceptance criterion: every documented example is executed by automated tests and uses only public commands and supported source syntax.
+4. [ ] Add cross-platform CI and release artifacts.
+   - Run the complete quality gate on supported Windows and Linux versions, build runtime artifacts reproducibly, and publish versioned checksums and release notes.
+   - Define which components require Node.js at development time and which artifacts are sufficient for execution.
+   - Acceptance criterion: release candidates pass the same compiler, integration, generated-artifact, Rust format, lint, and runtime tests on every supported platform.
+5. [ ] Establish a versioned conformance suite and compatibility matrix.
+   - Separate language, bytecode, Host ABI, standard-library, target-profile, and diagnostic fixtures so alternate implementations can validate one contract at a time.
+   - Include positive programs, required rejection cases, deterministic output, sandbox limits, malformed metadata, capability denial, and compiler/runtime version mismatches.
+   - Acceptance criterion: a release artifact can run the conformance suite without repository-internal APIs, and the supported `.jbc`, standard-library, and target-profile versions are published explicitly.
+6. [ ] Evaluate an interactive REPL after the unified runner is stable.
+   - Specify whether state persists as source declarations, linked modules, or runtime values before implementing the REPL.
+   - Acceptance criterion: if approved, the REPL must use the same parser, analyzer, linker, runtime validation, capability policy, and error contracts as file execution.
+
+P6 acceptance criterion: a user can install a versioned JIMP toolchain, execute a documented project with one command, inspect or validate its `.jbc`, receive consistent diagnostics, and reproduce the same behavior on every supported platform.
+
+### P7 — aggregate data and expanded language capabilities
+
+P7 expands the language only after P6 makes the current semantics easy to exercise and distribute. Every syntax, type-system, VM, sandbox, and standard-library change requires matching normative specifications in `docs/specs/EN` and `docs/specs/PT` before implementation.
+
+1. [ ] Specify the aggregate type and ownership model.
+   - Decide the source syntax and static typing for arrays and records, mutation and aliasing rules, equality behavior, function-signature representation, and control-flow type joins.
+   - Define whether values are copied, shared, or referenced and how cycles are prevented or collected; do not infer these semantics from a host-language implementation.
+   - Acceptance criterion: bilingual specifications cover valid programs, rejected programs, observable behavior, resource ownership, and compatibility consequences before parser or VM changes begin.
+2. [ ] Add a resource-bounded heap foundation to portable bytecode and the runtime.
+   - Introduce only generic value-storage and access mechanisms required by approved core semantics; JSON, files, networking, and other domain APIs must not become VM instructions.
+   - Extend independent JavaScript and Rust verification, logical memory accounting, recursion/alias safety, malformed-bytecode rejection, and inspector output.
+   - Acceptance criterion: heap allocation and access cannot bypass deterministic sandbox limits, forge native references, access host memory, or create an effect before complete verification.
+3. [ ] Implement typed arrays and indexed access.
+   - Add construction, read, update, length, bounds diagnostics, function parameters/returns, and deterministic iteration only as approved by the P7.1 specification.
+   - Acceptance criterion: compiler and runtime tests cover empty and nested arrays, mutation rules, type mismatches, bounds failures, alias behavior, memory limits, and cross-language verification.
+4. [ ] Implement typed records and field access.
+   - Choose and document nominal or structural typing, declaration syntax, field initialization, field mutation, equality, module visibility, and schema evolution before implementation.
+   - Acceptance criterion: records cross function and module boundaries with exact verified contracts; missing, duplicate, private, or type-incompatible fields fail deterministically.
+5. [ ] Add explicit recoverable-error semantics and collection/text primitives.
+   - Define a typed result mechanism before exposing operations that can fail during normal execution; exceptions, implicit nullability, and host-language exceptions must not emerge accidentally as language semantics.
+   - Deliver common text and collection behavior through ordinary language functions or catalog-defined standard modules whenever possible, using new core instructions only when the approved value model requires generic operations.
+   - Acceptance criterion: success and failure paths are statically visible, sandboxed, module-safe, and consistent across portable and optional native implementations.
+6. [ ] Add `std:json` on top of the approved aggregate and error models.
+   - JSON parsing and serialization must be catalog-defined APIs with canonical portable behavior or a documented reason why a portable implementation is impossible; `JSON` must not become a keyword or opcode.
+   - Specify number mapping, duplicate keys, ordering, Unicode, nesting limits, output determinism, and malformed-input diagnostics.
+   - Acceptance criterion: parse/stringify round trips, invalid inputs, deep structures, size limits, and portable/native semantic parity pass the complete cross-language gate.
+7. [ ] Design capability-gated files and networking as a subsequent P7 delivery slice.
+   - Define byte/buffer values, asynchronous execution, cancellation, timeouts, response-size limits, deterministic testing, and deployment policy before adding `std:files` or `std:http`.
+   - File and network operations must remain named, typed Host ABI capabilities selected by catalog data and explicit runtime policy; `FETCH`, paths, sockets, and platform handles must not become source keywords, portable opcodes, or trusted bytecode pointers.
+   - Acceptance criterion: denied, unavailable, incompatible, timed-out, oversized, and cancelled operations fail without escaping policy or resource limits, and hosts can omit the capabilities entirely.
+
+P7 acceptance criterion: JIMP can safely represent and manipulate typed aggregate data, process JSON through the standard library, and express recoverable failures while retaining portable verification, deterministic resource bounds, static module linking, data-defined host capabilities, and a VM free of domain-specific APIs.
+
 ## Current decisions
 
 | Topic                     | Current decision                                                                |
@@ -238,6 +301,9 @@ P5 acceptance criterion: a multi-file entry program can import project functions
 | Error contract            | Generated `jimp-error-v1` codes with human and one-line JSON CLI output          |
 | Source modules            | Acyclic relative imports and named function exports, statically linked           |
 | Standard library          | Versioned `std:` catalog with validated portable fallbacks and target-only native replacements |
+| Planned distribution      | Unified versioned CLI with explicit runtime discovery and no silent downloads       |
+| Planned aggregate model   | Must be specified bilingually before choosing representation, ownership, or syntax  |
+| Future domain APIs        | Standard-library and Host ABI capabilities, never source keywords or domain opcodes  |
 | Security boundary         | VM-level validation and capability confinement; OS/process isolation remains external |
 | Compatibility             | Legacy format 1 and portable 2.0–2.5 are not accepted; format 2.6 is pre-stable |
 

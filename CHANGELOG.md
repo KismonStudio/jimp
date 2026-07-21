@@ -91,6 +91,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Extended the implementation roadmap with P6 milestones for a unified CLI, installable runtime discovery, tested examples, cross-platform releases, conformance, and a later REPL evaluation.
+- Added a specification-first P7 roadmap for resource-bounded aggregate values, arrays, records, recoverable errors, collection/text APIs, `std:json`, and capability-gated file/network prerequisites without domain-specific VM instructions.
 - Extended the implementation roadmap with P5 milestones for module parsing, secure graph resolution, deterministic linking, module-aware debug identity, standard-library delivery, and explicit native target profiles.
 - Runtime decoding and verification now complete before VM execution begins.
 - Console effects are isolated behind a host interface and are unavailable to the bytecode decoder.
