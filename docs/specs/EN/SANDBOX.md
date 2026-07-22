@@ -25,4 +25,16 @@ These limits define the mandatory resource profile implemented by the official c
 | Execute | `MAX_ACTIVE_REGISTERS` | 262,144 | registers | Maximum virtual registers across all active frames. |
 | Execute | `REGISTER_SLOT_BYTES` | 16 | bytes | Logical memory charged for every active register, excluding string payload bytes. |
 | Execute | `MAX_RUNTIME_VALUE_BYTES` | 33,554,432 | bytes | Maximum logical bytes for active register slots and their string payloads. |
+| Execute | `MAX_HEAP_OBJECTS` | 4,096 | objects | Maximum immutable objects allocated during one execution. |
+| Verify | `MAX_HEAP_SLOTS_PER_OBJECT` | 1,024 | slots | Maximum slots in one immutable heap object. |
+| Execute | `MAX_TOTAL_HEAP_SLOTS` | 65,536 | slots | Maximum cumulative slots allocated during one execution. |
+| Execute | `HEAP_OBJECT_HEADER_BYTES` | 16 | bytes | Logical memory charged for every immutable heap object. |
+| Execute | `HEAP_SLOT_BYTES` | 16 | bytes | Logical memory charged for every heap slot, excluding string payload bytes. |
+| Execute | `MAX_HEAP_BYTES` | 4,194,304 | bytes | Maximum cumulative logical bytes allocated for heap objects, slots, and direct string payloads. |
+| Execute | `MAX_HEAP_DEPTH` | 128 | levels | Maximum immutable heap-reference nesting depth. |
+| Execute | `MAX_HEAP_EQUALITY_VISITS` | 65,536 | value pairs | Maximum value pairs examined by one structural heap equality operation. |
+| Execute | `MAX_JSON_INPUT_BYTES` | 1,048,576 | bytes | Maximum UTF-8 input accepted by one reference std:json operation. |
+| Execute | `MAX_JSON_OUTPUT_BYTES` | 1,048,576 | bytes | Maximum canonical UTF-8 output produced by one reference std:json operation. |
+| Execute | `MAX_JSON_DEPTH` | 128 | levels | Maximum array and object nesting depth accepted by reference std:json. |
+| Execute | `MAX_JSON_VALUES` | 65,536 | values | Maximum values parsed by one reference std:json operation. |
 | Execute | `MAX_EXECUTION_STEPS` | 1,000,000 | instructions | Maximum instructions executed by one program. |

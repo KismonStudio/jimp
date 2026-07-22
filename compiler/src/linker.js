@@ -10,34 +10,6 @@ function identityKey(moduleId, name) {
   return JSON.stringify([moduleId, name]);
 }
 
-function declaredExports(module) {
-  if (module.standard) {
-    return new Map(module.catalogModule.exports.map((exported) => [exported.name, {
-      name: exported.name,
-      moduleId: module.id,
-      ...standardExportSignature(exported),
-      standardDefinition: exported,
-    }]));
-  }
-  const exports = new Map();
-  for (const declaration of module.parsed.statements) {
-    if (declaration.kind !== "functionDeclaration" || !declaration.exported) continue;
-    if (exports.has(declaration.name)) {
-      throw withModuleContext(
-        new Error(`Export "${declaration.name}" is already declared at line ${declaration.line}.`),
-        module.id,
-      );
-    }
-    exports.set(declaration.name, {
-      name: declaration.name,
-      moduleId: module.id,
-      parameterTypes: declaration.parameters.map(({ type }) => type),
-      returnType: declaration.returnType,
-    });
-  }
-  return exports;
-}
-
 function visitCalls(value, visitor) {
   if (Array.isArray(value)) {
     for (const item of value) visitCalls(item, visitor);
@@ -58,7 +30,7 @@ function linkProject(graph, { targetProfile = "portable" } = {}) {
   const target = targetProfileNamed(targetProfile);
   const targetCapabilities = new Map(target.guaranteedCapabilities
     .map((capability) => [capability.symbol, capability]));
-  const exportTables = new Map(graph.modules.map((module) => [module.id, declaredExports(module)]));
+  const exportTables = new Map();
   const analyzedModules = [];
 
   for (const module of graph.modules) {
@@ -70,24 +42,61 @@ function linkProject(graph, { targetProfile = "portable" } = {}) {
         if (!exported) {
           throw withModuleContext(
             new Error(
-              `Import "${item.imported}" from "${dependency.declaration.specifier}" does not name an exported function at line ${item.line}.`,
+              `Import "${item.imported}" from "${dependency.declaration.specifier}" does not name an exported declaration at line ${item.line}.`,
             ),
             module.id,
           );
         }
         resolvedImports.push({
+          kind: exported.kind,
           specifier: dependency.declaration.specifier,
           imported: item.imported,
           local: item.local,
           moduleId: dependency.moduleId,
-          parameterTypes: exported.parameterTypes,
-          returnType: exported.returnType,
+          ...(exported.kind === "record" ? {
+            name: exported.name,
+            type: exported.type,
+            fields: exported.fields,
+            dependencies: exported.dependencies,
+          } : {
+            parameterTypes: exported.parameterTypes,
+            returnType: exported.returnType,
+            dependencies: exported.dependencies,
+          }),
         });
       }
     }
+    const program = analyzeProgram(module.parsed, { resolvedImports });
+    const moduleExports = new Map(program.exports.map((exported) => [exported.name, exported]));
+    if (module.standard) {
+      for (const catalogExport of module.catalogModule.exports) {
+        const analyzed = moduleExports.get(catalogExport.name);
+        if ((catalogExport.kind ?? "function") === "record") {
+          if (analyzed?.kind !== "record") {
+            throw withModuleContext(
+              new Error(`Standard record export "${catalogExport.name}" is missing.`),
+              module.id,
+            );
+          }
+          continue;
+        }
+        const signature = standardExportSignature(catalogExport);
+        moduleExports.set(catalogExport.name, {
+          kind: "function",
+          name: catalogExport.name,
+          moduleId: module.id,
+          parameterTypes: analyzed?.parameterTypes ?? signature.parameterTypes,
+          returnType: analyzed?.returnType ?? signature.returnType,
+          functionIndex: analyzed?.functionIndex ?? null,
+          dependencies: analyzed?.dependencies ?? [],
+          standardDefinition: catalogExport,
+        });
+      }
+    }
+    exportTables.set(module.id, moduleExports);
     analyzedModules.push({
       module,
-      program: analyzeProgram(module.parsed, { resolvedImports }),
+      program,
     });
   }
 
@@ -141,7 +150,8 @@ function linkProject(graph, { targetProfile = "portable" } = {}) {
         continue;
       }
       const analyzed = analyzedById.get(identity.moduleId)?.program;
-      const programExport = analyzed?.exports.find(({ name }) => name === identity.exportName);
+      const programExport = analyzed?.exports.find(({ name, kind }) =>
+        kind === "function" && name === identity.exportName);
       if (!programExport) {
         throw withModuleContext(new Error("Internal linker error: portable standard export is missing."), identity.moduleId);
       }
@@ -194,6 +204,7 @@ function linkProject(graph, { targetProfile = "portable" } = {}) {
   const exportedFunctionIndices = new Map();
   for (const { module, program } of analyzedModules) {
     for (const exported of program.exports) {
+      if (exported.kind !== "function") continue;
       const globalIndex = functionIndices.get(identityKey(module.id, exported.functionIndex));
       exportedFunctionIndices.set(identityKey(module.id, exported.name), globalIndex);
     }

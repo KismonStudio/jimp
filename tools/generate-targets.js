@@ -17,7 +17,7 @@ function validateDefinition() {
   const optionalCapabilities = new Map();
   for (const module of standardLibrary.modules) {
     for (const exported of module.exports) {
-      const symbol = exported.implementation.optionalNative?.capability;
+      const symbol = exported.implementation?.optionalNative?.capability;
       if (symbol) optionalCapabilities.set(symbol, {
         parameterTypes: exported.parameters.map(({ type }) => type),
         returnType: exported.returnType,

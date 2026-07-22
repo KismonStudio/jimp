@@ -6,13 +6,13 @@ JIMP publishes compatibility as separate contracts so an implementation can supp
 | --- | --- |
 | Toolchain | 0.1.0 |
 | Runtime protocol | 1 |
-| Portable bytecode | 2.6, little-endian |
+| Portable bytecode | 2.9, little-endian |
 | Host ABI catalog | 1 |
 | Standard-library major | 1 |
 | Target profiles | `portable`, `reference-native-i64` |
 | Diagnostics | `jimp-error-v1` |
 
-Compatibility is exact during the pre-stable 0.x series. The CLI rejects a runtime whose complete version/protocol handshake differs, and the runtime rejects unsupported bytecode, standard-library, capability, or target-profile metadata before execution.
+Compatibility is exact during the pre-stable 0.x series. The active runtime accepts portable bytecode `2.9` and rejects legacy format 1 plus portable formats `2.0` through `2.8`. The CLI rejects a runtime whose complete version/protocol handshake differs, and the runtime rejects unsupported bytecode, standard-library, capability, or target-profile metadata before execution.
 
 ## Running conformance
 

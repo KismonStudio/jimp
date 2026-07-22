@@ -169,3 +169,67 @@ test("analyzes loops with break and continue", () => {
     /must preserve type I64 inside a loop/,
   );
 });
+
+test("parses and analyzes typed arrays with functional updates", () => {
+  const program = analyzeProgram(parseProgram(`
+    let empty: [I64] = [];
+    let nested: [[I64]] = [empty, [1, 2]];
+    let changed = nested with [0] = [3];
+    changed[0][0];
+    changed.length;
+  `));
+
+  assert.equal(program.statements[0].type, "[I64]");
+  assert.equal(program.statements[1].type, "[[I64]]");
+  assert.equal(program.statements[2].initializer.kind, "arrayUpdateExpression");
+  assert.equal(program.statements[3].type, "I64");
+  assert.equal(program.statements[4].type, "I64");
+});
+
+test("parses and analyzes nominal records with ordered fields", () => {
+  const program = analyzeProgram(parseProgram(`
+    record Point {
+      x: I64,
+      y: I64,
+    }
+    let point = Point { y: 2, x: 1 };
+    let moved = point with { x: 4 };
+    moved.x;
+  `));
+
+  assert.equal(program.records[0].name, "Point");
+  assert.deepEqual(
+    program.statements[0].initializer.fields.map(({ name, index }) => [name, index]),
+    [["x", 0], ["y", 1]],
+  );
+  assert.equal(program.statements[1].type, program.records[0].type);
+  assert.equal(program.statements[2].type, "I64");
+});
+
+test("rejects invalid aggregate construction and mutation", () => {
+  for (const [source, diagnostic] of [
+    ["let values = [];", /requires a contextual array type/],
+    ["let values = [1, true];", /requires I64 elements/],
+    ["let values = [1];\nvalues[0] = 2;", /Unexpected token in expression/],
+    ["record Pair {\n left: I64\n right: I64\n}\nPair { left: 1 };", /missing field "right"/],
+    ["record Pair {\n left: I64\n}\nPair { left: 1, left: 2 };", /duplicated/],
+  ]) {
+    assert.throws(() => analyzeProgram(parseProgram(source)), diagnostic);
+  }
+});
+
+test("analyzes Unicode string length, indexing, slicing, and concatenation", () => {
+  const program = analyzeProgram(parseProgram(`
+    let value = "Olá";
+    value.length;
+    value[2];
+    value[0:2];
+    value + " mundo";
+  `));
+
+  assert.equal(program.statements[1].expression.memberKind, "stringLength");
+  assert.equal(program.statements[2].expression.indexKind, "string");
+  assert.equal(program.statements[3].expression.kind, "sliceExpression");
+  assert.equal(program.statements[4].expression.operationKind, "stringConcat");
+  assert(program.statements.slice(1).every(({ type }) => ["I64", "STRING"].includes(type)));
+});

@@ -20,6 +20,7 @@ export const STANDARD_LIBRARY = Object.freeze({
       },
       "exports": [
         {
+          "kind": "function",
           "name": "write",
           "parameters": [
             {
@@ -38,6 +39,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           }
         },
         {
+          "kind": "function",
           "name": "writeLine",
           "parameters": [
             {
@@ -66,6 +68,7 @@ export const STANDARD_LIBRARY = Object.freeze({
       },
       "exports": [
         {
+          "kind": "function",
           "name": "absolute",
           "parameters": [
             {
@@ -87,6 +90,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           }
         },
         {
+          "kind": "function",
           "name": "minimum",
           "parameters": [
             {
@@ -112,6 +116,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           }
         },
         {
+          "kind": "function",
           "name": "maximum",
           "parameters": [
             {
@@ -137,6 +142,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           }
         },
         {
+          "kind": "function",
           "name": "sign",
           "parameters": [
             {
@@ -158,11 +164,447 @@ export const STANDARD_LIBRARY = Object.freeze({
           }
         }
       ]
+    },
+    {
+      "specifier": "std:result",
+      "kind": "portable",
+      "source": "src/result.jimp",
+      "description": {
+        "en": "Explicit nominal result values for recoverable string-producing operations.",
+        "pt": "Valores nominais e explícitos de resultado para operações recuperáveis que produzem strings."
+      },
+      "exports": [
+        {
+          "kind": "record",
+          "name": "StringResult",
+          "fields": [
+            {
+              "name": "ok",
+              "type": "BOOL"
+            },
+            {
+              "name": "value",
+              "type": "STRING"
+            },
+            {
+              "name": "error",
+              "type": "STRING"
+            }
+          ],
+          "description": {
+            "en": "Carries an explicit success flag, string value, and deterministic error message.",
+            "pt": "Transporta um indicador explícito de sucesso, uma string e uma mensagem determinística de erro."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "stringSuccess",
+          "parameters": [
+            {
+              "name": "value",
+              "type": "STRING"
+            }
+          ],
+          "returnType": "StringResult",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/result.jimp"
+          },
+          "description": {
+            "en": "Creates a successful StringResult.",
+            "pt": "Cria um StringResult bem-sucedido."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "stringFailure",
+          "parameters": [
+            {
+              "name": "error",
+              "type": "STRING"
+            }
+          ],
+          "returnType": "StringResult",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/result.jimp"
+          },
+          "description": {
+            "en": "Creates a failed StringResult with an empty fallback value.",
+            "pt": "Cria um StringResult com falha e valor alternativo vazio."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:text",
+      "kind": "portable",
+      "source": "src/text.jimp",
+      "description": {
+        "en": "Portable Unicode-scalar text length, concatenation, indexed access, and slicing.",
+        "pt": "Comprimento, concatenação, acesso indexado e recorte portáteis por valores escalares Unicode."
+      },
+      "exports": [
+        {
+          "kind": "function",
+          "name": "length",
+          "parameters": [
+            {
+              "name": "value",
+              "type": "STRING"
+            }
+          ],
+          "returnType": "I64",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/text.jimp"
+          },
+          "description": {
+            "en": "Returns the Unicode scalar-value count.",
+            "pt": "Retorna a quantidade de valores escalares Unicode."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "concat",
+          "parameters": [
+            {
+              "name": "left",
+              "type": "STRING"
+            },
+            {
+              "name": "right",
+              "type": "STRING"
+            }
+          ],
+          "returnType": "STRING",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/text.jimp"
+          },
+          "description": {
+            "en": "Concatenates two strings.",
+            "pt": "Concatena duas strings."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "at",
+          "parameters": [
+            {
+              "name": "value",
+              "type": "STRING"
+            },
+            {
+              "name": "index",
+              "type": "I64"
+            }
+          ],
+          "returnType": "StringResult",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/text.jimp"
+          },
+          "description": {
+            "en": "Returns one Unicode scalar value or an explicit bounds error.",
+            "pt": "Retorna um valor escalar Unicode ou um erro explícito de limite."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "slice",
+          "parameters": [
+            {
+              "name": "value",
+              "type": "STRING"
+            },
+            {
+              "name": "start",
+              "type": "I64"
+            },
+            {
+              "name": "end",
+              "type": "I64"
+            }
+          ],
+          "returnType": "StringResult",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/text.jimp"
+          },
+          "description": {
+            "en": "Returns a half-open Unicode scalar range or an explicit bounds error.",
+            "pt": "Retorna um intervalo semiaberto de valores Unicode ou um erro explícito de limite."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:collections/i64",
+      "kind": "portable",
+      "source": "src/collections/i64.jimp",
+      "description": {
+        "en": "Portable search and recoverable replacement helpers for immutable I64 arrays.",
+        "pt": "Operações portáteis de busca e substituição recuperável para arrays imutáveis de I64."
+      },
+      "exports": [
+        {
+          "kind": "record",
+          "name": "I64ArrayResult",
+          "fields": [
+            {
+              "name": "ok",
+              "type": "BOOL"
+            },
+            {
+              "name": "value",
+              "type": "[I64]"
+            },
+            {
+              "name": "error",
+              "type": "STRING"
+            }
+          ],
+          "description": {
+            "en": "Carries an immutable I64 array or a recoverable error.",
+            "pt": "Transporta um array imutável de I64 ou um erro recuperável."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "contains",
+          "parameters": [
+            {
+              "name": "values",
+              "type": "[I64]"
+            },
+            {
+              "name": "expected",
+              "type": "I64"
+            }
+          ],
+          "returnType": "BOOL",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/collections/i64.jimp"
+          },
+          "description": {
+            "en": "Returns whether the array contains the expected value.",
+            "pt": "Informa se o array contém o valor esperado."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "indexOf",
+          "parameters": [
+            {
+              "name": "values",
+              "type": "[I64]"
+            },
+            {
+              "name": "expected",
+              "type": "I64"
+            }
+          ],
+          "returnType": "I64",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/collections/i64.jimp"
+          },
+          "description": {
+            "en": "Returns the first index or -1 when absent.",
+            "pt": "Retorna o primeiro índice ou -1 quando ausente."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "replace",
+          "parameters": [
+            {
+              "name": "values",
+              "type": "[I64]"
+            },
+            {
+              "name": "index",
+              "type": "I64"
+            },
+            {
+              "name": "replacement",
+              "type": "I64"
+            }
+          ],
+          "returnType": "I64ArrayResult",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/collections/i64.jimp"
+          },
+          "description": {
+            "en": "Returns an updated array or an explicit bounds error while preserving the input.",
+            "pt": "Retorna um array atualizado ou um erro explícito de limite, preservando a entrada."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:json/support",
+      "kind": "host-bridge",
+      "description": {
+        "en": "Total scalar Host ABI primitives used by the typed std:json wrapper.",
+        "pt": "Primitivas escalares totais da Host ABI usadas pelo wrapper tipado de std:json."
+      },
+      "exports": [
+        {
+          "kind": "function",
+          "name": "validate",
+          "parameters": [
+            {
+              "name": "source",
+              "type": "STRING"
+            }
+          ],
+          "returnType": "BOOL",
+          "implementation": {
+            "kind": "host",
+            "capability": "std.json.validate"
+          },
+          "description": {
+            "en": "Returns whether the input is valid and within the JSON resource limits.",
+            "pt": "Informa se a entrada é válida e respeita os limites de recursos de JSON."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "canonicalize",
+          "parameters": [
+            {
+              "name": "source",
+              "type": "STRING"
+            }
+          ],
+          "returnType": "STRING",
+          "implementation": {
+            "kind": "host",
+            "capability": "std.json.canonicalize"
+          },
+          "description": {
+            "en": "Returns deterministic compact JSON, or an empty string for invalid input.",
+            "pt": "Retorna JSON compacto e determinístico, ou uma string vazia para entrada inválida."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "diagnostic",
+          "parameters": [
+            {
+              "name": "source",
+              "type": "STRING"
+            }
+          ],
+          "returnType": "STRING",
+          "implementation": {
+            "kind": "host",
+            "capability": "std.json.diagnostic"
+          },
+          "description": {
+            "en": "Returns a deterministic validation diagnostic, or an empty string when valid.",
+            "pt": "Retorna um diagnóstico determinístico, ou uma string vazia quando a entrada é válida."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:json",
+      "kind": "portable",
+      "source": "src/json.jimp",
+      "description": {
+        "en": "Typed recoverable JSON parsing and deterministic serialization over validated documents.",
+        "pt": "Análise recuperável tipada de JSON e serialização determinística de documentos validados."
+      },
+      "exports": [
+        {
+          "kind": "record",
+          "name": "JsonDocument",
+          "fields": [
+            {
+              "name": "text",
+              "type": "STRING"
+            }
+          ],
+          "description": {
+            "en": "A JSON document represented by deterministic compact UTF-8 text.",
+            "pt": "Um documento JSON representado por texto UTF-8 compacto e determinístico."
+          }
+        },
+        {
+          "kind": "record",
+          "name": "JsonResult",
+          "fields": [
+            {
+              "name": "ok",
+              "type": "BOOL"
+            },
+            {
+              "name": "value",
+              "type": "JsonDocument"
+            },
+            {
+              "name": "error",
+              "type": "STRING"
+            }
+          ],
+          "description": {
+            "en": "Carries a validated document or a recoverable deterministic parse error.",
+            "pt": "Transporta um documento validado ou um erro de análise determinístico e recuperável."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "parse",
+          "parameters": [
+            {
+              "name": "source",
+              "type": "STRING"
+            }
+          ],
+          "returnType": "JsonResult",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/json.jimp"
+          },
+          "description": {
+            "en": "Validates and canonicalizes JSON without throwing a language-level exception.",
+            "pt": "Valida e canonicaliza JSON sem lançar uma exceção no nível da linguagem."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "stringify",
+          "parameters": [
+            {
+              "name": "document",
+              "type": "JsonDocument"
+            }
+          ],
+          "returnType": "StringResult",
+          "implementation": {
+            "kind": "portable",
+            "source": "src/json.jimp"
+          },
+          "description": {
+            "en": "Serializes a document or reports an explicit validation error.",
+            "pt": "Serializa um documento ou informa um erro explícito de validação."
+          }
+        }
+      ]
     }
   ]
 });
 
 export const STANDARD_LIBRARY_SOURCES = Object.freeze({
   "src/console.jimp": "export function writeLine(message: STRING): VOID {\n  print message;\n}\n",
-  "src/math/i64.jimp": "export function absolute(value: I64): I64 {\n  if value < 0 {\n    return -value;\n  } else {\n    return value;\n  }\n}\n\nexport function minimum(left: I64, right: I64): I64 {\n  if left <= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function maximum(left: I64, right: I64): I64 {\n  if left >= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function sign(value: I64): I64 {\n  if value < 0 {\n    return -1;\n  } else {\n    if value > 0 {\n      return 1;\n    } else {\n      return 0;\n    }\n  }\n}\n"
+  "src/math/i64.jimp": "export function absolute(value: I64): I64 {\n  if value < 0 {\n    return -value;\n  } else {\n    return value;\n  }\n}\n\nexport function minimum(left: I64, right: I64): I64 {\n  if left <= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function maximum(left: I64, right: I64): I64 {\n  if left >= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function sign(value: I64): I64 {\n  if value < 0 {\n    return -1;\n  } else {\n    if value > 0 {\n      return 1;\n    } else {\n      return 0;\n    }\n  }\n}\n",
+  "src/result.jimp": "export record StringResult {\n  ok: BOOL,\n  value: STRING,\n  error: STRING,\n}\n\nexport function stringSuccess(value: STRING): StringResult {\n  return StringResult { ok: true, value: value, error: \"\" };\n}\n\nexport function stringFailure(error: STRING): StringResult {\n  return StringResult { ok: false, value: \"\", error: error };\n}\n",
+  "src/text.jimp": "import { StringResult, stringSuccess, stringFailure } from \"std:result\";\n\nexport function length(value: STRING): I64 {\n  return value.length;\n}\n\nexport function concat(left: STRING, right: STRING): STRING {\n  return left + right;\n}\n\nexport function at(value: STRING, index: I64): StringResult {\n  if index < 0 || index >= value.length {\n    return stringFailure(\"String index is out of bounds.\");\n  }\n  return stringSuccess(value[index]);\n}\n\nexport function slice(value: STRING, start: I64, end: I64): StringResult {\n  if start < 0 || end < start || end > value.length {\n    return stringFailure(\"String slice is out of bounds.\");\n  }\n  return stringSuccess(value[start:end]);\n}\n",
+  "src/collections/i64.jimp": "export record I64ArrayResult {\n  ok: BOOL,\n  value: [I64],\n  error: STRING,\n}\n\nexport function contains(values: [I64], expected: I64): BOOL {\n  var index = 0;\n  while index < values.length {\n    if values[index] == expected {\n      return true;\n    }\n    index = index + 1;\n  }\n  return false;\n}\n\nexport function indexOf(values: [I64], expected: I64): I64 {\n  var index = 0;\n  while index < values.length {\n    if values[index] == expected {\n      return index;\n    }\n    index = index + 1;\n  }\n  return -1;\n}\n\nexport function replace(values: [I64], index: I64, replacement: I64): I64ArrayResult {\n  if index < 0 || index >= values.length {\n    return I64ArrayResult { ok: false, value: values, error: \"Array index is out of bounds.\" };\n  }\n  return I64ArrayResult { ok: true, value: values with [index] = replacement, error: \"\" };\n}\n",
+  "src/json.jimp": "import { StringResult, stringSuccess, stringFailure } from \"std:result\";\nimport { validate, canonicalize, diagnostic } from \"std:json/support\";\n\nexport record JsonDocument {\n  text: STRING,\n}\n\nexport record JsonResult {\n  ok: BOOL,\n  value: JsonDocument,\n  error: STRING,\n}\n\nexport function parse(source: STRING): JsonResult {\n  if validate(source) {\n    return JsonResult { ok: true, value: JsonDocument { text: canonicalize(source) }, error: \"\" };\n  }\n  return JsonResult { ok: false, value: JsonDocument { text: \"null\" }, error: diagnostic(source) };\n}\n\nexport function stringify(document: JsonDocument): StringResult {\n  if validate(document.text) {\n    return stringSuccess(canonicalize(document.text));\n  }\n  return stringFailure(diagnostic(document.text));\n}\n"
 });

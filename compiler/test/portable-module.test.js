@@ -52,7 +52,7 @@ test("round-trips portable constants and typed host imports", () => {
 
   assert.deepEqual(module.header, {
     major: 2,
-    minor: 6,
+    minor: 9,
     entryFunction: 0,
     sectionCount: 4,
   });
@@ -74,6 +74,189 @@ test("round-trips portable constants and typed host imports", () => {
   }]);
   assert.equal(module.functions[0].registerCount, 2);
   assert(module.code.length > 0);
+});
+
+test("verifies generic immutable heap allocation and typed access", () => {
+  const code = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+    encodeInstruction("HEAP_ALLOC", { destination: 1, value_start: 0, value_count: 1 }),
+    encodeInstruction("LOAD_CONST", { destination: 2, constant: 1 }),
+    encodeInstruction("LOAD_CONST", { destination: 3, constant: 2 }),
+    encodeInstruction("HEAP_REPLACE", { destination: 4, object: 1, index: 2, value: 3 }),
+    encodeInstruction("HEAP_EQUAL", { destination: 5, left: 1, right: 4 }),
+    encodeInstruction("HEAP_LOAD", { destination: 6, object: 4, index: 2, result_type: 2 }),
+    encodeInstruction("HEAP_LENGTH", { destination: 6, object: 4 }),
+    encodeInstruction("HALT"),
+  ]);
+  const module = decodePortableModule(encodePortableModule({
+    constants: [
+      { type: "I64", value: 7n },
+      { type: "I64", value: 0n },
+      { type: "I64", value: 8n },
+    ],
+    imports: [],
+    functions: [{
+      name: null,
+      code,
+      registerCount: 7,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  }));
+
+  assert.deepEqual(module.functions[0].instructions.map(({ name }) => name), [
+    "LOAD_CONST", "HEAP_ALLOC", "LOAD_CONST", "LOAD_CONST", "HEAP_REPLACE",
+    "HEAP_EQUAL", "HEAP_LOAD", "HEAP_LENGTH", "HALT",
+  ]);
+});
+
+test("keeps heap references outside constants and the Host ABI", () => {
+  assert.throws(
+    () => encodePortableModule({
+      constants: [{ type: "HEAP_REF", value: 0 }],
+      imports: [],
+      functions: [{
+        name: null,
+        code: encodeInstruction("HALT"),
+        registerCount: 0,
+        parameterTypes: [],
+        returnType: "VOID",
+      }],
+    }),
+    /unsupported type HEAP_REF/,
+  );
+  assert.throws(
+    () => encodePortableModule({
+      constants: [
+        { type: "STRING", value: "host" },
+        { type: "STRING", value: "leak" },
+      ],
+      imports: [{
+        namespace: 0,
+        name: 1,
+        parameterTypes: ["HEAP_REF"],
+        returnType: "VOID",
+      }],
+      functions: [{
+        name: null,
+        code: encodeInstruction("HALT"),
+        registerCount: 0,
+        parameterTypes: [],
+        returnType: "VOID",
+      }],
+    }),
+    /cannot expose VM heap references through the Host ABI/,
+  );
+});
+
+test("rejects malformed heap type tags before execution", () => {
+  const code = Buffer.concat([
+    encodeInstruction("HEAP_ALLOC", { destination: 0, value_start: 0, value_count: 0 }),
+    encodeInstruction("LOAD_CONST", { destination: 1, constant: 0 }),
+    encodeInstruction("HEAP_LOAD", { destination: 2, object: 0, index: 1, result_type: 255 }),
+    encodeInstruction("HALT"),
+  ]);
+
+  assert.throws(
+    () => decodePortableModule(encodePortableModule({
+      constants: [{ type: "I64", value: 0n }],
+      imports: [],
+      functions: [{
+        name: null,
+        code,
+        registerCount: 3,
+        parameterTypes: [],
+        returnType: "VOID",
+      }],
+    })),
+    /HEAP_LOAD result type cannot use VOID/,
+  );
+});
+
+test("rejects replacement and equality over non-heap operands", () => {
+  const createModule = (instruction) => encodePortableModule({
+    constants: [{ type: "I64", value: 0n }],
+    imports: [],
+    functions: [{
+      name: null,
+      code: Buffer.concat([
+        encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+        encodeInstruction("LOAD_CONST", { destination: 1, constant: 0 }),
+        instruction,
+        encodeInstruction("HALT"),
+      ]),
+      registerCount: 3,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+
+  assert.throws(
+    () => decodePortableModule(createModule(encodeInstruction("HEAP_REPLACE", {
+      destination: 2,
+      object: 0,
+      index: 1,
+      value: 0,
+    }))),
+    /HEAP_REPLACE object must be HEAP_REF/,
+  );
+  assert.throws(
+    () => decodePortableModule(createModule(encodeInstruction("HEAP_EQUAL", {
+      destination: 2,
+      left: 0,
+      right: 1,
+    }))),
+    /HEAP_EQUAL operands must be HEAP_REF/,
+  );
+});
+
+test("verifies generic string instructions and rejects invalid operand types", () => {
+  const validCode = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+    encodeInstruction("LOAD_CONST", { destination: 1, constant: 1 }),
+    encodeInstruction("STRING_LENGTH", { destination: 2, value: 0 }),
+    encodeInstruction("STRING_LOAD", { destination: 3, value: 0, index: 1 }),
+    encodeInstruction("STRING_SLICE", { destination: 4, value: 0, start: 1, end: 2 }),
+    encodeInstruction("STRING_CONCAT", { destination: 5, left: 0, right: 3 }),
+    encodeInstruction("HALT"),
+  ]);
+  const module = decodePortableModule(encodePortableModule({
+    constants: [
+      { type: "STRING", value: "A😀B" },
+      { type: "I64", value: 1n },
+    ],
+    imports: [],
+    functions: [{
+      name: null,
+      code: validCode,
+      registerCount: 6,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  }));
+  assert.deepEqual(module.functions[0].instructions.slice(2, 6).map(({ name }) => name), [
+    "STRING_LENGTH", "STRING_LOAD", "STRING_SLICE", "STRING_CONCAT",
+  ]);
+
+  const invalidCode = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 0 }),
+    encodeInstruction("STRING_LENGTH", { destination: 1, value: 0 }),
+    encodeInstruction("HALT"),
+  ]);
+  assert.throws(
+    () => decodePortableModule(encodePortableModule({
+      constants: [{ type: "I64", value: 0n }],
+      imports: [],
+      functions: [{
+        name: null,
+        code: invalidCode,
+        registerCount: 2,
+        parameterTypes: [],
+        returnType: "VOID",
+      }],
+    })),
+    /STRING_LENGTH value must be STRING/,
+  );
 });
 
 test("round-trips validated optional build metadata", () => {

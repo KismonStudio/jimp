@@ -8,7 +8,7 @@ test("compiles print statements into portable bytecode", () => {
   const module = decodePortableModule(bytecode);
   assert.equal(bytecode.subarray(0, 4).toString(), "JIMP");
   assert.equal(bytecode.readUInt16LE(4), 2);
-  assert.equal(bytecode.readUInt16LE(6), 6);
+  assert.equal(bytecode.readUInt16LE(6), 9);
   assert.equal(module.imports[0].symbol, "std.console.write");
   assert.deepEqual(
     module.functions[0].instructions.map(({ name }) => name),
@@ -364,4 +364,41 @@ test("lowers while, break, and continue to generic jumps", () => {
 
   assert(jumps.length >= 3);
   assert(jumps.some(({ offset, operands }) => operands.target < offset));
+});
+
+test("lowers arrays and records to generic immutable heap instructions", () => {
+  const module = decodePortableModule(compile(`
+    record Point {
+      x: I64,
+      y: I64,
+    }
+    let values: [I64] = [1, 2];
+    let changed = values with [0] = 3;
+    let point = Point { x: 1, y: 2 };
+    let moved = point with { y: 4 };
+    let equal = changed == [3, 2];
+    changed[0];
+    changed.length;
+    moved.y;
+  `));
+  const names = module.functions[0].instructions.map(({ name }) => name);
+
+  for (const name of ["HEAP_ALLOC", "HEAP_REPLACE", "HEAP_LOAD", "HEAP_LENGTH", "HEAP_EQUAL"]) {
+    assert(names.includes(name), `Expected ${name} in aggregate lowering.`);
+  }
+});
+
+test("lowers portable Unicode string operations", () => {
+  const module = decodePortableModule(compile(`
+    let value = "Olá";
+    value.length;
+    value[2];
+    value[0:2];
+    value + " mundo";
+  `));
+  const names = module.functions[0].instructions.map(({ name }) => name);
+
+  for (const name of ["STRING_LENGTH", "STRING_LOAD", "STRING_SLICE", "STRING_CONCAT"]) {
+    assert(names.includes(name), `Expected ${name} in string lowering.`);
+  }
 });

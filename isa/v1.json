@@ -3,7 +3,7 @@
   "name": "jimp-portable-vm",
   "formatVersion": {
     "major": 2,
-    "minor": 6
+    "minor": 9
   },
   "endianness": "little",
   "opcodeWidth": 1,
@@ -17,7 +17,8 @@
     { "name": "import_index", "encoding": "u32", "allowsNoRegister": false },
     { "name": "register_count", "encoding": "u16", "allowsNoRegister": false },
     { "name": "code_offset", "encoding": "u32", "allowsNoRegister": false },
-    { "name": "function_index", "encoding": "u32", "allowsNoRegister": false }
+    { "name": "function_index", "encoding": "u32", "allowsNoRegister": false },
+    { "name": "value_type_tag", "encoding": "u16", "allowsNoRegister": false }
   ],
   "valueTypes": [
     {
@@ -49,6 +50,12 @@
       "tag": 4,
       "runtimeValue": true,
       "description": { "en": "Immutable valid UTF-8 string.", "pt": "String UTF-8 válida e imutável." }
+    },
+    {
+      "name": "HEAP_REF",
+      "tag": 5,
+      "runtimeValue": true,
+      "description": { "en": "Opaque reference to an immutable, VM-owned heap object.", "pt": "Referencia opaca para um objeto imutavel pertencente a heap da VM." }
     },
     {
       "name": "VOID",
@@ -94,6 +101,124 @@
       "description": {
         "en": "Invokes a resolved, typed host import.",
         "pt": "Invoca um import do host resolvido e tipado."
+      }
+    },
+    {
+      "name": "HEAP_ALLOC",
+      "opcode": 4,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "value_start", "type": "register" },
+        { "name": "value_count", "type": "register_count" }
+      ],
+      "description": {
+        "en": "Atomically allocates an immutable heap object from consecutive registers.",
+        "pt": "Aloca atomicamente um objeto imutavel na heap a partir de registradores consecutivos."
+      }
+    },
+    {
+      "name": "HEAP_LOAD",
+      "opcode": 5,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "object", "type": "register" },
+        { "name": "index", "type": "register" },
+        { "name": "result_type", "type": "value_type_tag" }
+      ],
+      "description": {
+        "en": "Loads a typed slot from an immutable heap object using an I64 index.",
+        "pt": "Carrega um slot tipado de um objeto imutavel na heap usando um indice I64."
+      }
+    },
+    {
+      "name": "HEAP_LENGTH",
+      "opcode": 6,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "object", "type": "register" }
+      ],
+      "description": {
+        "en": "Loads an immutable heap object's slot count as I64.",
+        "pt": "Carrega como I64 a quantidade de slots de um objeto imutavel na heap."
+      }
+    },
+    {
+      "name": "HEAP_REPLACE",
+      "opcode": 7,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "object", "type": "register" },
+        { "name": "index", "type": "register" },
+        { "name": "value", "type": "register" }
+      ],
+      "description": {
+        "en": "Creates an immutable heap object with one indexed slot replaced.",
+        "pt": "Cria um objeto imutavel na heap com um slot indexado substituido."
+      }
+    },
+    {
+      "name": "HEAP_EQUAL",
+      "opcode": 8,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "left", "type": "register" },
+        { "name": "right", "type": "register" }
+      ],
+      "description": {
+        "en": "Compares two immutable heap graphs structurally without exposing reference identity.",
+        "pt": "Compara estruturalmente dois grafos imutaveis da heap sem expor identidade de referencia."
+      }
+    },
+    {
+      "name": "STRING_LENGTH",
+      "opcode": 60,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "value", "type": "register" }
+      ],
+      "description": {
+        "en": "Returns the Unicode scalar-value count of an immutable UTF-8 string as I64.",
+        "pt": "Retorna como I64 a quantidade de valores escalares Unicode de uma string UTF-8 imutavel."
+      }
+    },
+    {
+      "name": "STRING_LOAD",
+      "opcode": 61,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "value", "type": "register" },
+        { "name": "index", "type": "register" }
+      ],
+      "description": {
+        "en": "Loads one Unicode scalar value from an immutable UTF-8 string using an I64 index.",
+        "pt": "Carrega um valor escalar Unicode de uma string UTF-8 imutavel usando um indice I64."
+      }
+    },
+    {
+      "name": "STRING_SLICE",
+      "opcode": 62,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "value", "type": "register" },
+        { "name": "start", "type": "register" },
+        { "name": "end", "type": "register" }
+      ],
+      "description": {
+        "en": "Copies a half-open Unicode scalar-value range from an immutable UTF-8 string.",
+        "pt": "Copia um intervalo semiaberto de valores escalares Unicode de uma string UTF-8 imutavel."
+      }
+    },
+    {
+      "name": "STRING_CONCAT",
+      "opcode": 63,
+      "operands": [
+        { "name": "destination", "type": "register" },
+        { "name": "left", "type": "register" },
+        { "name": "right", "type": "register" }
+      ],
+      "description": {
+        "en": "Concatenates two immutable UTF-8 strings.",
+        "pt": "Concatena duas strings UTF-8 imutaveis."
       }
     },
     {

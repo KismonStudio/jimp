@@ -13,6 +13,7 @@ const {
   MAX_CONSTANT_STRING_BYTES,
   MAX_FUNCTIONS,
   MAX_HOST_IMPORTS,
+  MAX_HEAP_SLOTS_PER_OBJECT,
   MAX_MODULE_BYTES,
   MAX_PARAMETERS,
   MAX_REGISTERS_PER_FUNCTION,
@@ -168,6 +169,8 @@ function encodeImports(imports, constants) {
     const parameterTags = parameterTypes.map((type, parameterIndex) =>
       encodeValueType(type, `${context} parameter ${parameterIndex}`, { allowNull: false }));
     const returnTag = encodeValueType(hostImport.returnType, `${context} return type`, { allowVoid: true });
+    invariant(!parameterTypes.includes("HEAP_REF") && hostImport.returnType !== "HEAP_REF",
+      `${context} cannot expose VM heap references through the Host ABI.`);
     invariant((hostImport.flags ?? 0) === 0, `${context} flags must be zero.`);
     return Buffer.concat([
       encodeU32(hostImport.namespace),
@@ -481,14 +484,17 @@ function decodeImports(section, constants) {
     invariant(parameterCount <= MAX_PARAMETERS,
       `Host import ${index} parameter count exceeds the sandbox limit of ${MAX_PARAMETERS}.`);
     const returnType = decodeValueType(cursor.u8(`host import ${index} return type`), `Host import ${index} return type`, { allowVoid: true });
+    invariant(returnType !== "HEAP_REF", `Host import ${index} cannot return HEAP_REF.`);
     invariant(cursor.u8(`host import ${index} flags`) === 0, `Host import ${index} flags must be zero.`);
     const parameterTypes = [];
     for (let parameter = 0; parameter < parameterCount; parameter += 1) {
-      parameterTypes.push(decodeValueType(
+      const parameterType = decodeValueType(
         cursor.u8(`host import ${index} parameter ${parameter}`),
         `Host import ${index} parameter ${parameter}`,
         { allowNull: false },
-      ));
+      );
+      invariant(parameterType !== "HEAP_REF", `Host import ${index} parameter ${parameter} cannot use HEAP_REF.`);
+      parameterTypes.push(parameterType);
     }
     assertStringConstant(constants, namespace, `Host import ${index} namespace`);
     assertStringConstant(constants, name, `Host import ${index} name`);
@@ -757,6 +763,79 @@ function decodeFunctionInstructions(
       const destination = register(operands, "destination", name);
       const source = register(operands, "source", name);
       types[destination] = types[source];
+    } else if (name === "HEAP_ALLOC") {
+      const destination = register(operands, "destination", name);
+      invariant(operands.value_count <= MAX_HEAP_SLOTS_PER_OBJECT,
+        `HEAP_ALLOC value count exceeds the sandbox limit of ${MAX_HEAP_SLOTS_PER_OBJECT}.`);
+      if (operands.value_count === 0) {
+        invariant(operands.value_start === 0,
+          "HEAP_ALLOC with no values must use register zero as its value start.");
+      } else {
+        const valueStart = register(operands, "value_start", name);
+        invariant(valueStart + operands.value_count <= func.registerCount,
+          "HEAP_ALLOC value range is out of bounds.");
+        for (let index = 0; index < operands.value_count; index += 1) {
+          invariant(types[valueStart + index] !== "UNKNOWN",
+            `HEAP_ALLOC value ${index} must have one type on every path.`);
+        }
+      }
+      types[destination] = "HEAP_REF";
+    } else if (name === "HEAP_LOAD") {
+      const destination = register(operands, "destination", name);
+      const object = register(operands, "object", name);
+      const index = register(operands, "index", name);
+      invariant(types[object] === "HEAP_REF", "HEAP_LOAD object must be HEAP_REF.");
+      invariant(types[index] === "I64", "HEAP_LOAD index must be I64.");
+      types[destination] = decodeValueType(operands.result_type, "HEAP_LOAD result type");
+    } else if (name === "HEAP_LENGTH") {
+      const destination = register(operands, "destination", name);
+      const object = register(operands, "object", name);
+      invariant(types[object] === "HEAP_REF", "HEAP_LENGTH object must be HEAP_REF.");
+      types[destination] = "I64";
+    } else if (name === "HEAP_REPLACE") {
+      const destination = register(operands, "destination", name);
+      const object = register(operands, "object", name);
+      const index = register(operands, "index", name);
+      const value = register(operands, "value", name);
+      invariant(types[object] === "HEAP_REF", "HEAP_REPLACE object must be HEAP_REF.");
+      invariant(types[index] === "I64", "HEAP_REPLACE index must be I64.");
+      invariant(types[value] !== "UNKNOWN", "HEAP_REPLACE value must have one type on every path.");
+      types[destination] = "HEAP_REF";
+    } else if (name === "HEAP_EQUAL") {
+      const destination = register(operands, "destination", name);
+      const left = register(operands, "left", name);
+      const right = register(operands, "right", name);
+      invariant(types[left] === "HEAP_REF" && types[right] === "HEAP_REF",
+        "HEAP_EQUAL operands must be HEAP_REF.");
+      types[destination] = "BOOL";
+    } else if (name === "STRING_LENGTH") {
+      const destination = register(operands, "destination", name);
+      const value = register(operands, "value", name);
+      invariant(types[value] === "STRING", "STRING_LENGTH value must be STRING.");
+      types[destination] = "I64";
+    } else if (name === "STRING_LOAD") {
+      const destination = register(operands, "destination", name);
+      const value = register(operands, "value", name);
+      const index = register(operands, "index", name);
+      invariant(types[value] === "STRING", "STRING_LOAD value must be STRING.");
+      invariant(types[index] === "I64", "STRING_LOAD index must be I64.");
+      types[destination] = "STRING";
+    } else if (name === "STRING_SLICE") {
+      const destination = register(operands, "destination", name);
+      const value = register(operands, "value", name);
+      const start = register(operands, "start", name);
+      const end = register(operands, "end", name);
+      invariant(types[value] === "STRING", "STRING_SLICE value must be STRING.");
+      invariant(types[start] === "I64" && types[end] === "I64",
+        "STRING_SLICE bounds must be I64.");
+      types[destination] = "STRING";
+    } else if (name === "STRING_CONCAT") {
+      const destination = register(operands, "destination", name);
+      const left = register(operands, "left", name);
+      const right = register(operands, "right", name);
+      invariant(types[left] === "STRING" && types[right] === "STRING",
+        "STRING_CONCAT operands must be STRING.");
+      types[destination] = "STRING";
     } else if (name === "NEGATE" || name === "BOOL_NOT") {
       const destination = register(operands, "destination", name);
       const operand = register(operands, "operand", name);
@@ -784,6 +863,8 @@ function decodeFunctionInstructions(
         invariant(NUMERIC_TYPES.has(leftType), `${name} operands must be I64 or F64.`);
         types[destination] = leftType;
       } else if (EQUALITY_INSTRUCTIONS.has(name)) {
+        invariant(leftType !== "HEAP_REF",
+          `${name} does not expose heap-reference identity; aggregate equality is added with typed aggregates.`);
         types[destination] = "BOOL";
       } else if (ORDERED_COMPARISON_INSTRUCTIONS.has(name)) {
         invariant(NUMERIC_TYPES.has(leftType), `${name} operands must be I64 or F64.`);

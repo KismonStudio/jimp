@@ -1,0 +1,28 @@
+import { at, slice } from "std:text";
+import { contains, replace } from "std:collections/i64";
+import { parse, stringify } from "std:json";
+
+let character = at("Olá", 2);
+let segment = slice("portable", 0, 4);
+if character.ok && character.value == "á" && segment.ok && segment.value == "port" {
+  print "recoverable text operations";
+}
+
+let values = [10, 20, 30];
+let changed = replace(values, 1, 25);
+if contains(values, 20) && changed.ok && changed.value[1] == 25 && values[1] == 20 {
+  print "recoverable collection operations";
+}
+
+let parsed = parse(" {\"name\": \"JIMP\", \"values\": [1, 2]} ");
+if parsed.ok {
+  let encoded = stringify(parsed.value);
+  if encoded.ok && encoded.value == "{\"name\":\"JIMP\",\"values\":[1,2]}" {
+    print "recoverable JSON round trip";
+  }
+}
+
+let invalid = parse("{\"duplicate\":1,\"duplicate\":2}");
+if !invalid.ok {
+  print "invalid JSON was recovered";
+}

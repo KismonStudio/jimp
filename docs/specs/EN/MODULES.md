@@ -4,7 +4,7 @@
 
 ## Status
 
-This document specifies the implemented P4.1 contract for source modules, named function imports, named function exports, graph resolution, and static linking. P5.1 through P5.3 implement the complete project-module path: the CLI securely loads an acyclic source graph, validates exact function contracts, links module-qualified identities deterministically, and emits one self-contained `.jbc` 2.6 file with module-aware debug metadata.
+This document specifies the implemented source-module contract for named function and record imports and exports, graph resolution, and static linking. The CLI securely loads an acyclic source graph, validates exact scalar and aggregate contracts, links module-qualified identities deterministically, and emits one self-contained `.jbc` 2.9 file with module-aware debug metadata.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -22,9 +22,7 @@ Modules are a compiler and linker concept. They are not VM instructions, runtime
 
 This boundary allows the same linked `.jbc` to run on hosts that have no source filesystem.
 
-## Initial scope
-
-The initial module system intentionally supports only named function exports and imports.
+## Scope
 
 Supported:
 
@@ -32,7 +30,9 @@ Supported:
 - named imported bindings;
 - optional local aliases;
 - exported typed functions;
+- exported nominal record declarations and schemas;
 - private module-local functions;
+- private module-local records;
 - transitive, acyclic dependency graphs;
 - deterministic static linking into one portable module.
 
@@ -47,11 +47,11 @@ Deferred:
 - runtime module loading and multiple `.jbc` linkage;
 - source-level Host ABI declarations.
 
-An imported non-entry module must contain only imports and function declarations. Executable statements are valid only in the entry module. This rule avoids hidden initialization order and observable import-time effects.
+An imported non-entry module must contain only imports, record declarations, and function declarations. Executable statements are valid only in the entry module. This rule avoids hidden initialization order and observable import-time effects.
 
 ## Syntax
 
-Imports occupy one logical line and must appear before every function declaration or executable statement, except for blank lines and comments.
+Imports occupy one logical line and must appear before every record declaration, function declaration, or executable statement, except for blank lines and comments.
 
 ```jimp
 import { add, multiply as mul } from "./math.jimp";
@@ -60,7 +60,7 @@ let answer = add(20, 22);
 mul(answer, 2);
 ```
 
-Exports are written directly on function declarations:
+Exports are written directly on function or record declarations:
 
 ```jimp
 export function add(left: I64, right: I64): I64 {
@@ -69,6 +69,11 @@ export function add(left: I64, right: I64): I64 {
 
 function privateHelper(value: I64): I64 {
   return value;
+}
+
+export record Point {
+  x: I64,
+  y: I64,
 }
 ```
 
@@ -86,7 +91,7 @@ export let value = 1;
 
 ## Imported bindings
 
-An import item names an exported function and may declare a different local name with `as`.
+An import item names an exported function or record and may declare a different local name with `as`.
 
 ```jimp
 import { calculate as calculateTotal } from "./totals.jimp";
@@ -94,26 +99,29 @@ import { calculate as calculateTotal } from "./totals.jimp";
 
 - The name before `as` is looked up in the dependency's export table.
 - The name after `as`, or the original name when no alias exists, is the local binding.
-- Imported bindings are immutable and callable wherever a module-local function is callable.
+- An imported function binding is immutable and callable wherever a module-local function is callable.
+- An imported record binding names the same nominal type and permits record literals, annotations, field access, and exact aggregate function contracts under its local alias.
 - Imported bindings are available throughout their module, including in functions declared before the import's first call site.
 - Two imports must not create the same local binding.
-- An imported binding must not conflict with a module-local function, variable, parameter, or reserved word.
-- Importing the same exported function under distinct local aliases is valid.
-- An import item that names a missing or private function is invalid.
+- An imported binding must not conflict with a module-local function or record, variable, parameter, or reserved word.
+- Importing the same exported declaration under distinct local aliases is valid.
+- An import item that names a missing or private declaration is invalid.
 
 Calls must match the exported function's exact parameter and return contract. JIMP performs no implicit conversion at a module boundary.
 
-## Exported functions
+## Exported declarations
 
-`export` changes visibility only. It does not change function evaluation, typing, calling convention, or runtime representation.
+`export` changes visibility only. It does not change function evaluation, record identity, typing, calling convention, or runtime representation.
 
-- Only a top-level function declaration may use `export`.
-- Export names are the declared function names; export aliases are not supported.
+- Only a top-level function or record declaration may use `export`.
+- Export names are the declared function or record names; export aliases are not supported.
 - Export names must be unique in one module.
 - A private function remains callable inside its declaring module.
 - An exported function may call private functions and imported functions.
 - An exported function cannot capture entry-module variables, matching the existing isolated function-scope rule.
 - The entry module may export functions, although those exports are used only when another compilation treats that file as a dependency.
+- An exported record exposes its qualified nominal identity, ordered field names, and exact field types. Importing it does not create a structurally interchangeable local record.
+- An exported function may accept or return aggregates. Required record schemas are carried transitively for exact call and field-access analysis, but a caller must import a record declaration explicitly to name or construct that type.
 
 Export tables are compile-time metadata. They do not expose native pointers and need not remain observable in the linked runtime module.
 
@@ -192,9 +200,9 @@ For a valid graph, modules are linked in a deterministic topological order: depe
 
 Name resolution occurs within a module namespace before global function indices are allocated.
 
-1. Collect module-local function signatures and export tables.
-2. Resolve each imported binding to one exported function identity: `(portable module ID, export name)`.
-3. Analyze function bodies using local and imported bindings.
+1. Collect module-local record schemas, function signatures, and export tables.
+2. Resolve each imported binding to one exported function or record identity: `(portable module ID, export name)`.
+3. Analyze declarations and function bodies using local and imported bindings and exact nominal aggregate identities.
 4. Assign linked function indices in deterministic module and declaration order.
 5. Lower calls to numeric `CALL` operands.
 6. Emit one entry function for the entry module's executable statements.
@@ -213,7 +221,7 @@ Required failure cases include:
 - project-root or symbolic-link escape;
 - missing, unreadable, non-regular, or invalid UTF-8 source;
 - duplicate or conflicting local import binding;
-- missing or private export;
+- missing or private exported declaration;
 - duplicate export;
 - import appearing after a declaration or executable statement;
 - executable statement in a non-entry module;
@@ -229,8 +237,8 @@ This grammar extends the notation in [LANGUAGE.md](LANGUAGE.md):
 
 ```ebnf
 module              = { trivia-line }, { import-declaration, { trivia-line } },
-                      { function-declaration | exported-function-declaration
-                        | entry-statement } ;
+                      { function-declaration | record-declaration
+                        | exported-declaration | entry-statement } ;
 
 import-declaration  = whitespace, "import", required-whitespace,
                       "{", whitespace, import-list, whitespace, "}",
@@ -242,27 +250,27 @@ import-item         = identifier,
                       [ required-whitespace, "as", required-whitespace,
                         identifier ] ;
 
-exported-function-declaration = whitespace, "export", required-whitespace,
-                                function-declaration ;
+exported-declaration = whitespace, "export", required-whitespace,
+                       ( function-declaration | record-declaration ) ;
 entry-statement     = statement ;
 ```
 
-An empty import list is invalid. `entry-statement` is permitted only in the entry module. The `export` prefix and the function header must occupy the same logical line.
+An empty import list is invalid. `entry-statement` is permitted only in the entry module. The `export` prefix and the declaration header must occupy the same logical line.
 
 ## Current implementation
 
-The frontend represents imports separately from executable statements and marks visibility directly on function declarations. The project resolver supplies each imported item with its specifier, imported and local names, portable dependency module ID, exact parameter types, and return type. Analysis rejects unresolved or extraneous descriptors, invalid contracts, duplicate local bindings, conflicts with functions, variables, parameters, or reserved words, and executable statements in a non-entry module.
+The frontend represents imports separately from executable statements and marks visibility directly on function and record declarations. The project resolver supplies each imported item with its specifier, imported and local names, portable dependency module ID, declaration kind, and either an exact function signature or nominal record schema with transitive schema dependencies. Analysis rejects unresolved or extraneous descriptors, invalid contracts, duplicate local bindings, name conflicts, and executable statements in a non-entry module.
 
 An analyzed imported call retains its module-qualified function identity until the linker assigns dependency-first global indices. The CLI uses `compileProject(entryPath)` semantics and supports complete project graphs. The lower-level `compile(source)` embedding API remains intentionally single-source and rejects imports because it has no project root or filesystem authority.
 
 ## Implementation acceptance criteria
 
-P4.1 implementation is complete through P5.3:
+The module implementation is complete through P7.6:
 
 - the parser and analyzer implement this syntax and visibility model;
 - the resolver enforces canonical identity and project-root containment;
 - acyclic multi-file programs link deterministically into one `.jbc`;
-- imported calls execute through generic `CALL` instructions in the Rust runtime;
+- imported calls execute through generic `CALL` instructions and aggregate values use generic heap instructions in the Rust runtime;
 - source diagnostics distinguish module IDs and lines;
 - unit and cross-language integration tests cover valid graphs and every required failure class;
 - no module concept or source path resolver is added to the VM instruction set.

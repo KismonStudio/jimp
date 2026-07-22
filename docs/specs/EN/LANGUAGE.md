@@ -4,7 +4,7 @@
 
 ## Status
 
-This document defines the core source-language syntax and semantics implemented through P5.5, including named imports, aliases, exported functions, secure static project graphs, and catalog-backed `std:` modules. The language and portable format remain pre-stable.
+This document defines the core source-language syntax and semantics implemented through P7.6, including Unicode-scalar STRING operations, typed arrays, nominal records, recoverable result records, named imports and exports, secure static project graphs, and catalog-backed `std:` modules. The language and portable format remain pre-stable.
 
 The keywords, grammar, type rules, and examples are normative. Explanatory prose is informative unless it uses **must**, **must not**, **required**, or **invalid**.
 
@@ -24,14 +24,14 @@ Comments begin with `//` after optional leading whitespace and occupy the rest o
 Reserved words are case-sensitive:
 
 ```text
-as break continue else export false from function if import let null print return true var while
+as break continue else export false from function if import let null print record return true var while with
 ```
 
 Identifiers begin with an ASCII letter or underscore and continue with ASCII letters, digits, or underscores. They are case-sensitive.
 
 ## Types and literals
 
-The value types are `NULL`, `BOOL`, `I64`, `F64`, and `STRING`. `VOID` is permitted only as a function return type and never denotes a runtime value.
+The scalar value types are `NULL`, `BOOL`, `I64`, `F64`, and `STRING`. An array type is written `[T]`; its element type cannot be `NULL` or `VOID`. A record type is the name of a visible nominal `record` declaration. Aggregate types may be nested. `VOID` is permitted only as a function return type and never denotes a runtime value.
 
 - Strings use double quotes and support `\\`, `\"`, `\n`, `\r`, and `\t`.
 - Integers use base-ten digits with an optional leading minus sign and must fit signed `i64`.
@@ -46,11 +46,12 @@ Both declaration forms require an initializer:
 
 ```jimp
 let immutableValue = 42;
-var mutableValue = immutableValue + 1;
+var mutableValue: I64 = immutableValue + 1;
 mutableValue = mutableValue * 2;
 ```
 
 - `let` creates an immutable variable; `var` creates a mutable variable.
+- Either form may include an optional exact `: Type` annotation before `=`. Empty array literals require such a contextual type or another exact aggregate context.
 - Names must be declared before use and may not be duplicated in one scope.
 - Nested blocks may shadow outer variables.
 - A mutable variable's current type is tracked in source order.
@@ -58,28 +59,47 @@ mutableValue = mutableValue * 2;
 - An outer variable assigned in a loop must preserve the type it had when the loop was entered.
 - Variables declared inside a block are unavailable after the block closes.
 - A variable name may not conflict with a function name.
+- A variable or parameter name may not conflict with a visible record name.
 
 ## Expressions
 
-Primary expressions are literals, variable references, function calls, and parenthesized expressions. Function arguments and binary operands are evaluated from left to right.
+Primary expressions are scalar and array literals, record literals, variable references, function calls, and parenthesized expressions. Postfix indexed access, STRING slicing, `.length`, and record-field access bind more tightly than unary operators. Functional updates with `with` have the lowest precedence. Function arguments, literal members, update operands, and binary operands are evaluated from left to right.
 
 From highest to lowest precedence:
 
 | Precedence | Operators | Operand types | Result |
 | ---: | --- | --- | --- |
-| 8 | function call | exact declared parameter types | declared return type |
+| 9 | call, indexed access, STRING slice, `.length`, field access | exact call contract; array or STRING plus `I64`; STRING plus two `I64`; array, STRING, or record | declared return, element or one-scalar STRING, STRING, `I64`, or field type |
+| 8 | array and record literals | exact homogeneous/contextual elements or complete declared fields | aggregate type |
 | 7 | unary `-` | `I64` or `F64` | operand type |
 | 7 | unary `!` | `BOOL` | `BOOL` |
 | 6 | `*`, `/`, `%` | same numeric type | operand type |
-| 5 | `+`, `-` | same numeric type | operand type |
+| 5 | `+`, `-` | same numeric type; `+` also accepts two STRING values | operand type |
 | 4 | `<`, `<=`, `>`, `>=` | same numeric type | `BOOL` |
 | 3 | `==`, `!=` | same non-`VOID` value type | `BOOL` |
 | 2 | `&&` | `BOOL`, `BOOL` | `BOOL` |
 | 1 | `||` | `BOOL`, `BOOL` | `BOOL` |
+| 0 | `with [index] = value`, `with { field: value, ... }` | exact array element or record field types | base aggregate type |
 
 `&&` and `||` short-circuit. Checked `I64` arithmetic reports overflow and zero-divisor errors at runtime. `F64` operations follow IEEE 754 binary64 behavior.
 
 A `VOID` call may be used as an expression statement, but its result cannot initialize or assign a variable, be printed, returned as a value, or participate in another expression.
+
+Arrays and records have immutable value semantics. Indexed or field assignment is invalid; a `with` expression returns a new value and leaves the original unchanged. `==` and `!=` compare same-typed aggregates structurally. See [AGGREGATES.md](AGGREGATES.md) for exact initialization, nominal identity, module visibility, bounds failures, and sandbox behavior.
+
+STRING length, indexing, and slicing count Unicode scalar values rather than UTF-8 bytes. `value[index]` returns a one-scalar STRING, `value[start:end]` uses a half-open range, and STRING `+` concatenates. Invalid direct indices and ranges fail execution deterministically; the portable [`std:text`](STDLIB.md) helpers expose recoverable alternatives described by [RESULTS.md](RESULTS.md). Typed JSON document processing is provided by [`std:json`](JSON.md), not by source syntax.
+
+Records are declared at module scope, with one typed field per logical line:
+
+```jimp
+record Point {
+  x: I64,
+  y: I64,
+}
+
+let origin = Point { y: 0, x: 0 }
+let moved = origin with { x: 4 }
+```
 
 ## Functions
 
@@ -93,8 +113,8 @@ function add(left: I64, right: I64): I64 {
 let answer = add(20, 22);
 ```
 
-- Parameter types may be `BOOL`, `I64`, `F64`, or `STRING`.
-- Return types may additionally be `NULL` or `VOID`.
+- Parameter types may be `BOOL`, `I64`, `F64`, `STRING`, or any visible aggregate type.
+- Return types may additionally be `NULL`, `VOID`, or any visible aggregate type.
 - Parameter names are unique within a function and parameters are immutable.
 - Calls must provide the exact number and types of arguments; no conversion is performed.
 - Calls may precede declarations, and direct or mutual recursion is valid.
@@ -143,7 +163,14 @@ The grammar uses ISO/IEC 14977-style EBNF. Lexical whitespace may surround opera
 
 ```ebnf
 program          = { trivia-line | top-level-item } ;
-top-level-item   = statement | function-declaration ;
+top-level-item   = statement | function-declaration | record-declaration ;
+
+record-declaration = record-header, line-ending,
+                     { trivia-line | record-field-line }, close-brace-line ;
+record-header    = whitespace, "record", required-whitespace,
+                   identifier, whitespace, "{" ;
+record-field-line = whitespace, identifier, whitespace, ":", whitespace,
+                    value-type, [ whitespace, "," ], whitespace, line-boundary ;
 
 function-declaration = function-header, line-ending, block-body,
                        close-brace-line ;
@@ -153,8 +180,10 @@ function-header  = whitespace, "function", required-whitespace,
                    ":", whitespace, return-type, whitespace, "{" ;
 parameter-list   = parameter, { whitespace, ",", whitespace, parameter } ;
 parameter        = identifier, whitespace, ":", whitespace, parameter-type ;
-parameter-type   = "BOOL" | "I64" | "F64" | "STRING" ;
+parameter-type   = "BOOL" | "I64" | "F64" | "STRING" | aggregate-type ;
 return-type      = "NULL" | parameter-type | "VOID" ;
+value-type       = "NULL" | "BOOL" | "I64" | "F64" | "STRING" | aggregate-type ;
+aggregate-type   = identifier | "[", whitespace, parameter-type, whitespace, "]" ;
 
 statement        = statement-line | if-statement | while-statement ;
 statement-line   = whitespace, simple-statement, whitespace, line-boundary ;
@@ -182,7 +211,8 @@ block-body       = { trivia-line | statement } ;
 
 print-statement  = "print", required-whitespace, expression, [ ";" ] ;
 variable-declaration = ( "let" | "var" ), required-whitespace,
-                       identifier, whitespace, "=", whitespace,
+                       identifier, [ whitespace, ":", whitespace, value-type ],
+                       whitespace, "=", whitespace,
                        expression, [ ";" ] ;
 variable-assignment = identifier, whitespace, "=", whitespace,
                       expression, [ ";" ] ;
@@ -191,7 +221,13 @@ break-statement  = "break", [ ";" ] ;
 continue-statement = "continue", [ ";" ] ;
 expression-statement = expression, [ ";" ] ;
 
-expression       = logical-or-expression ;
+expression       = update-expression ;
+update-expression = logical-or-expression,
+                    { required-whitespace, "with", required-whitespace,
+                      ( "[", whitespace, expression, whitespace, "]",
+                        whitespace, "=", whitespace, expression
+                      | "{", whitespace, field-initializer-list,
+                        whitespace, "}" ) } ;
 logical-or-expression = logical-and-expression,
                         { whitespace, "||", whitespace, logical-and-expression } ;
 logical-and-expression = equality-expression,
@@ -207,12 +243,28 @@ additive-expression = multiplicative-expression,
 multiplicative-expression = unary-expression,
                             { whitespace, ( "*" | "/" | "%" ),
                               whitespace, unary-expression } ;
-unary-expression = { ( "!" | "-" ), whitespace }, primary-expression ;
-primary-expression = value-literal | function-call | identifier
+unary-expression = { ( "!" | "-" ), whitespace }, postfix-expression ;
+postfix-expression = primary-expression,
+                     { whitespace,
+                       ( "[", whitespace, expression,
+                         [ whitespace, ":", whitespace, expression ],
+                         whitespace, "]"
+                       | ".", identifier ) } ;
+primary-expression = value-literal | array-literal | record-literal
+                     | function-call | identifier
                      | "(", whitespace, expression, whitespace, ")" ;
 function-call    = identifier, whitespace, "(", whitespace,
                    [ argument-list ], whitespace, ")" ;
 argument-list    = expression, { whitespace, ",", whitespace, expression } ;
+array-literal    = "[", whitespace,
+                   [ expression, { whitespace, ",", whitespace, expression },
+                     [ whitespace, "," ] ], whitespace, "]" ;
+record-literal   = identifier, whitespace, "{", whitespace,
+                   field-initializer-list, whitespace, "}" ;
+field-initializer-list = [ field-initializer,
+                           { whitespace, ",", whitespace, field-initializer },
+                           [ whitespace, "," ] ] ;
+field-initializer = identifier, whitespace, ":", whitespace, expression ;
 
 value-literal    = string-literal | integer-literal | float-literal
                    | "true" | "false" | "null" ;
@@ -257,10 +309,13 @@ var changing = 1;
 while true {
   changing = false;
 }
+let unknown = [];
+let mixed = [1, "two"];
+origin.x = 4;
 ```
 
 The compiler must report the logical source line containing invalid syntax or semantics and must not emit bytecode.
 
 ## Out of scope
 
-The current compiler does not yet implement standalone blocks, `else if`, closures, first-class functions, default or variadic parameters, heap values, or exceptions. Static project graphs, imported calls, the initial [standard library](STDLIB.md), and explicit [target profiles](TARGETS.md) are implemented.
+The current compiler does not yet implement standalone blocks, `else if`, closures, first-class functions, default or variadic parameters, in-place aggregate mutation, exceptions, or file/network authority. Typed [arrays and records](AGGREGATES.md), recoverable [result records](RESULTS.md), the portable [heap](HEAP.md), static project graphs, imported calls, the current [standard library](STDLIB.md), and explicit [target profiles](TARGETS.md) are implemented. Future external I/O follows the separately reviewed [capability design](IO_CAPABILITIES.md).

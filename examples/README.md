@@ -13,6 +13,8 @@ Run the basic examples:
 jimp run examples/hello.jimp
 jimp run examples/functions.jimp
 jimp run examples/loops.jimp
+jimp run examples/aggregates.jimp
+jimp run examples/data.jimp
 jimp run examples/modules/main.jimp --project-root=examples/modules
 ```
 

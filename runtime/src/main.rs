@@ -13,6 +13,7 @@ use crate::{
 mod error;
 mod generated;
 mod host;
+mod json;
 mod portable;
 mod vm;
 
@@ -102,7 +103,12 @@ fn prepare_module<H: Host>(
             ));
         }
     }
-    let mut allowed_symbols = vec!["std.console.write"];
+    let mut allowed_symbols = vec![
+        "std.console.write",
+        "std.json.validate",
+        "std.json.canonicalize",
+        "std.json.diagnostic",
+    ];
     allowed_symbols.extend(
         target
             .guaranteed_capabilities

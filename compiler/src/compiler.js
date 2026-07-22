@@ -1,5 +1,5 @@
 import { analyzeProgram } from "./analyzer.js";
-import { NO_REGISTER } from "./generated/isa.js";
+import { NO_REGISTER, VALUE_TYPES } from "./generated/isa.js";
 import { SANDBOX_LIMITS } from "./generated/sandbox.js";
 import { parseProgram } from "./parser.js";
 import { encodeInstruction, encodePortableModule } from "./portable/module.js";
@@ -18,6 +18,14 @@ const BINARY_INSTRUCTIONS = Object.freeze({
   ">": "GREATER_THAN",
   ">=": "GREATER_EQUAL",
 });
+
+function isAggregateType(type) {
+  return type.startsWith("[") || type.startsWith("RECORD<");
+}
+
+function vmType(type) {
+  return isAggregateType(type) ? "HEAP_REF" : type;
+}
 
 class RegisterAllocator {
   constructor(variableCount) {
@@ -257,6 +265,95 @@ export function emitAnalyzedProgram(program, {
         return destination;
       }
       if (expression.kind === "callExpression") return compileCall(expression);
+      if (expression.kind === "arrayLiteral" || expression.kind === "recordLiteral") {
+        const values = expression.kind === "arrayLiteral"
+          ? expression.elements.map(compileExpression)
+          : expression.fields.map(({ expression: field }) => compileExpression(field));
+        const valueStart = registers.allocateRange(values.length);
+        for (let index = 0; index < values.length; index += 1) {
+          assembler.emit("MOVE", { destination: valueStart + index, source: values[index] });
+          registers.release(values[index]);
+        }
+        const destination = registers.allocate();
+        assembler.emit("HEAP_ALLOC", {
+          destination,
+          value_start: valueStart,
+          value_count: values.length,
+        });
+        registers.releaseRange(valueStart, values.length);
+        return destination;
+      }
+      if (expression.kind === "indexExpression") {
+        const object = compileExpression(expression.object);
+        const index = compileExpression(expression.index);
+        if (expression.indexKind === "string") {
+          assembler.emit("STRING_LOAD", { destination: object, value: object, index });
+        } else {
+          assembler.emit("HEAP_LOAD", {
+            destination: object,
+            object,
+            index,
+            result_type: VALUE_TYPES[vmType(expression.type)],
+          });
+        }
+        registers.release(index);
+        return object;
+      }
+      if (expression.kind === "sliceExpression") {
+        const object = compileExpression(expression.object);
+        const start = compileExpression(expression.start);
+        const end = compileExpression(expression.end);
+        assembler.emit("STRING_SLICE", { destination: object, value: object, start, end });
+        registers.release(start);
+        registers.release(end);
+        return object;
+      }
+      if (expression.kind === "memberExpression") {
+        const object = compileExpression(expression.object);
+        if (expression.memberKind === "arrayLength") {
+          assembler.emit("HEAP_LENGTH", { destination: object, object });
+          return object;
+        }
+        if (expression.memberKind === "stringLength") {
+          assembler.emit("STRING_LENGTH", { destination: object, value: object });
+          return object;
+        }
+        const constant = constants.length;
+        constants.push({ type: "I64", value: BigInt(expression.field.index) });
+        const index = registers.allocate();
+        assembler.emit("LOAD_CONST", { destination: index, constant });
+        assembler.emit("HEAP_LOAD", {
+          destination: object,
+          object,
+          index,
+          result_type: VALUE_TYPES[vmType(expression.type)],
+        });
+        registers.release(index);
+        return object;
+      }
+      if (expression.kind === "arrayUpdateExpression") {
+        const object = compileExpression(expression.object);
+        const index = compileExpression(expression.index);
+        const value = compileExpression(expression.value);
+        assembler.emit("HEAP_REPLACE", { destination: object, object, index, value });
+        registers.release(index);
+        registers.release(value);
+        return object;
+      }
+      if (expression.kind === "recordUpdateExpression") {
+        const object = compileExpression(expression.object);
+        for (const field of expression.fields) {
+          const constant = constants.length;
+          constants.push({ type: "I64", value: BigInt(field.index) });
+          const index = registers.allocate();
+          assembler.emit("LOAD_CONST", { destination: index, constant });
+          const value = compileExpression(field.expression);
+          assembler.emit("HEAP_REPLACE", { destination: object, object, index, value });
+          registers.release(index);
+          registers.release(value);
+        }
+        return object;
+      }
       if (expression.kind === "unaryExpression") {
         const operand = compileExpression(expression.operand);
         assembler.emit(UNARY_INSTRUCTIONS[expression.operator], {
@@ -280,6 +377,19 @@ export function emitAnalyzedProgram(program, {
       }
       const left = compileExpression(expression.left);
       const right = compileExpression(expression.right);
+      if (expression.operationKind === "stringConcat") {
+        assembler.emit("STRING_CONCAT", { destination: left, left, right });
+        registers.release(right);
+        return left;
+      }
+      if (isAggregateType(expression.left.type)) {
+        assembler.emit("HEAP_EQUAL", { destination: left, left, right });
+        if (expression.operator === "!=") {
+          assembler.emit("BOOL_NOT", { destination: left, operand: left });
+        }
+        registers.release(right);
+        return left;
+      }
       assembler.emit(BINARY_INSTRUCTIONS[expression.operator], {
         destination: left,
         left,
@@ -424,8 +534,8 @@ export function emitAnalyzedProgram(program, {
       code: compiled.code,
       debug: compiled.debug,
       registerCount: compiled.registerCount,
-      parameterTypes: func.parameterTypes,
-      returnType: func.returnType,
+      parameterTypes: func.parameterTypes.map(vmType),
+      returnType: vmType(func.returnType),
     });
   }
 

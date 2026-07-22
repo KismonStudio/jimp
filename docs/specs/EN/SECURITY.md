@@ -4,7 +4,7 @@
 
 ## Status
 
-This document specifies the P4.4 security contract for the official Rust runtime, portable `.jbc` format `2.6`, and `jimp-reference-sandbox` profile v1. It consolidates the guarantees defined by [VM.md](VM.md), the generated limits in [SANDBOX.md](SANDBOX.md), the capability model used by [STDLIB.md](STDLIB.md), and the failure classes in [ERRORS.md](ERRORS.md).
+This document specifies the security contract for the official Rust runtime, portable `.jbc` format `2.9`, and `jimp-reference-sandbox` profile v1. It consolidates the guarantees defined by [VM.md](VM.md), [HEAP.md](HEAP.md), the generated limits in [SANDBOX.md](SANDBOX.md), the capability model used by [STDLIB.md](STDLIB.md), and the failure classes in [ERRORS.md](ERRORS.md).
 
 The terms **must**, **must not**, **required**, and **invalid** are normative. This is a VM-level sandbox contract, not a claim of operating-system or process isolation.
 
@@ -30,7 +30,7 @@ The sandbox is designed to reject or contain these module-controlled behaviors:
 - type confusion across branches, calls, returns, and host invocations;
 - unreachable or improperly terminated instruction streams;
 - excessive verifier work within the dimensions represented by the reference profile;
-- unbounded VM loops, recursion, active registers, or logical value memory;
+- unbounded VM loops, recursion, active registers, logical value memory, heap allocation, nesting, structural-equality work, or JSON parsing/canonicalization work;
 - requests for unavailable, denied, or signature-incompatible host capabilities;
 - attempts to influence execution through non-authoritative debug metadata;
 - attempts to embed native addresses or invoke arbitrary FFI targets.
@@ -59,12 +59,12 @@ No module-requested host effect may occur before step 6. A decode, verification,
 | Structural integrity | Section bounds, overlap, cardinality, encodings, indices, and instruction boundaries are checked before execution. | Decode |
 | Control-flow and type integrity | Reachability, jump targets, path-sensitive register types, calls, returns, and host-call contracts are verified for every function. | Verify |
 | Capability confinement | Every import must be exactly allowed, available, and signature-compatible before any instruction executes. | Resolve |
-| VM resource bounds | Load, verification, call-frame, register, logical-value-memory, and execution-step limits use the selected sandbox profile. | Decode, verify, or execute |
+| VM resource bounds | Load, verification, call-frame, register, logical-value-memory, heap, aggregate-depth, structural-equality-work, JSON input/output/depth/value, and execution-step limits use the selected sandbox profile. | Decode, verify, or execute |
 | Host argument integrity | Runtime values are checked against the resolved import signature immediately before invocation. | Execute |
 | Debug non-authority | Debug metadata may enrich diagnostics but cannot change decoding, control flow, values, authorization, or execution. | Decode or verify |
 | Native-pointer exclusion | Bytecode contains symbolic imports and numeric VM operands, never trusted native addresses. | Decode and resolve |
 
-A valid module can directly manipulate only its scalar values, virtual registers, control flow, and call frames. It has no implicit access to files, networking, environment variables, clocks, randomness, processes, or native memory. Such access exists only when an explicitly authorized host capability provides it.
+A valid module can directly manipulate only scalar values, opaque immutable heap values, virtual registers, control flow, and call frames. Heap handles cannot enter constants or Host ABI signatures and are never native addresses. The module has no implicit access to files, networking, environment variables, clocks, randomness, processes, or native memory. Such access exists only when an explicitly authorized host capability provides it.
 
 ## Capability security
 
@@ -77,7 +77,7 @@ A host import is a request, not permission. Before execution, the resolver requi
 
 Resolution replaces symbolic lookup with an implementation-defined numeric handle. Bytecode cannot choose that handle or use it as a native address. The host validates the runtime argument values again when the handle is invoked.
 
-The official standalone runtime currently authorizes only `std.console.write(STRING): VOID`. This permits writing supplied UTF-8 data to standard output and grants no filesystem, network, environment, clock, randomness, process, or arbitrary FFI authority.
+The official standalone runtime authorizes `std.console.write(STRING): VOID` and the pure, total `std.json.validate`, `std.json.canonicalize`, and `std.json.diagnostic` support capabilities. JSON support accepts only STRING values, applies the generated JSON limits, and performs no external I/O. These capabilities grant no filesystem, network, environment, clock, randomness, process, or arbitrary FFI authority.
 
 Capability policy must be deny-by-default. Adding a capability expands the sandbox's authority and requires a separate review of its input validation, authorization, resource quotas, determinism, and side effects.
 
@@ -87,11 +87,11 @@ The normative numeric ceilings live in [`sandbox/v1.json`](../../../sandbox/v1.j
 
 - **Load limits** bound encoded input structures before large dependent allocations are accepted.
 - **Verification limits** bound decoded instruction volume, per-function register state, and path-sensitive type-analysis state.
-- **Execution limits** bound interpreted instructions, simultaneous frames, active registers, and logical value bytes.
+- **Execution limits** bound interpreted work, simultaneous frames, active registers, logical value bytes, cumulative heap objects, slots, logical heap bytes, aggregate depth, structural-equality visits, and JSON input, output, nesting, and value count.
 
-Logical value memory charges each active register slot plus the UTF-8 payload of strings stored in active registers. Constant-pool strings are charged by separate load limits. The accounting is deterministic and portable, but it is not a measurement of allocator overhead or process resident memory.
+Logical value memory charges each active register slot plus the UTF-8 payload of strings stored in active registers. Heap accounting separately charges every immutable object, slot, direct string payload, and derived nesting depth cumulatively; functional replacement cannot reclaim the original charge during execution. Constant-pool strings are charged by separate load limits. The accounting is deterministic and portable, but it is not a measurement of allocator overhead or process resident memory.
 
-One VM instruction incurs one execution step regardless of host work. Time spent, memory allocated, bytes written, or external requests performed inside an authorized host capability are not charged by the VM budgets. Hosts must apply their own quotas and cancellation rules.
+Every VM instruction incurs one base execution step. `HEAP_EQUAL` additionally charges one step per value pair examined and is bounded by `MAX_HEAP_EQUALITY_VISITS`. The reference JSON support is bounded independently by `MAX_JSON_INPUT_BYTES`, `MAX_JSON_OUTPUT_BYTES`, `MAX_JSON_DEPTH`, and `MAX_JSON_VALUES`. Other time spent, memory allocated, bytes written, or external requests performed inside an authorized host capability are not charged by VM budgets. Hosts must apply their own quotas and cancellation rules.
 
 ## Failure and effect semantics
 
@@ -134,6 +134,6 @@ The host remains responsible for the safety of its native implementation even wh
 
 For untrusted modules, operators should run the runtime with the smallest capability allowlist and least-privileged operating-system identity, constrain process memory and CPU externally, bound output and I/O, isolate sensitive files and credentials, and validate a module with `--validate-portable` before scheduling execution. Validation is useful for admission control but does not authorize later execution under a different host policy.
 
-## P4.4 acceptance
+## Current acceptance
 
-P4.4 is complete when the trust boundary, threat model, pre-effect validation order, capability rules, deterministic VM budgets, failure semantics, host obligations, and explicit non-guarantees are documented consistently in English and Portuguese and linked from the VM and generated sandbox references. This task changes no opcode, bytecode section, capability permission, or runtime authority.
+The contract is current through P7.7: the trust boundary, threat model, pre-effect validation order, capability rules, deterministic scalar, aggregate, and JSON budgets, failure semantics, host obligations, and explicit non-guarantees are documented consistently in English and Portuguese. P7.7 specifies future file/network capability prerequisites in [IO_CAPABILITIES.md](IO_CAPABILITIES.md) but grants no such authority.

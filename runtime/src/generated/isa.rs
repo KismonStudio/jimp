@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 pub(crate) const FORMAT_MAJOR: u16 = 2;
-pub(crate) const FORMAT_MINOR: u16 = 6;
+pub(crate) const FORMAT_MINOR: u16 = 9;
 pub(crate) const NO_REGISTER: u16 = 65535;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -13,6 +13,7 @@ pub(crate) enum ValueType {
     I64 = 2,
     F64 = 3,
     String = 4,
+    HeapRef = 5,
     Void = 255,
 }
 
@@ -26,6 +27,7 @@ impl TryFrom<u8> for ValueType {
             2 => Ok(Self::I64),
             3 => Ok(Self::F64),
             4 => Ok(Self::String),
+            5 => Ok(Self::HeapRef),
             255 => Ok(Self::Void),
             _ => Err(()),
         }
@@ -38,6 +40,15 @@ pub(crate) enum Opcode {
     LoadConst = 1,
     Move = 2,
     HostCall = 3,
+    HeapAlloc = 4,
+    HeapLoad = 5,
+    HeapLength = 6,
+    HeapReplace = 7,
+    HeapEqual = 8,
+    StringLength = 60,
+    StringLoad = 61,
+    StringSlice = 62,
+    StringConcat = 63,
     Negate = 10,
     Add = 11,
     Subtract = 12,
@@ -69,6 +80,15 @@ impl TryFrom<u8> for Opcode {
             1 => Ok(Self::LoadConst),
             2 => Ok(Self::Move),
             3 => Ok(Self::HostCall),
+            4 => Ok(Self::HeapAlloc),
+            5 => Ok(Self::HeapLoad),
+            6 => Ok(Self::HeapLength),
+            7 => Ok(Self::HeapReplace),
+            8 => Ok(Self::HeapEqual),
+            60 => Ok(Self::StringLength),
+            61 => Ok(Self::StringLoad),
+            62 => Ok(Self::StringSlice),
+            63 => Ok(Self::StringConcat),
             10 => Ok(Self::Negate),
             11 => Ok(Self::Add),
             12 => Ok(Self::Subtract),
@@ -110,6 +130,7 @@ pub(crate) enum OperandKind {
     RegisterCount,
     CodeOffset,
     FunctionIndex,
+    ValueTypeTag,
 }
 
 pub(crate) struct OperandTypeDefinition {
@@ -173,6 +194,12 @@ pub(crate) const OPERAND_TYPES: &[OperandTypeDefinition] = &[
         encoding: OperandEncoding::U32,
         allows_no_register: false,
     },
+    OperandTypeDefinition {
+        name: "value_type_tag",
+        kind: OperandKind::ValueTypeTag,
+        encoding: OperandEncoding::U16,
+        allows_no_register: false,
+    },
 ];
 
 pub(crate) const INSTRUCTIONS: &[InstructionDefinition] = &[
@@ -223,6 +250,172 @@ pub(crate) const INSTRUCTIONS: &[InstructionDefinition] = &[
             OperandDefinition {
                 name: "result",
                 kind: OperandKind::OptionalRegister,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "HEAP_ALLOC",
+        opcode: Opcode::HeapAlloc,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "value_start",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "value_count",
+                kind: OperandKind::RegisterCount,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "HEAP_LOAD",
+        opcode: Opcode::HeapLoad,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "object",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "index",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "result_type",
+                kind: OperandKind::ValueTypeTag,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "HEAP_LENGTH",
+        opcode: Opcode::HeapLength,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "object",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "HEAP_REPLACE",
+        opcode: Opcode::HeapReplace,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "object",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "index",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "value",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "HEAP_EQUAL",
+        opcode: Opcode::HeapEqual,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "STRING_LENGTH",
+        opcode: Opcode::StringLength,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "value",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "STRING_LOAD",
+        opcode: Opcode::StringLoad,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "value",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "index",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "STRING_SLICE",
+        opcode: Opcode::StringSlice,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "value",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "start",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "end",
+                kind: OperandKind::Register,
+            },
+        ],
+    },
+    InstructionDefinition {
+        name: "STRING_CONCAT",
+        opcode: Opcode::StringConcat,
+        operands: &[
+            OperandDefinition {
+                name: "destination",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "left",
+                kind: OperandKind::Register,
+            },
+            OperandDefinition {
+                name: "right",
+                kind: OperandKind::Register,
             },
         ],
     },

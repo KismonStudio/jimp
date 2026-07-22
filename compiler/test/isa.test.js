@@ -9,12 +9,22 @@ import {
 } from "../src/generated/isa.js";
 
 test("exposes the portable VM v1 metadata", () => {
-  assert.deepEqual(FORMAT_VERSION, { major: 2, minor: 6 });
+  assert.deepEqual(FORMAT_VERSION, { major: 2, minor: 9 });
   assert.equal(NO_REGISTER, 0xffff);
   assert.equal(VALUE_TYPES.STRING, 4);
+  assert.equal(VALUE_TYPES.HEAP_REF, 5);
   assert.equal(VALUE_TYPES.VOID, 255);
   assert.equal(OPCODES.LOAD_CONST, 1);
   assert.equal(OPCODES.HOST_CALL, 3);
+  assert.equal(OPCODES.HEAP_ALLOC, 4);
+  assert.equal(OPCODES.HEAP_LOAD, 5);
+  assert.equal(OPCODES.HEAP_LENGTH, 6);
+  assert.equal(OPCODES.HEAP_REPLACE, 7);
+  assert.equal(OPCODES.HEAP_EQUAL, 8);
+  assert.equal(OPCODES.STRING_LENGTH, 60);
+  assert.equal(OPCODES.STRING_LOAD, 61);
+  assert.equal(OPCODES.STRING_SLICE, 62);
+  assert.equal(OPCODES.STRING_CONCAT, 63);
   assert.equal(OPCODES.ADD, 11);
   assert.equal(OPCODES.EQUAL, 20);
   assert.equal(OPCODES.BOOL_OR, 32);
@@ -24,6 +34,29 @@ test("exposes the portable VM v1 metadata", () => {
   assert.equal(OPCODES.CALL, 50);
   assert.equal(OPCODES.RETURN, 51);
   assert.equal(OPCODES.HALT, 255);
+});
+
+test("defines generic immutable heap operands", () => {
+  const allocate = INSTRUCTIONS.find(({ name }) => name === "HEAP_ALLOC");
+  const load = INSTRUCTIONS.find(({ name }) => name === "HEAP_LOAD");
+  const replace = INSTRUCTIONS.find(({ name }) => name === "HEAP_REPLACE");
+  const equal = INSTRUCTIONS.find(({ name }) => name === "HEAP_EQUAL");
+
+  assert.deepEqual(allocate.operands.map(({ name }) => name), [
+    "destination", "value_start", "value_count",
+  ]);
+  assert.deepEqual(load.operands.map(({ name, type }) => [name, type]), [
+    ["destination", "register"],
+    ["object", "register"],
+    ["index", "register"],
+    ["result_type", "value_type_tag"],
+  ]);
+  assert.deepEqual(replace.operands.map(({ name }) => name), [
+    "destination", "object", "index", "value",
+  ]);
+  assert.deepEqual(equal.operands.map(({ name }) => name), [
+    "destination", "left", "right",
+  ]);
 });
 
 test("defines control-flow operands", () => {

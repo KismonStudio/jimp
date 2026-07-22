@@ -1,0 +1,17 @@
+record Point {
+  x: I64,
+  y: I64,
+}
+
+let values: [I64] = [10, 20, 30];
+let changed = values with [1] = 25;
+let origin = Point { x: 0, y: 0 };
+let moved = origin with { x: 4, y: 2 };
+
+if values[1] == 20 && changed[1] == 25 && changed.length == 3 {
+  print "array value semantics";
+}
+
+if origin == Point { x: 0, y: 0 } && moved == Point { x: 4, y: 2 } {
+  print "record value semantics";
+}

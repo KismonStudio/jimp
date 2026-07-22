@@ -1,0 +1,23 @@
+import { StringResult, stringSuccess, stringFailure } from "std:result";
+
+export function length(value: STRING): I64 {
+  return value.length;
+}
+
+export function concat(left: STRING, right: STRING): STRING {
+  return left + right;
+}
+
+export function at(value: STRING, index: I64): StringResult {
+  if index < 0 || index >= value.length {
+    return stringFailure("String index is out of bounds.");
+  }
+  return stringSuccess(value[index]);
+}
+
+export function slice(value: STRING, start: I64, end: I64): StringResult {
+  if start < 0 || end < start || end > value.length {
+    return stringFailure("String slice is out of bounds.");
+  }
+  return stringSuccess(value[start:end]);
+}

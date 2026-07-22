@@ -4,9 +4,9 @@
 
 ## Status
 
-This document specifies the implemented portable JIMP VM v1 through P5.5. Format `2.6` includes independently validated optional debug and reproducible-build metadata while preserving the resource-bounded execution and standard-error foundation.
+This document specifies the implemented portable JIMP VM v1 through P7.6. Format `2.9` preserves the independently verified, resource-bounded immutable heap and adds generic Unicode-scalar STRING length, indexed load, half-open slice, and concatenation operations.
 
-The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.6` remains pre-stable while the language and VM continue to evolve.
+The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.9` remains pre-stable while the language and VM continue to evolve.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -19,7 +19,7 @@ The terms **must**, **must not**, **required**, and **invalid** are normative.
 - The complete module is verified before execution or host effects.
 - The same valid module has the same structural meaning on every compatible runtime.
 
-## Scalar value model
+## Value model
 
 Portable VM v1 defines the following scalar value types:
 
@@ -30,13 +30,14 @@ Portable VM v1 defines the following scalar value types:
 | `i64` | `2` | Signed 64-bit two's-complement integer |
 | `f64` | `3` | IEEE 754 binary64 bit pattern |
 | `string` | `4` | Immutable sequence of valid UTF-8 bytes |
+| `heap_ref` | `5` | Opaque reference to an immutable VM-owned heap object |
 | `void` | `255` | Signature-only marker for no return value |
 
 `void` is not a runtime value and must not be stored in a register or constant-pool entry. There are no implicit conversions between value types.
 
 The runtime's in-memory representation is implementation-defined. The observable values and their bytecode encodings are portable. All multibyte numbers in `.jbc` are little-endian.
 
-Strings are immutable. A string loaded from the constant pool may be shared by an implementation, but its observable content must not change. Collection, object, binary-buffer, and function-reference values are outside the initial v1 foundation.
+Strings are immutable. A string loaded from the constant pool may be shared by an implementation, but its observable content must not change. `heap_ref` follows the separate [portable heap contract](HEAP.md); collection and record meanings remain compiler-level contracts. Binary-buffer and function-reference values remain deferred.
 
 ## Virtual registers
 
@@ -62,7 +63,7 @@ A portable `.jbc` file consists of a header, a section directory, and section pa
 | --- | --- | --- |
 | magic | 4 bytes | ASCII `JIMP` |
 | format major | `u16` | `2` |
-| format minor | `u16` | `6` |
+| format minor | `u16` | `9` |
 | module flags | `u32` | `0`; other bits are reserved |
 | entry function | `u32` | Index in the function section |
 | section count | `u16` | Number of directory entries |
@@ -160,7 +161,7 @@ The code section contains function instruction streams. Every instruction starts
 
 ## Debug section
 
-The debug section maps encoded instruction offsets back to portable source-module IDs and source lines. Its directory entry must set the `OPTIONAL` flag. A valid format `2.6` module may omit this section without changing execution semantics.
+The debug section maps encoded instruction offsets back to portable source-module IDs and source lines. Its directory entry must set the `OPTIONAL` flag. A valid format `2.9` module may omit this section without changing execution semantics.
 
 | Field | Encoding | Meaning |
 | --- | --- | --- |
@@ -205,6 +206,10 @@ The initial generic instruction set has these semantic operations. Numeric opcod
 ### Typed binary arithmetic
 
 `ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, and `REMAINDER` use `destination, left, right` register operands. Both inputs must have the same numeric type, and the result has that type. `I64` arithmetic is checked; overflow, division by zero, and remainder by zero are runtime errors. `I64` division truncates toward zero. `F64` arithmetic follows IEEE 754 binary64 behavior.
+
+### Generic STRING operations
+
+`STRING_LENGTH destination, value` accepts STRING and produces I64. `STRING_LOAD destination, value, index` accepts STRING and I64 and produces a one-scalar STRING. `STRING_SLICE destination, value, start, end` accepts STRING and two I64 bounds and produces a half-open STRING range. These operations count Unicode scalar values, never UTF-8 bytes; negative or out-of-range indices and invalid ranges fail deterministically. `STRING_CONCAT destination, left, right` accepts two STRING values and produces STRING. All results remain subject to logical value-memory and execution-step budgets.
 
 ### Typed comparisons
 
@@ -307,7 +312,7 @@ Instruction decoding first establishes opcode, operand, register, index, and jum
 
 The official limits are generated from [`sandbox/v1.json`](../../../sandbox/v1.json) and published in the [JIMP Reference Sandbox v1](SANDBOX.md). The JavaScript encoder and verifier and the Rust decoder and verifier enforce the same load and verification limits. The CLI checks the encoded file size before reading it.
 
-Execution tracks steps, call frames, active registers, and logical runtime value memory. Logical value memory equals `16` bytes for every active register plus the UTF-8 payload bytes of every string stored in those registers. Constant-pool storage is bounded separately. A frame is charged before its register array or argument strings are copied. Replacing or returning a value updates the charge, and host arguments are borrowed without a VM-side copy.
+Execution tracks steps, call frames, active registers, logical runtime value memory, and cumulative logical heap memory. Logical register value memory equals `16` bytes for every active register plus the UTF-8 payload bytes of every string stored in those registers. Heap objects, slots, direct string payloads, and depth follow [HEAP.md](HEAP.md) and are bounded separately. A frame is charged before its register array or argument strings are copied. Replacing or returning a value updates the register charge, and host arguments are borrowed without a VM-side copy.
 
 Exceeding a load or verification limit rejects the complete module before execution and host effects. Exceeding an execution limit terminates the program with an error; completed effects from earlier authorized host calls are not rolled back. Logical limits are portable and deterministic but do not describe implementation allocator overhead or total process RSS.
 
@@ -317,4 +322,4 @@ The module must never contain trusted native addresses. Debug and build metadata
 
 ## Deferred decisions
 
-The following items require later specifications: heap values, collections, binary buffers, asynchronous host operations, exceptions, runtime module imports and exports, column-level debug locations, and AOT/JIT execution.
+The following items require later specifications or implementation: binary buffers, asynchronous host operations, recoverable errors, runtime module imports and exports, column-level debug locations, and AOT/JIT execution.

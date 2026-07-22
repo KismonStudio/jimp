@@ -4,7 +4,7 @@
 
 ## Status
 
-Este documento especifica o contrato implementado do P4.1 para módulos-fonte, imports nomeados de funções, exports nomeados de funções, resolução do grafo e vinculação estática. O P5.1 ao P5.3 implementam o caminho completo de módulos do projeto: a CLI carrega com segurança um grafo acíclico de fontes, valida contratos exatos de funções, vincula identidades qualificadas por módulo deterministicamente e gera um único arquivo `.jbc` 2.6 autocontido com metadados de debug cientes do módulo.
+Este documento especifica o contrato implementado de módulos-fonte para imports e exports nomeados de funções e records, resolução do grafo e vinculação estática. A CLI carrega com segurança um grafo acíclico de fontes, valida contratos escalares e agregados exatos, vincula identidades qualificadas por módulo deterministicamente e gera um único arquivo `.jbc` 2.9 autocontido com metadados de debug cientes do módulo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -22,9 +22,7 @@ Módulos são um conceito do compilador e do vinculador. Eles não são instruç
 
 Esse limite permite executar o mesmo `.jbc` vinculado em hosts que não possuem um sistema de arquivos com os fontes.
 
-## Escopo inicial
-
-O sistema inicial de módulos oferece intencionalmente apenas imports e exports nomeados de funções.
+## Escopo
 
 Compatível:
 
@@ -32,7 +30,9 @@ Compatível:
 - bindings importados por nome;
 - aliases locais opcionais;
 - funções tipadas exportadas;
+- declarações e esquemas de records nominais exportados;
 - funções privadas locais ao módulo;
+- records privados locais ao módulo;
 - grafos transitivos e acíclicos de dependências;
 - vinculação estática determinística em um único módulo portátil.
 
@@ -47,11 +47,11 @@ Adiado:
 - carregamento de módulos em runtime e vinculação de vários `.jbc`;
 - declarações da Host ABI no código-fonte.
 
-Um módulo importado que não seja o de entrada deve conter somente imports e declarações de funções. Instruções executáveis são válidas apenas no módulo de entrada. Essa regra evita ordem oculta de inicialização e efeitos observáveis durante o import.
+Um módulo importado que não seja o de entrada deve conter somente imports e declarações de records e funções. Instruções executáveis são válidas apenas no módulo de entrada. Essa regra evita ordem oculta de inicialização e efeitos observáveis durante o import.
 
 ## Sintaxe
 
-Imports ocupam uma linha lógica e devem aparecer antes de toda declaração de função ou instrução executável, exceto linhas vazias e comentários.
+Imports ocupam uma linha lógica e devem aparecer antes de toda declaração de record, função ou instrução executável, exceto linhas vazias e comentários.
 
 ```jimp
 import { add, multiply as mul } from "./math.jimp";
@@ -60,7 +60,7 @@ let answer = add(20, 22);
 mul(answer, 2);
 ```
 
-Exports são escritos diretamente nas declarações de funções:
+Exports são escritos diretamente nas declarações de funções ou records:
 
 ```jimp
 export function add(left: I64, right: I64): I64 {
@@ -69,6 +69,11 @@ export function add(left: I64, right: I64): I64 {
 
 function privateHelper(value: I64): I64 {
   return value;
+}
+
+export record Point {
+  x: I64,
+  y: I64,
 }
 ```
 
@@ -86,7 +91,7 @@ export let value = 1;
 
 ## Bindings importados
 
-Um item de import nomeia uma função exportada e pode declarar outro nome local com `as`.
+Um item de import nomeia uma função ou record exportado e pode declarar outro nome local com `as`.
 
 ```jimp
 import { calculate as calculateTotal } from "./totals.jimp";
@@ -94,26 +99,29 @@ import { calculate as calculateTotal } from "./totals.jimp";
 
 - O nome anterior a `as` é procurado na tabela de exports da dependência.
 - O nome posterior a `as`, ou o nome original quando não há alias, é o binding local.
-- Bindings importados são imutáveis e podem ser chamados em qualquer local onde uma função local ao módulo possa ser chamada.
+- Um binding de função importado é imutável e pode ser chamado onde uma função local ao módulo poderia ser chamada.
+- Um binding de record importado nomeia o mesmo tipo nominal e permite literais, anotações, acesso a campos e contratos agregados exatos sob seu alias local.
 - Bindings importados ficam disponíveis em todo o módulo, inclusive em funções declaradas antes do primeiro local de chamada do import.
 - Dois imports não devem criar o mesmo binding local.
-- Um binding importado não deve conflitar com função local ao módulo, variável, parâmetro ou palavra reservada.
-- Importar a mesma função exportada com aliases locais distintos é válido.
-- Um item de import que nomeie uma função ausente ou privada é inválido.
+- Um binding importado não deve conflitar com função ou record local ao módulo, variável, parâmetro ou palavra reservada.
+- Importar a mesma declaração exportada com aliases locais distintos é válido.
+- Um item de import que nomeie uma declaração ausente ou privada é inválido.
 
 As chamadas devem corresponder exatamente ao contrato de parâmetros e retorno da função exportada. JIMP não realiza conversão implícita na fronteira entre módulos.
 
-## Funções exportadas
+## Declarações exportadas
 
-`export` altera somente a visibilidade. Ele não altera a avaliação, tipagem, convenção de chamada nem representação da função em runtime.
+`export` altera somente a visibilidade. Ele não altera a avaliação, identidade do record, tipagem, convenção de chamada nem representação em runtime.
 
-- Somente uma declaração de função no escopo superior pode usar `export`.
-- Os nomes dos exports são os nomes declarados das funções; aliases de export não são permitidos.
+- Somente uma declaração de função ou record no escopo superior pode usar `export`.
+- Os nomes dos exports são os nomes declarados das funções ou records; aliases de export não são permitidos.
 - Os nomes dos exports devem ser únicos em um módulo.
 - Uma função privada permanece acessível dentro do módulo que a declarou.
 - Uma função exportada pode chamar funções privadas e importadas.
 - Uma função exportada não pode capturar variáveis do módulo de entrada, seguindo a regra existente de escopo isolado das funções.
 - O módulo de entrada pode exportar funções, embora esses exports sejam usados somente quando outra compilação tratar o arquivo como dependência.
+- Um record exportado expõe sua identidade nominal qualificada, os nomes ordenados dos campos e os tipos exatos. Importá-lo não cria um record local estruturalmente intercambiável.
+- Uma função exportada pode aceitar ou retornar agregados. Os esquemas necessários são transportados transitivamente para análise exata de chamadas e campos, mas o consumidor deve importar explicitamente o record para nomear ou construir esse tipo.
 
 As tabelas de exports são metadados de compilação. Elas não expõem ponteiros nativos e não precisam permanecer observáveis no módulo vinculado em runtime.
 
@@ -192,9 +200,9 @@ Para um grafo válido, os módulos são vinculados em ordem topológica determin
 
 A resolução de nomes ocorre em um namespace de módulo antes da alocação dos índices globais de funções.
 
-1. Coletar assinaturas das funções locais e tabelas de exports.
-2. Resolver cada binding importado para uma identidade de função exportada: `(ID portátil do módulo, nome do export)`.
-3. Analisar corpos de funções usando bindings locais e importados.
+1. Coletar esquemas de records locais, assinaturas de funções e tabelas de exports.
+2. Resolver cada binding importado para uma identidade de função ou record exportado: `(ID portátil do módulo, nome do export)`.
+3. Analisar declarações e corpos usando bindings locais e importados e identidades nominais exatas.
 4. Atribuir índices vinculados de funções na ordem determinística dos módulos e declarações.
 5. Reduzir chamadas a operandos numéricos de `CALL`.
 6. Emitir uma função de entrada para as instruções executáveis do módulo de entrada.
@@ -213,7 +221,7 @@ Casos obrigatórios de falha incluem:
 - escape da raiz do projeto ou por link simbólico;
 - fonte ausente, ilegível, não regular ou com UTF-8 inválido;
 - binding local de import duplicado ou conflitante;
-- export ausente ou privado;
+- declaração exportada ausente ou privada;
 - export duplicado;
 - import posterior a uma declaração ou instrução executável;
 - instrução executável em módulo que não seja o de entrada;
@@ -229,8 +237,8 @@ Esta gramática estende a notação de [LANGUAGE.md](LANGUAGE.md):
 
 ```ebnf
 module              = { trivia-line }, { import-declaration, { trivia-line } },
-                      { function-declaration | exported-function-declaration
-                        | entry-statement } ;
+                      { function-declaration | record-declaration
+                        | exported-declaration | entry-statement } ;
 
 import-declaration  = whitespace, "import", required-whitespace,
                       "{", whitespace, import-list, whitespace, "}",
@@ -242,27 +250,27 @@ import-item         = identifier,
                       [ required-whitespace, "as", required-whitespace,
                         identifier ] ;
 
-exported-function-declaration = whitespace, "export", required-whitespace,
-                                function-declaration ;
+exported-declaration = whitespace, "export", required-whitespace,
+                       ( function-declaration | record-declaration ) ;
 entry-statement     = statement ;
 ```
 
-Uma lista vazia de imports é inválida. `entry-statement` é permitido somente no módulo de entrada. O prefixo `export` e o cabeçalho da função devem ocupar a mesma linha lógica.
+Uma lista vazia de imports é inválida. `entry-statement` é permitido somente no módulo de entrada. O prefixo `export` e o cabeçalho da declaração devem ocupar a mesma linha lógica.
 
 ## Implementação atual
 
-O frontend representa imports separadamente das instruções executáveis e marca a visibilidade diretamente nas declarações de funções. O resolvedor do projeto fornece para cada item importado seu especificador, nomes importado e local, ID portátil do módulo de dependência, tipos exatos dos parâmetros e tipo de retorno. A análise rejeita descritores não resolvidos ou excedentes, contratos inválidos, bindings locais duplicados, conflitos com funções, variáveis, parâmetros ou palavras reservadas e instruções executáveis em um módulo que não seja o de entrada.
+O frontend representa imports separadamente das instruções executáveis e marca a visibilidade diretamente nas declarações de funções e records. O resolvedor fornece cada item com especificador, nomes importado e local, ID portátil do módulo, tipo da declaração e uma assinatura exata de função ou um esquema nominal de record com dependências transitivas. A análise rejeita descritores não resolvidos ou excedentes, contratos inválidos, bindings duplicados, conflitos de nomes e instruções executáveis fora do módulo de entrada.
 
 Uma chamada importada analisada mantém sua identidade de função qualificada por módulo até o vinculador atribuir índices globais com dependências primeiro. A CLI usa a semântica de `compileProject(entryPath)` e aceita grafos completos de projetos. A API de baixo nível `compile(source)` permanece intencionalmente restrita a um único fonte e rejeita imports porque não possui raiz de projeto nem autoridade sobre o sistema de arquivos.
 
 ## Critérios de aceitação da implementação
 
-A implementação do P4.1 está concluída até o P5.3:
+A implementação de módulos está concluída até o P7.6:
 
 - o parser e o analisador implementarem essa sintaxe e esse modelo de visibilidade;
 - o resolvedor aplicar identidade canônica e contenção na raiz do projeto;
 - programas acíclicos com vários arquivos forem vinculados deterministicamente em um `.jbc`;
-- chamadas importadas forem executadas por instruções genéricas `CALL` no runtime Rust;
+- chamadas importadas forem executadas por instruções genéricas `CALL`, e valores agregados usarem instruções genéricas de heap no runtime Rust;
 - diagnósticos de fonte distinguirem IDs de módulos e linhas;
 - testes unitários e de integração entre linguagens cobrirem grafos válidos e todas as classes obrigatórias de falhas;
 - nenhum conceito de módulo nem resolvedor de caminhos de fonte for adicionado ao conjunto de instruções da VM.

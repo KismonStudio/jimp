@@ -18,6 +18,7 @@
       },
       "exports": [
         {
+          "kind": "function",
           "name": "write",
           "parameters": [
             { "name": "message", "type": "STRING" }
@@ -33,6 +34,7 @@
           }
         },
         {
+          "kind": "function",
           "name": "writeLine",
           "parameters": [
             { "name": "message", "type": "STRING" }
@@ -58,6 +60,7 @@
       },
       "exports": [
         {
+          "kind": "function",
           "name": "absolute",
           "parameters": [
             { "name": "value", "type": "I64" }
@@ -76,6 +79,7 @@
           }
         },
         {
+          "kind": "function",
           "name": "minimum",
           "parameters": [
             { "name": "left", "type": "I64" },
@@ -95,6 +99,7 @@
           }
         },
         {
+          "kind": "function",
           "name": "maximum",
           "parameters": [
             { "name": "left", "type": "I64" },
@@ -114,6 +119,7 @@
           }
         },
         {
+          "kind": "function",
           "name": "sign",
           "parameters": [
             { "name": "value", "type": "I64" }
@@ -129,6 +135,282 @@
           "description": {
             "en": "Returns -1 for negative values, 0 for zero, and 1 for positive values.",
             "pt": "Retorna -1 para valores negativos, 0 para zero e 1 para valores positivos."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:result",
+      "kind": "portable",
+      "source": "src/result.jimp",
+      "description": {
+        "en": "Explicit nominal result values for recoverable string-producing operations.",
+        "pt": "Valores nominais e explícitos de resultado para operações recuperáveis que produzem strings."
+      },
+      "exports": [
+        {
+          "kind": "record",
+          "name": "StringResult",
+          "fields": [
+            { "name": "ok", "type": "BOOL" },
+            { "name": "value", "type": "STRING" },
+            { "name": "error", "type": "STRING" }
+          ],
+          "description": {
+            "en": "Carries an explicit success flag, string value, and deterministic error message.",
+            "pt": "Transporta um indicador explícito de sucesso, uma string e uma mensagem determinística de erro."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "stringSuccess",
+          "parameters": [{ "name": "value", "type": "STRING" }],
+          "returnType": "StringResult",
+          "implementation": { "kind": "portable", "source": "src/result.jimp" },
+          "description": {
+            "en": "Creates a successful StringResult.",
+            "pt": "Cria um StringResult bem-sucedido."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "stringFailure",
+          "parameters": [{ "name": "error", "type": "STRING" }],
+          "returnType": "StringResult",
+          "implementation": { "kind": "portable", "source": "src/result.jimp" },
+          "description": {
+            "en": "Creates a failed StringResult with an empty fallback value.",
+            "pt": "Cria um StringResult com falha e valor alternativo vazio."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:text",
+      "kind": "portable",
+      "source": "src/text.jimp",
+      "description": {
+        "en": "Portable Unicode-scalar text length, concatenation, indexed access, and slicing.",
+        "pt": "Comprimento, concatenação, acesso indexado e recorte portáteis por valores escalares Unicode."
+      },
+      "exports": [
+        {
+          "kind": "function",
+          "name": "length",
+          "parameters": [{ "name": "value", "type": "STRING" }],
+          "returnType": "I64",
+          "implementation": { "kind": "portable", "source": "src/text.jimp" },
+          "description": {
+            "en": "Returns the Unicode scalar-value count.",
+            "pt": "Retorna a quantidade de valores escalares Unicode."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "concat",
+          "parameters": [
+            { "name": "left", "type": "STRING" },
+            { "name": "right", "type": "STRING" }
+          ],
+          "returnType": "STRING",
+          "implementation": { "kind": "portable", "source": "src/text.jimp" },
+          "description": {
+            "en": "Concatenates two strings.",
+            "pt": "Concatena duas strings."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "at",
+          "parameters": [
+            { "name": "value", "type": "STRING" },
+            { "name": "index", "type": "I64" }
+          ],
+          "returnType": "StringResult",
+          "implementation": { "kind": "portable", "source": "src/text.jimp" },
+          "description": {
+            "en": "Returns one Unicode scalar value or an explicit bounds error.",
+            "pt": "Retorna um valor escalar Unicode ou um erro explícito de limite."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "slice",
+          "parameters": [
+            { "name": "value", "type": "STRING" },
+            { "name": "start", "type": "I64" },
+            { "name": "end", "type": "I64" }
+          ],
+          "returnType": "StringResult",
+          "implementation": { "kind": "portable", "source": "src/text.jimp" },
+          "description": {
+            "en": "Returns a half-open Unicode scalar range or an explicit bounds error.",
+            "pt": "Retorna um intervalo semiaberto de valores Unicode ou um erro explícito de limite."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:collections/i64",
+      "kind": "portable",
+      "source": "src/collections/i64.jimp",
+      "description": {
+        "en": "Portable search and recoverable replacement helpers for immutable I64 arrays.",
+        "pt": "Operações portáteis de busca e substituição recuperável para arrays imutáveis de I64."
+      },
+      "exports": [
+        {
+          "kind": "record",
+          "name": "I64ArrayResult",
+          "fields": [
+            { "name": "ok", "type": "BOOL" },
+            { "name": "value", "type": "[I64]" },
+            { "name": "error", "type": "STRING" }
+          ],
+          "description": {
+            "en": "Carries an immutable I64 array or a recoverable error.",
+            "pt": "Transporta um array imutável de I64 ou um erro recuperável."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "contains",
+          "parameters": [
+            { "name": "values", "type": "[I64]" },
+            { "name": "expected", "type": "I64" }
+          ],
+          "returnType": "BOOL",
+          "implementation": { "kind": "portable", "source": "src/collections/i64.jimp" },
+          "description": {
+            "en": "Returns whether the array contains the expected value.",
+            "pt": "Informa se o array contém o valor esperado."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "indexOf",
+          "parameters": [
+            { "name": "values", "type": "[I64]" },
+            { "name": "expected", "type": "I64" }
+          ],
+          "returnType": "I64",
+          "implementation": { "kind": "portable", "source": "src/collections/i64.jimp" },
+          "description": {
+            "en": "Returns the first index or -1 when absent.",
+            "pt": "Retorna o primeiro índice ou -1 quando ausente."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "replace",
+          "parameters": [
+            { "name": "values", "type": "[I64]" },
+            { "name": "index", "type": "I64" },
+            { "name": "replacement", "type": "I64" }
+          ],
+          "returnType": "I64ArrayResult",
+          "implementation": { "kind": "portable", "source": "src/collections/i64.jimp" },
+          "description": {
+            "en": "Returns an updated array or an explicit bounds error while preserving the input.",
+            "pt": "Retorna um array atualizado ou um erro explícito de limite, preservando a entrada."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:json/support",
+      "kind": "host-bridge",
+      "description": {
+        "en": "Total scalar Host ABI primitives used by the typed std:json wrapper.",
+        "pt": "Primitivas escalares totais da Host ABI usadas pelo wrapper tipado de std:json."
+      },
+      "exports": [
+        {
+          "kind": "function",
+          "name": "validate",
+          "parameters": [{ "name": "source", "type": "STRING" }],
+          "returnType": "BOOL",
+          "implementation": { "kind": "host", "capability": "std.json.validate" },
+          "description": {
+            "en": "Returns whether the input is valid and within the JSON resource limits.",
+            "pt": "Informa se a entrada é válida e respeita os limites de recursos de JSON."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "canonicalize",
+          "parameters": [{ "name": "source", "type": "STRING" }],
+          "returnType": "STRING",
+          "implementation": { "kind": "host", "capability": "std.json.canonicalize" },
+          "description": {
+            "en": "Returns deterministic compact JSON, or an empty string for invalid input.",
+            "pt": "Retorna JSON compacto e determinístico, ou uma string vazia para entrada inválida."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "diagnostic",
+          "parameters": [{ "name": "source", "type": "STRING" }],
+          "returnType": "STRING",
+          "implementation": { "kind": "host", "capability": "std.json.diagnostic" },
+          "description": {
+            "en": "Returns a deterministic validation diagnostic, or an empty string when valid.",
+            "pt": "Retorna um diagnóstico determinístico, ou uma string vazia quando a entrada é válida."
+          }
+        }
+      ]
+    },
+    {
+      "specifier": "std:json",
+      "kind": "portable",
+      "source": "src/json.jimp",
+      "description": {
+        "en": "Typed recoverable JSON parsing and deterministic serialization over validated documents.",
+        "pt": "Análise recuperável tipada de JSON e serialização determinística de documentos validados."
+      },
+      "exports": [
+        {
+          "kind": "record",
+          "name": "JsonDocument",
+          "fields": [{ "name": "text", "type": "STRING" }],
+          "description": {
+            "en": "A JSON document represented by deterministic compact UTF-8 text.",
+            "pt": "Um documento JSON representado por texto UTF-8 compacto e determinístico."
+          }
+        },
+        {
+          "kind": "record",
+          "name": "JsonResult",
+          "fields": [
+            { "name": "ok", "type": "BOOL" },
+            { "name": "value", "type": "JsonDocument" },
+            { "name": "error", "type": "STRING" }
+          ],
+          "description": {
+            "en": "Carries a validated document or a recoverable deterministic parse error.",
+            "pt": "Transporta um documento validado ou um erro de análise determinístico e recuperável."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "parse",
+          "parameters": [{ "name": "source", "type": "STRING" }],
+          "returnType": "JsonResult",
+          "implementation": { "kind": "portable", "source": "src/json.jimp" },
+          "description": {
+            "en": "Validates and canonicalizes JSON without throwing a language-level exception.",
+            "pt": "Valida e canonicaliza JSON sem lançar uma exceção no nível da linguagem."
+          }
+        },
+        {
+          "kind": "function",
+          "name": "stringify",
+          "parameters": [{ "name": "document", "type": "JsonDocument" }],
+          "returnType": "StringResult",
+          "implementation": { "kind": "portable", "source": "src/json.jimp" },
+          "description": {
+            "en": "Serializes a document or reports an explicit validation error.",
+            "pt": "Serializa um documento ou informa um erro explícito de validação."
           }
         }
       ]

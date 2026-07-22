@@ -4,7 +4,7 @@
   "compatibility": {
     "toolchain": "0.1.0",
     "runtimeProtocol": 1,
-    "bytecode": "2.6",
+    "bytecode": "2.9",
     "standardLibraryMajor": 1,
     "hostAbi": 1,
     "targetProfiles": ["portable", "reference-native-i64"],

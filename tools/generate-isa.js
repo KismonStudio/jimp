@@ -66,11 +66,13 @@ function validateDefinition(definition) {
     }
   }
 
-  for (const requiredType of ["NULL", "BOOL", "I64", "F64", "STRING", "VOID"]) {
+  for (const requiredType of ["NULL", "BOOL", "I64", "F64", "STRING", "HEAP_REF", "VOID"]) {
     invariant(definition.valueTypes.some(({ name }) => name === requiredType), `missing ${requiredType} value type`);
   }
   for (const requiredInstruction of [
-    "LOAD_CONST", "MOVE", "HOST_CALL",
+    "LOAD_CONST", "MOVE", "HOST_CALL", "HEAP_ALLOC", "HEAP_LOAD", "HEAP_LENGTH",
+    "HEAP_REPLACE", "HEAP_EQUAL", "STRING_LENGTH", "STRING_LOAD", "STRING_SLICE",
+    "STRING_CONCAT",
     "NEGATE", "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "REMAINDER",
     "EQUAL", "NOT_EQUAL", "LESS_THAN", "LESS_EQUAL", "GREATER_THAN", "GREATER_EQUAL",
     "BOOL_NOT", "BOOL_AND", "BOOL_OR",

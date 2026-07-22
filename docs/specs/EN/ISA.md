@@ -4,7 +4,7 @@
 
 > This file is generated from [`isa/v1.json`](../../../isa/v1.json). Do not edit it manually.
 
-- Format version: `2.6`
+- Format version: `2.9`
 - Byte order: `little-endian`
 - Opcode width: `1 byte`
 - `NO_REGISTER`: `65535` (`0xffff`)
@@ -18,6 +18,7 @@
 | `2` | `I64` | yes | Signed 64-bit two's-complement integer. |
 | `3` | `F64` | yes | IEEE 754 binary64 value. |
 | `4` | `STRING` | yes | Immutable valid UTF-8 string. |
+| `5` | `HEAP_REF` | yes | Opaque reference to an immutable, VM-owned heap object. |
 | `255` | `VOID` | no | Signature-only marker for no return value. |
 
 ## Instructions
@@ -27,6 +28,15 @@
 | `1` | `LOAD_CONST` | `destination: register (u16)`<br>`constant: constant_index (u32)` | Loads an immutable constant into a virtual register. |
 | `2` | `MOVE` | `destination: register (u16)`<br>`source: register (u16)` | Copies a value between virtual registers. |
 | `3` | `HOST_CALL` | `import: import_index (u32)`<br>`argument_start: register (u16)`<br>`argument_count: register_count (u16)`<br>`result: optional_register (u16)` | Invokes a resolved, typed host import. |
+| `4` | `HEAP_ALLOC` | `destination: register (u16)`<br>`value_start: register (u16)`<br>`value_count: register_count (u16)` | Atomically allocates an immutable heap object from consecutive registers. |
+| `5` | `HEAP_LOAD` | `destination: register (u16)`<br>`object: register (u16)`<br>`index: register (u16)`<br>`result_type: value_type_tag (u16)` | Loads a typed slot from an immutable heap object using an I64 index. |
+| `6` | `HEAP_LENGTH` | `destination: register (u16)`<br>`object: register (u16)` | Loads an immutable heap object's slot count as I64. |
+| `7` | `HEAP_REPLACE` | `destination: register (u16)`<br>`object: register (u16)`<br>`index: register (u16)`<br>`value: register (u16)` | Creates an immutable heap object with one indexed slot replaced. |
+| `8` | `HEAP_EQUAL` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Compares two immutable heap graphs structurally without exposing reference identity. |
+| `60` | `STRING_LENGTH` | `destination: register (u16)`<br>`value: register (u16)` | Returns the Unicode scalar-value count of an immutable UTF-8 string as I64. |
+| `61` | `STRING_LOAD` | `destination: register (u16)`<br>`value: register (u16)`<br>`index: register (u16)` | Loads one Unicode scalar value from an immutable UTF-8 string using an I64 index. |
+| `62` | `STRING_SLICE` | `destination: register (u16)`<br>`value: register (u16)`<br>`start: register (u16)`<br>`end: register (u16)` | Copies a half-open Unicode scalar-value range from an immutable UTF-8 string. |
+| `63` | `STRING_CONCAT` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Concatenates two immutable UTF-8 strings. |
 | `10` | `NEGATE` | `destination: register (u16)`<br>`operand: register (u16)` | Negates a typed numeric value. |
 | `11` | `ADD` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Adds two typed numeric values. |
 | `12` | `SUBTRACT` | `destination: register (u16)`<br>`left: register (u16)`<br>`right: register (u16)` | Subtracts two typed numeric values. |

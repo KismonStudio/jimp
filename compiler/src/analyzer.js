@@ -3,15 +3,61 @@ import { withModuleContext } from "./module-context.js";
 
 const RESERVED_WORDS = new Set([
   "as", "break", "continue", "else", "export", "false", "from", "function",
-  "if", "import", "let", "null", "print", "return", "true", "var", "while",
+  "if", "import", "let", "null", "print", "record", "return", "true", "var", "while", "with",
 ]);
-const PARAMETER_TYPES = new Set(["BOOL", "I64", "F64", "STRING"]);
-const RETURN_TYPES = new Set(["NULL", "BOOL", "I64", "F64", "STRING", "VOID"]);
+const VALUE_TYPES = new Set(["NULL", "BOOL", "I64", "F64", "STRING"]);
 const NUMERIC_TYPES = new Set(["I64", "F64"]);
 const ARITHMETIC_OPERATORS = new Set(["+", "-", "*", "/", "%"]);
 const EQUALITY_OPERATORS = new Set(["==", "!="]);
 const COMPARISON_OPERATORS = new Set(["<", "<=", ">", ">="]);
 const BOOLEAN_OPERATORS = new Set(["&&", "||"]);
+
+function isArrayType(type) {
+  return typeof type === "string" && type.startsWith("[") && type.endsWith("]");
+}
+
+function arrayElementType(type) {
+  return type.slice(1, -1);
+}
+
+function isRecordType(type) {
+  return typeof type === "string" && type.startsWith("RECORD<") && type.endsWith(">");
+}
+
+function isAggregateType(type) {
+  return isArrayType(type) || isRecordType(type);
+}
+
+function canonicalRecordType(moduleId, name) {
+  return `RECORD<${moduleId ?? "<entry>"}::${name}>`;
+}
+
+function resolveType(type, state, line, { allowNull = true, allowVoid = false } = {}) {
+  if (isArrayType(type)) {
+    const element = resolveType(arrayElementType(type), state, line, {
+      allowNull: false,
+      allowVoid: false,
+    });
+    return `[${element}]`;
+  }
+  if (VALUE_TYPES.has(type)) {
+    if (!allowNull && type === "NULL") throw new Error(`Type NULL is not valid here at line ${line}.`);
+    return type;
+  }
+  if (type === "VOID") {
+    if (allowVoid) return type;
+    throw new Error(`Type VOID is not valid here at line ${line}.`);
+  }
+  const record = state.types.get(type);
+  if (!record) throw new Error(`Type "${type}" is not declared at line ${line}.`);
+  return record.type;
+}
+
+function requireRecord(state, type, line) {
+  const record = state.recordsByType.get(type);
+  if (!record) throw new Error(`Expected a record value, received ${type} at line ${line}.`);
+  return record;
+}
 
 function assertName(name, line, kind, functions) {
   if (RESERVED_WORDS.has(name)) {
@@ -64,13 +110,14 @@ function analyzeCall(expression, state) {
   if (!signature) {
     throw new Error(`Function "${expression.callee}" is not declared at line ${expression.line}.`);
   }
-  const argumentsList = expression.arguments.map((argument) => analyzeExpression(argument, state));
-  if (argumentsList.length !== signature.parameterTypes.length) {
+  if (expression.arguments.length !== signature.parameterTypes.length) {
     throw new Error(
       `Function "${expression.callee}" expects ${signature.parameterTypes.length} argument(s), `
-      + `received ${argumentsList.length} at line ${expression.line}.`,
+      + `received ${expression.arguments.length} at line ${expression.line}.`,
     );
   }
+  const argumentsList = expression.arguments.map((argument, index) =>
+    analyzeExpression(argument, state, signature.parameterTypes[index]));
   for (let index = 0; index < argumentsList.length; index += 1) {
     if (argumentsList[index].type !== signature.parameterTypes[index]) {
       throw new Error(
@@ -89,7 +136,7 @@ function analyzeCall(expression, state) {
   };
 }
 
-function analyzeExpression(expression, state) {
+function analyzeExpression(expression, state, expectedType = null) {
   if (expression.kind === "literal") {
     return { ...expression, type: expression.value.type };
   }
@@ -98,6 +145,170 @@ function analyzeExpression(expression, state) {
     return { ...expression, register: variable.register, type: variable.type };
   }
   if (expression.kind === "callExpression") return analyzeCall(expression, state);
+  if (expression.kind === "arrayLiteral") {
+    const contextualElement = expectedType && isArrayType(expectedType)
+      ? arrayElementType(expectedType)
+      : null;
+    if (expression.elements.length === 0 && contextualElement === null) {
+      throw new Error(`Empty array literal requires a contextual array type at line ${expression.line}.`);
+    }
+    const elements = [];
+    let elementType = contextualElement;
+    for (const element of expression.elements) {
+      const analyzed = analyzeExpression(element, state, elementType);
+      elementType ??= analyzed.type;
+      if (analyzed.type !== elementType) {
+        throw new Error(
+          `Array literal requires ${elementType} elements, received ${analyzed.type} at line ${expression.line}.`,
+        );
+      }
+      elements.push(analyzed);
+    }
+    const type = `[${elementType}]`;
+    if (expectedType !== null && type !== expectedType) {
+      throw new Error(`Expected ${expectedType}, received ${type} at line ${expression.line}.`);
+    }
+    return { ...expression, elements, elementType, type };
+  }
+  if (expression.kind === "recordLiteral") {
+    const record = state.types.get(expression.recordName);
+    if (!record || record.kind !== "record") {
+      throw new Error(`Record "${expression.recordName}" is not declared at line ${expression.line}.`);
+    }
+    if (expectedType !== null && expectedType !== record.type) {
+      throw new Error(`Expected ${expectedType}, received ${record.type} at line ${expression.line}.`);
+    }
+    const provided = new Map();
+    for (const field of expression.fields) {
+      if (provided.has(field.name)) {
+        throw new Error(`Record field "${field.name}" is duplicated at line ${field.line}.`);
+      }
+      provided.set(field.name, field);
+    }
+    const fields = record.fields.map((definition, index) => {
+      const field = provided.get(definition.name);
+      if (!field) {
+        throw new Error(`Record "${record.name}" is missing field "${definition.name}" at line ${expression.line}.`);
+      }
+      provided.delete(definition.name);
+      const analyzed = analyzeExpression(field.expression, state, definition.type);
+      if (analyzed.type !== definition.type) {
+        throw new Error(
+          `Record field "${definition.name}" requires ${definition.type}, received ${analyzed.type} at line ${field.line}.`,
+        );
+      }
+      return { ...field, expression: analyzed, type: definition.type, index };
+    });
+    if (provided.size > 0) {
+      const field = provided.values().next().value;
+      throw new Error(`Record "${record.name}" has no field "${field.name}" at line ${field.line}.`);
+    }
+    return { ...expression, fields, record, type: record.type };
+  }
+  if (expression.kind === "indexExpression") {
+    const object = analyzeExpression(expression.object, state);
+    const index = analyzeExpression(expression.index, state, "I64");
+    if (index.type !== "I64") {
+      throw new Error(`Indexed access requires an I64 index, received ${index.type} at line ${expression.line}.`);
+    }
+    if (isArrayType(object.type)) {
+      return {
+        ...expression,
+        object,
+        index,
+        type: arrayElementType(object.type),
+        indexKind: "array",
+      };
+    }
+    if (object.type === "STRING") {
+      return { ...expression, object, index, type: "STRING", indexKind: "string" };
+    }
+    throw new Error(
+      `Indexed access requires an array or STRING, received ${object.type} at line ${expression.line}.`,
+    );
+  }
+  if (expression.kind === "sliceExpression") {
+    const object = analyzeExpression(expression.object, state, "STRING");
+    if (object.type !== "STRING") {
+      throw new Error(`Sliced access requires STRING, received ${object.type} at line ${expression.line}.`);
+    }
+    const start = analyzeExpression(expression.start, state, "I64");
+    const end = analyzeExpression(expression.end, state, "I64");
+    if (start.type !== "I64" || end.type !== "I64") {
+      throw new Error(`String slice bounds require I64 at line ${expression.line}.`);
+    }
+    return { ...expression, object, start, end, type: "STRING" };
+  }
+  if (expression.kind === "memberExpression") {
+    const object = analyzeExpression(expression.object, state);
+    if (isArrayType(object.type)) {
+      if (expression.member !== "length") {
+        throw new Error(`Array has no member "${expression.member}" at line ${expression.line}.`);
+      }
+      return { ...expression, object, type: "I64", memberKind: "arrayLength" };
+    }
+    if (object.type === "STRING") {
+      if (expression.member !== "length") {
+        throw new Error(`STRING has no member "${expression.member}" at line ${expression.line}.`);
+      }
+      return { ...expression, object, type: "I64", memberKind: "stringLength" };
+    }
+    const record = requireRecord(state, object.type, expression.line);
+    const index = record.fields.findIndex(({ name }) => name === expression.member);
+    if (index < 0) {
+      throw new Error(`Record "${record.name}" has no field "${expression.member}" at line ${expression.line}.`);
+    }
+    return {
+      ...expression,
+      object,
+      field: { ...record.fields[index], index },
+      type: record.fields[index].type,
+      memberKind: "recordField",
+    };
+  }
+  if (expression.kind === "arrayUpdateExpression") {
+    const object = analyzeExpression(expression.object, state);
+    if (!isArrayType(object.type)) {
+      throw new Error(`Array update requires an array, received ${object.type} at line ${expression.line}.`);
+    }
+    const index = analyzeExpression(expression.index, state, "I64");
+    if (index.type !== "I64") {
+      throw new Error(`Array update index requires I64, received ${index.type} at line ${expression.line}.`);
+    }
+    const elementType = arrayElementType(object.type);
+    const value = analyzeExpression(expression.value, state, elementType);
+    if (value.type !== elementType) {
+      throw new Error(`Array update requires ${elementType}, received ${value.type} at line ${expression.line}.`);
+    }
+    return { ...expression, object, index, value, type: object.type };
+  }
+  if (expression.kind === "recordUpdateExpression") {
+    const object = analyzeExpression(expression.object, state);
+    const record = requireRecord(state, object.type, expression.line);
+    if (expression.fields.length === 0) {
+      throw new Error(`Record update requires at least one field at line ${expression.line}.`);
+    }
+    const names = new Set();
+    const fields = expression.fields.map((field) => {
+      if (names.has(field.name)) {
+        throw new Error(`Record update field "${field.name}" is duplicated at line ${field.line}.`);
+      }
+      names.add(field.name);
+      const index = record.fields.findIndex(({ name }) => name === field.name);
+      if (index < 0) {
+        throw new Error(`Record "${record.name}" has no field "${field.name}" at line ${field.line}.`);
+      }
+      const definition = record.fields[index];
+      const value = analyzeExpression(field.expression, state, definition.type);
+      if (value.type !== definition.type) {
+        throw new Error(
+          `Record field "${field.name}" requires ${definition.type}, received ${value.type} at line ${field.line}.`,
+        );
+      }
+      return { ...field, expression: value, type: definition.type, index };
+    });
+    return { ...expression, object, fields, record, type: object.type };
+  }
   if (expression.kind === "unaryExpression") {
     const operand = analyzeExpression(expression.operand, state);
     if (expression.operator === "-" && NUMERIC_TYPES.has(operand.type)) {
@@ -113,6 +324,9 @@ function analyzeExpression(expression, state) {
   const right = analyzeExpression(expression.right, state);
   const sameType = left.type === right.type;
   if (ARITHMETIC_OPERATORS.has(expression.operator)) {
+    if (expression.operator === "+" && sameType && left.type === "STRING") {
+      return { ...expression, left, right, type: "STRING", operationKind: "stringConcat" };
+    }
     if (!sameType || !NUMERIC_TYPES.has(left.type)) {
       return typeError(expression.operator, left.type, right.type, expression.line);
     }
@@ -189,6 +403,9 @@ function analyzeBlock(block, state) {
 
 function analyzeDeclaration(statement, state) {
   assertName(statement.name, statement.line, "variable", state.functions);
+  if (state.types.has(statement.name)) {
+    throw new Error(`Variable "${statement.name}" conflicts with a record name at line ${statement.line}.`);
+  }
   const scope = state.scopes.at(-1);
   const previous = scope.get(statement.name);
   if (previous) {
@@ -197,9 +414,17 @@ function analyzeDeclaration(statement, state) {
       + `the first declaration is at line ${previous.line}.`,
     );
   }
-  const initializer = analyzeExpression(statement.initializer, state);
+  const annotation = statement.annotation === null
+    ? null
+    : resolveType(statement.annotation, state, statement.line, { allowNull: true });
+  const initializer = analyzeExpression(statement.initializer, state, annotation);
   if (initializer.type === "VOID") {
     throw new Error(`Variable "${statement.name}" cannot be initialized with VOID at line ${statement.line}.`);
+  }
+  if (annotation !== null && initializer.type !== annotation) {
+    throw new Error(
+      `Variable "${statement.name}" requires ${annotation}, received ${initializer.type} at line ${statement.line}.`,
+    );
   }
   if (state.context.nextRegister >= SANDBOX_LIMITS.MAX_REGISTERS_PER_FUNCTION) {
     throw new Error(
@@ -211,11 +436,18 @@ function analyzeDeclaration(statement, state) {
     mutable: statement.mutable,
     register: state.context.nextRegister,
     type: initializer.type,
+    declaredType: annotation,
   };
   state.context.nextRegister += 1;
   scope.set(statement.name, variable);
   return {
-    statement: { ...statement, initializer, register: variable.register, type: initializer.type },
+    statement: {
+      ...statement,
+      annotation,
+      initializer,
+      register: variable.register,
+      type: initializer.type,
+    },
     terminates: false,
   };
 }
@@ -228,6 +460,11 @@ function analyzeAssignment(statement, state) {
   const expression = analyzeExpression(statement.expression, state);
   if (expression.type === "VOID") {
     throw new Error(`Variable "${statement.name}" cannot be assigned VOID at line ${statement.line}.`);
+  }
+  if (variable.declaredType !== null && variable.declaredType !== expression.type) {
+    throw new Error(
+      `Variable "${statement.name}" requires ${variable.declaredType}, received ${expression.type} at line ${statement.line}.`,
+    );
   }
   for (const guard of state.loopTypeGuards) {
     const guardedType = guard.get(variable.register);
@@ -339,30 +576,35 @@ function analyzeStatements(statements, state) {
   return { statements: analyzed, terminates };
 }
 
-function validateImportedSignature(resolution, declaration, item) {
-  if (!Array.isArray(resolution.parameterTypes)
-    || resolution.parameterTypes.some((type) => !PARAMETER_TYPES.has(type))) {
-    throw new Error(
-      `Import "${item.imported}" from "${declaration.specifier}" has an invalid parameter contract at line ${item.line}.`,
-    );
-  }
-  if (!RETURN_TYPES.has(resolution.returnType)) {
-    throw new Error(
-      `Import "${item.imported}" from "${declaration.specifier}" has an invalid return contract at line ${item.line}.`,
-    );
-  }
+function validateImportedResolution(resolution, declaration, item) {
   if (typeof resolution.moduleId !== "string" || resolution.moduleId.length === 0) {
     throw new Error(
       `Import "${item.imported}" from "${declaration.specifier}" has no module identity at line ${item.line}.`,
     );
   }
+  const kind = resolution.kind ?? "function";
+  if (kind === "function") {
+    if (!Array.isArray(resolution.parameterTypes)
+      || typeof resolution.returnType !== "string") {
+      throw new Error(
+        `Import "${item.imported}" from "${declaration.specifier}" has an invalid function contract at line ${item.line}.`,
+      );
+    }
+    return;
+  }
+  if (kind === "record"
+    && typeof resolution.type === "string"
+    && Array.isArray(resolution.fields)) return;
+  throw new Error(
+    `Import "${item.imported}" from "${declaration.specifier}" has an invalid export contract at line ${item.line}.`,
+  );
 }
 
 function importResolutionKey({ specifier, imported, local }) {
   return JSON.stringify([specifier, imported, local]);
 }
 
-function collectImportedFunctions(program, resolvedImports) {
+function collectDeclarations(program, resolvedImports) {
   const resolutions = new Map();
   for (const resolution of resolvedImports) {
     const key = importResolutionKey(resolution);
@@ -376,16 +618,12 @@ function collectImportedFunctions(program, resolvedImports) {
 
   const functions = new Map();
   const imports = [];
+  const types = new Map();
+  const recordsByType = new Map();
   for (const declaration of program.imports) {
     for (const item of declaration.items) {
-      assertName(item.imported, item.line, "import", functions);
-      assertName(item.local, item.line, "import", functions);
-      const previous = functions.get(item.local);
-      if (previous) {
-        throw new Error(
-          `Imported binding "${item.local}" is already declared at line ${item.line}; `
-          + `the first declaration is at line ${previous.line}.`,
-        );
+      if (functions.has(item.local) || types.has(item.local)) {
+        throw new Error(`Imported binding "${item.local}" is already declared at line ${item.line}.`);
       }
       const key = importResolutionKey({
         specifier: declaration.specifier,
@@ -398,23 +636,57 @@ function collectImportedFunctions(program, resolvedImports) {
           `Import "${item.imported}" from "${declaration.specifier}" is unresolved at line ${item.line}.`,
         );
       }
-      validateImportedSignature(resolution, declaration, item);
+      validateImportedResolution(resolution, declaration, item);
       resolutions.delete(key);
-      const signature = {
-        kind: "imported",
-        line: item.line,
-        localName: item.local,
-        importedName: item.imported,
-        specifier: declaration.specifier,
-        identity: {
+      if (resolution.kind === "record") {
+        const record = {
+          kind: "record",
+          name: resolution.name,
+          localName: item.local,
           moduleId: resolution.moduleId,
-          exportName: item.imported,
-        },
-        parameterTypes: [...resolution.parameterTypes],
-        returnType: resolution.returnType,
-      };
-      functions.set(item.local, signature);
-      imports.push(signature);
+          type: resolution.type,
+          fields: resolution.fields.map((field) => ({ ...field })),
+          imported: true,
+          line: item.line,
+        };
+        types.set(item.local, record);
+        recordsByType.set(record.type, record);
+        for (const dependency of resolution.dependencies ?? []) {
+          if (!recordsByType.has(dependency.type)) {
+            recordsByType.set(dependency.type, {
+              ...dependency,
+              kind: "record",
+              imported: true,
+            });
+          }
+        }
+      } else {
+        assertName(item.local, item.line, "import", functions);
+        const signature = {
+          kind: "imported",
+          line: item.line,
+          localName: item.local,
+          importedName: item.imported,
+          specifier: declaration.specifier,
+          identity: {
+            moduleId: resolution.moduleId,
+            exportName: item.imported,
+          },
+          parameterTypes: [...resolution.parameterTypes],
+          returnType: resolution.returnType,
+        };
+        functions.set(item.local, signature);
+        imports.push(signature);
+        for (const dependency of resolution.dependencies ?? []) {
+          if (!recordsByType.has(dependency.type)) {
+            recordsByType.set(dependency.type, {
+              ...dependency,
+              kind: "record",
+              imported: true,
+            });
+          }
+        }
+      }
     }
   }
   if (resolutions.size > 0) {
@@ -423,11 +695,43 @@ function collectImportedFunctions(program, resolvedImports) {
       `Resolved import "${resolution.local}" from "${resolution.specifier}" is not declared by the module.`,
     );
   }
-  return { functions, imports };
-}
+  const localRecords = program.statements.filter(({ kind }) => kind === "recordDeclaration");
+  for (const declaration of localRecords) {
+    assertName(declaration.name, declaration.line, "record", functions);
+    if (types.has(declaration.name) || functions.has(declaration.name)) {
+      throw new Error(`Record "${declaration.name}" is already declared at line ${declaration.line}.`);
+    }
+    const record = {
+      kind: "record",
+      name: declaration.name,
+      moduleId: program.moduleId,
+      type: canonicalRecordType(program.moduleId, declaration.name),
+      fields: [],
+      declaration,
+      imported: false,
+      line: declaration.line,
+    };
+    types.set(declaration.name, record);
+    recordsByType.set(record.type, record);
+  }
+  const typeState = { types };
+  for (const declaration of localRecords) {
+    const record = types.get(declaration.name);
+    const names = new Set();
+    record.fields = declaration.fields.map((field) => {
+      assertName(field.name, field.line, "field", functions);
+      if (names.has(field.name)) {
+        throw new Error(`Record field "${field.name}" is duplicated at line ${field.line}.`);
+      }
+      names.add(field.name);
+      return {
+        name: field.name,
+        type: resolveType(field.type, typeState, field.line, { allowNull: true }),
+        line: field.line,
+      };
+    });
+  }
 
-function collectFunctions(program, resolvedImports) {
-  const { functions, imports } = collectImportedFunctions(program, resolvedImports);
   let index = 1;
   for (const declaration of program.statements.filter(({ kind }) => kind === "functionDeclaration")) {
     if (index >= SANDBOX_LIMITS.MAX_FUNCTIONS) {
@@ -436,6 +740,9 @@ function collectFunctions(program, resolvedImports) {
       );
     }
     assertName(declaration.name, declaration.line, "function", functions);
+    if (types.has(declaration.name)) {
+      throw new Error(`Function "${declaration.name}" conflicts with a record name at line ${declaration.line}.`);
+    }
     if (functions.has(declaration.name)) {
       const previous = functions.get(declaration.name);
       if (previous.kind === "imported") {
@@ -445,9 +752,10 @@ function collectFunctions(program, resolvedImports) {
       }
       throw new Error(`Function "${declaration.name}" is already declared at line ${declaration.line}.`);
     }
-    if (!RETURN_TYPES.has(declaration.returnType)) {
-      throw new Error(`Invalid return type for function "${declaration.name}" at line ${declaration.line}.`);
-    }
+    const returnType = resolveType(declaration.returnType, typeState, declaration.line, {
+      allowNull: true,
+      allowVoid: true,
+    });
     const parameterNames = new Set();
     if (declaration.parameters.length > SANDBOX_LIMITS.MAX_PARAMETERS) {
       throw new Error(
@@ -456,11 +764,12 @@ function collectFunctions(program, resolvedImports) {
     }
     for (const parameter of declaration.parameters) {
       assertName(parameter.name, parameter.line, "parameter", functions);
-      if (!PARAMETER_TYPES.has(parameter.type)) {
-        throw new Error(
-          `Parameter "${parameter.name}" cannot use type ${parameter.type} at line ${parameter.line}.`,
-        );
+      if (types.has(parameter.name)) {
+        throw new Error(`Parameter "${parameter.name}" conflicts with a record name at line ${parameter.line}.`);
       }
+      parameter.type = resolveType(parameter.type, typeState, parameter.line, {
+        allowNull: false,
+      });
       if (parameterNames.has(parameter.name)) {
         throw new Error(`Duplicate parameter "${parameter.name}" at line ${parameter.line}.`);
       }
@@ -471,14 +780,14 @@ function collectFunctions(program, resolvedImports) {
       declaration,
       index,
       parameterTypes: declaration.parameters.map(({ type }) => type),
-      returnType: declaration.returnType,
+      returnType,
     });
     index += 1;
   }
-  return { functions, imports };
+  return { functions, imports, types, recordsByType };
 }
 
-function analyzeFunction(signature, functions) {
+function analyzeFunction(signature, functions, types, recordsByType) {
   const context = { nextRegister: signature.parameterTypes.length };
   const scope = new Map();
   const parameters = signature.declaration.parameters.map((parameter, register) => {
@@ -494,6 +803,8 @@ function analyzeFunction(signature, functions) {
     context,
     scopes: [scope],
     functions,
+    types,
+    recordsByType,
     currentFunction: { name: signature.declaration.name, returnType: signature.returnType },
     loopDepth: 0,
     loopTypeGuards: [],
@@ -509,6 +820,7 @@ function analyzeFunction(signature, functions) {
     index: signature.index,
     parameters,
     parameterTypes: signature.parameterTypes,
+    returnType: signature.returnType,
     body: { ...signature.declaration.body, statements: body.statements },
     variableCount: context.nextRegister,
   };
@@ -518,17 +830,20 @@ function analyzeProgramInternal(program, { resolvedImports = [] } = {}) {
   if (!Array.isArray(resolvedImports)) {
     throw new Error("resolvedImports must be an array.");
   }
-  const { functions, imports } = collectFunctions(program, resolvedImports);
+  const { functions, imports, types, recordsByType } = collectDeclarations(program, resolvedImports);
   const entryContext = { nextRegister: 0 };
   const entryState = {
     context: entryContext,
     scopes: [new Map()],
     functions,
+    types,
+    recordsByType,
     currentFunction: null,
     loopDepth: 0,
     loopTypeGuards: [],
   };
-  const entryStatements = program.statements.filter(({ kind }) => kind !== "functionDeclaration");
+  const entryStatements = program.statements.filter(({ kind }) =>
+    kind !== "functionDeclaration" && kind !== "recordDeclaration");
   if (program.isEntry === false && entryStatements.length > 0) {
     throw new Error(
       `Executable statements are only valid in the entry module at line ${entryStatements[0].line}.`,
@@ -537,22 +852,53 @@ function analyzeProgramInternal(program, { resolvedImports = [] } = {}) {
   const entry = analyzeStatements(entryStatements, entryState);
   const localFunctions = [...functions.values()].filter(({ kind }) => kind === "local");
   const analyzedFunctions = localFunctions.map((signature) =>
-    analyzeFunction(signature, functions));
-  const exports = localFunctions
+    analyzeFunction(signature, functions, types, recordsByType));
+  const functionExports = localFunctions
     .filter(({ declaration }) => declaration.exported)
     .map((signature) => ({
+      kind: "function",
       name: signature.declaration.name,
       moduleId: program.moduleId,
       functionIndex: signature.index,
       parameterTypes: [...signature.parameterTypes],
       returnType: signature.returnType,
+      ...(recordsByType.size === 0 ? {} : {
+        dependencies: [...recordsByType.values()].map((dependency) => ({
+          name: dependency.name,
+          moduleId: dependency.moduleId,
+          type: dependency.type,
+          fields: dependency.fields.map(({ name, type }) => ({ name, type })),
+        })),
+      }),
+    }));
+  const recordExports = [...types.values()]
+    .filter((record) => !record.imported && record.declaration.exported)
+    .map((record) => ({
+      kind: "record",
+      name: record.name,
+      moduleId: program.moduleId,
+      type: record.type,
+      fields: record.fields.map(({ name, type }) => ({ name, type })),
+      dependencies: [...recordsByType.values()].map((dependency) => ({
+        name: dependency.name,
+        moduleId: dependency.moduleId,
+        type: dependency.type,
+        fields: dependency.fields.map(({ name, type }) => ({ name, type })),
+      })),
     }));
   return {
     kind: "analyzedProgram",
     moduleId: program.moduleId,
     isEntry: program.isEntry,
     imports,
-    exports,
+    exports: [...functionExports, ...recordExports],
+    records: [...types.values()].filter((record) => !record.imported).map((record) => ({
+      name: record.name,
+      type: record.type,
+      fields: record.fields.map(({ name, type }) => ({ name, type })),
+      exported: record.declaration.exported,
+      line: record.line,
+    })),
     statements: entry.statements,
     functions: analyzedFunctions,
     variableCount: entryContext.nextRegister,

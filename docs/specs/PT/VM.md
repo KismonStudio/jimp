@@ -4,9 +4,9 @@
 
 ## Status
 
-Este documento especifica a VM portátil JIMP v1 implementada até o P5.5. O formato `2.6` inclui metadados opcionais de debug e compilação reproduzível validados independentemente, preservando a base de execução com recursos limitados e erros padronizados.
+Este documento especifica a VM portátil JIMP v1 implementada até o P7.6. O formato `2.9` preserva a heap imutável, validada independentemente e limitada por recursos, e adiciona operações genéricas de comprimento, leitura indexada, recorte semiaberto e concatenação de STRING por valores escalares Unicode.
 
-O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.6` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
+O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.9` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -62,7 +62,7 @@ Um arquivo `.jbc` portátil consiste em um cabeçalho, um diretório de seções
 | --- | --- | --- |
 | magic | 4 bytes | ASCII `JIMP` |
 | versão principal do formato | `u16` | `2` |
-| versão secundária do formato | `u16` | `6` |
+| versão secundária do formato | `u16` | `9` |
 | flags do módulo | `u32` | `0`; demais bits são reservados |
 | função de entrada | `u32` | Índice na seção de funções |
 | quantidade de seções | `u16` | Quantidade de entradas do diretório |
@@ -160,7 +160,7 @@ A seção de código contém os fluxos de instruções das funções. Cada instr
 
 ## Seção de debug
 
-A seção de debug relaciona offsets de instruções codificadas aos IDs portáteis dos módulos-fonte e às linhas do código-fonte. Sua entrada no diretório deve definir a flag `OPTIONAL`. Um módulo válido no formato `2.6` pode omitir essa seção sem alterar a semântica da execução.
+A seção de debug relaciona offsets de instruções codificadas aos IDs portáteis dos módulos-fonte e às linhas do código-fonte. Sua entrada no diretório deve definir a flag `OPTIONAL`. Um módulo válido no formato `2.9` pode omitir essa seção sem alterar a semântica da execução.
 
 | Campo | Codificação | Significado |
 | --- | --- | --- |
@@ -205,6 +205,10 @@ O conjunto inicial de instruções genéricas possui as seguintes operações se
 ### Aritmética binária tipada
 
 `ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE` e `REMAINDER` utilizam os operandos de registrador `destination, left, right`. As duas entradas devem possuir o mesmo tipo numérico, e o resultado possui esse tipo. A aritmética `I64` é verificada; overflow, divisão por zero e resto por zero são erros de runtime. A divisão `I64` trunca em direção a zero. A aritmética `F64` segue o comportamento binary64 IEEE 754.
+
+### Operações genéricas de STRING
+
+`STRING_LENGTH destination, value` aceita STRING e produz I64. `STRING_LOAD destination, value, index` aceita STRING e I64 e produz uma STRING de um valor escalar. `STRING_SLICE destination, value, start, end` aceita STRING e dois limites I64 e produz um intervalo semiaberto de STRING. Essas operações contam valores escalares Unicode, nunca bytes UTF-8; índices negativos ou fora dos limites e intervalos inválidos falham deterministicamente. `STRING_CONCAT destination, left, right` aceita duas STRING e produz STRING. Todos os resultados permanecem sujeitos aos limites de memória lógica de valores e de passos de execução.
 
 ### Comparações tipadas
 

@@ -1,0 +1,26 @@
+import { StringResult, stringSuccess, stringFailure } from "std:result";
+import { validate, canonicalize, diagnostic } from "std:json/support";
+
+export record JsonDocument {
+  text: STRING,
+}
+
+export record JsonResult {
+  ok: BOOL,
+  value: JsonDocument,
+  error: STRING,
+}
+
+export function parse(source: STRING): JsonResult {
+  if validate(source) {
+    return JsonResult { ok: true, value: JsonDocument { text: canonicalize(source) }, error: "" };
+  }
+  return JsonResult { ok: false, value: JsonDocument { text: "null" }, error: diagnostic(source) };
+}
+
+export function stringify(document: JsonDocument): StringResult {
+  if validate(document.text) {
+    return stringSuccess(canonicalize(document.text));
+  }
+  return stringFailure(diagnostic(document.text));
+}

@@ -16,9 +16,9 @@ export function resolveStandardModule(specifier, major = STANDARD_LIBRARY.versio
 }
 
 export function standardModuleSource(module) {
-  const paths = [...new Set(module.exports
-    .map((exported) => exported.implementation.source)
-    .filter((source) => source !== undefined))];
+  const paths = [...new Set([module.source, ...module.exports
+    .map((exported) => exported.implementation?.source)
+    .filter((source) => source !== undefined)].filter((source) => source !== undefined))];
   if (paths.length > 1) {
     throw new Error(`Standard module "${module.specifier}" uses multiple canonical source files.`);
   }
@@ -26,6 +26,9 @@ export function standardModuleSource(module) {
 }
 
 export function standardExportSignature(exported) {
+  if ((exported.kind ?? "function") !== "function") {
+    throw new Error(`Standard export "${exported.name}" is not a function.`);
+  }
   return {
     parameterTypes: exported.parameters.map(({ type }) => type),
     returnType: exported.returnType,

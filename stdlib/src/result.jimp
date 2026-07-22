@@ -1,0 +1,13 @@
+export record StringResult {
+  ok: BOOL,
+  value: STRING,
+  error: STRING,
+}
+
+export function stringSuccess(value: STRING): StringResult {
+  return StringResult { ok: true, value: value, error: "" };
+}
+
+export function stringFailure(error: STRING): StringResult {
+  return StringResult { ok: false, value: "", error: error };
+}

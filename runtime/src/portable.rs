@@ -4,10 +4,10 @@ use crate::generated::{
         OperandEncoding, ValueType,
     },
     sandbox::{
-        MAX_CODE_BYTES, MAX_CONSTANT_STRING_BYTES, MAX_CONSTANTS, MAX_FUNCTIONS, MAX_HOST_IMPORTS,
-        MAX_MODULE_BYTES, MAX_PARAMETERS, MAX_REGISTERS_PER_FUNCTION, MAX_SECTION_COUNT,
-        MAX_SYMBOL_BYTES, MAX_TOTAL_CONSTANT_STRING_BYTES, MAX_TOTAL_INSTRUCTIONS,
-        MAX_VERIFICATION_TYPE_CELLS,
+        MAX_CODE_BYTES, MAX_CONSTANT_STRING_BYTES, MAX_CONSTANTS, MAX_FUNCTIONS,
+        MAX_HEAP_SLOTS_PER_OBJECT, MAX_HOST_IMPORTS, MAX_MODULE_BYTES, MAX_PARAMETERS,
+        MAX_REGISTERS_PER_FUNCTION, MAX_SECTION_COUNT, MAX_SYMBOL_BYTES,
+        MAX_TOTAL_CONSTANT_STRING_BYTES, MAX_TOTAL_INSTRUCTIONS, MAX_VERIFICATION_TYPE_CELLS,
     },
 };
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -34,6 +34,7 @@ pub(crate) enum Value {
     I64(i64),
     F64(f64),
     String(String),
+    HeapRef(usize),
 }
 
 impl Value {
@@ -51,6 +52,7 @@ impl Value {
             Self::I64(_) => ValueType::I64,
             Self::F64(_) => ValueType::F64,
             Self::String(_) => ValueType::String,
+            Self::HeapRef(_) => ValueType::HeapRef,
         }
     }
 }
@@ -114,6 +116,52 @@ pub(crate) enum Instruction {
     Move {
         destination: usize,
         source: usize,
+    },
+    HeapAlloc {
+        destination: usize,
+        value_start: usize,
+        value_count: usize,
+    },
+    HeapLoad {
+        destination: usize,
+        object: usize,
+        index: usize,
+        result_type: ValueType,
+    },
+    HeapLength {
+        destination: usize,
+        object: usize,
+    },
+    HeapReplace {
+        destination: usize,
+        object: usize,
+        index: usize,
+        value: usize,
+    },
+    HeapEqual {
+        destination: usize,
+        left: usize,
+        right: usize,
+    },
+    StringLength {
+        destination: usize,
+        value: usize,
+    },
+    StringLoad {
+        destination: usize,
+        value: usize,
+        index: usize,
+    },
+    StringSlice {
+        destination: usize,
+        value: usize,
+        start: usize,
+        end: usize,
+    },
+    StringConcat {
+        destination: usize,
+        left: usize,
+        right: usize,
     },
     Unary {
         opcode: Opcode,
@@ -308,6 +356,9 @@ fn decode_constants(section: Section<'_>) -> Result<Vec<Value>, String> {
                         .map_err(|_| format!("Constant {index} contains invalid UTF-8."))?,
                 )
             }
+            ValueType::HeapRef => {
+                return Err(format!("Constant {index} cannot encode HEAP_REF."));
+            }
             ValueType::Void => unreachable!("VOID constants are rejected"),
         };
         constants.push(value);
@@ -361,17 +412,26 @@ fn decode_imports(section: Section<'_>, constants: &[Value]) -> Result<Vec<HostI
             true,
             true,
         )?;
+        if return_type == ValueType::HeapRef {
+            return Err(format!("Host import {index} cannot return HEAP_REF."));
+        }
         if cursor.read_u8(&format!("host import {index} flags"))? != 0 {
             return Err(format!("Host import {index} flags must be zero."));
         }
         let mut parameter_types = Vec::with_capacity(parameter_count);
         for parameter in 0..parameter_count {
-            parameter_types.push(value_type(
+            let parameter_type = value_type(
                 cursor.read_u8(&format!("host import {index} parameter {parameter}"))?,
                 &format!("Host import {index} parameter {parameter}"),
                 false,
                 false,
-            )?);
+            )?;
+            if parameter_type == ValueType::HeapRef {
+                return Err(format!(
+                    "Host import {index} parameter {parameter} cannot use HEAP_REF."
+                ));
+            }
+            parameter_types.push(parameter_type);
         }
         let namespace = string_constant(
             constants,
@@ -759,6 +819,119 @@ fn verify_instruction_flow(
                 destination,
                 source,
             } => types[destination] = types[source],
+            Instruction::HeapAlloc {
+                destination,
+                value_start,
+                value_count,
+            } => {
+                for (index, value_type) in types[value_start..value_start + value_count]
+                    .iter()
+                    .enumerate()
+                {
+                    if value_type.is_none() {
+                        return Err(format!(
+                            "HEAP_ALLOC value {index} must have one type on every path."
+                        ));
+                    }
+                }
+                types[destination] = Some(ValueType::HeapRef);
+            }
+            Instruction::HeapLoad {
+                destination,
+                object,
+                index,
+                result_type,
+            } => {
+                if types[object] != Some(ValueType::HeapRef) {
+                    return Err("HEAP_LOAD object must be HEAP_REF on every path.".into());
+                }
+                if types[index] != Some(ValueType::I64) {
+                    return Err("HEAP_LOAD index must be I64 on every path.".into());
+                }
+                types[destination] = Some(result_type);
+            }
+            Instruction::HeapLength {
+                destination,
+                object,
+            } => {
+                if types[object] != Some(ValueType::HeapRef) {
+                    return Err("HEAP_LENGTH object must be HEAP_REF on every path.".into());
+                }
+                types[destination] = Some(ValueType::I64);
+            }
+            Instruction::HeapReplace {
+                destination,
+                object,
+                index,
+                value,
+            } => {
+                if types[object] != Some(ValueType::HeapRef) {
+                    return Err("HEAP_REPLACE object must be HEAP_REF on every path.".into());
+                }
+                if types[index] != Some(ValueType::I64) {
+                    return Err("HEAP_REPLACE index must be I64 on every path.".into());
+                }
+                if types[value].is_none() {
+                    return Err("HEAP_REPLACE value must have one type on every path.".into());
+                }
+                types[destination] = Some(ValueType::HeapRef);
+            }
+            Instruction::HeapEqual {
+                destination,
+                left,
+                right,
+            } => {
+                if types[left] != Some(ValueType::HeapRef)
+                    || types[right] != Some(ValueType::HeapRef)
+                {
+                    return Err("HEAP_EQUAL operands must be HEAP_REF on every path.".into());
+                }
+                types[destination] = Some(ValueType::Bool);
+            }
+            Instruction::StringLength { destination, value } => {
+                if types[value] != Some(ValueType::String) {
+                    return Err("STRING_LENGTH value must be STRING on every path.".into());
+                }
+                types[destination] = Some(ValueType::I64);
+            }
+            Instruction::StringLoad {
+                destination,
+                value,
+                index,
+            } => {
+                if types[value] != Some(ValueType::String) {
+                    return Err("STRING_LOAD value must be STRING on every path.".into());
+                }
+                if types[index] != Some(ValueType::I64) {
+                    return Err("STRING_LOAD index must be I64 on every path.".into());
+                }
+                types[destination] = Some(ValueType::String);
+            }
+            Instruction::StringSlice {
+                destination,
+                value,
+                start,
+                end,
+            } => {
+                if types[value] != Some(ValueType::String) {
+                    return Err("STRING_SLICE value must be STRING on every path.".into());
+                }
+                if types[start] != Some(ValueType::I64) || types[end] != Some(ValueType::I64) {
+                    return Err("STRING_SLICE bounds must be I64 on every path.".into());
+                }
+                types[destination] = Some(ValueType::String);
+            }
+            Instruction::StringConcat {
+                destination,
+                left,
+                right,
+            } => {
+                if types[left] != Some(ValueType::String) || types[right] != Some(ValueType::String)
+                {
+                    return Err("STRING_CONCAT operands must be STRING on every path.".into());
+                }
+                types[destination] = Some(ValueType::String);
+            }
             Instruction::Unary {
                 opcode,
                 destination,
@@ -803,7 +976,14 @@ fn verify_instruction_flow(
                         }
                         value_type
                     }
-                    Opcode::Equal | Opcode::NotEqual => ValueType::Bool,
+                    Opcode::Equal | Opcode::NotEqual => {
+                        if value_type == ValueType::HeapRef {
+                            return Err(format!(
+                                "{name} does not expose heap-reference identity; aggregate equality is added with typed aggregates."
+                            ));
+                        }
+                        ValueType::Bool
+                    }
                     Opcode::LessThan
                     | Opcode::LessEqual
                     | Opcode::GreaterThan
@@ -991,6 +1171,169 @@ fn verify_function(
                 Instruction::Move {
                     destination,
                     source,
+                }
+            }
+            Opcode::HeapAlloc => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "HEAP_ALLOC destination register",
+                )?;
+                let value_start = usize::try_from(operands[1])
+                    .map_err(|_| "HEAP_ALLOC value start is out of range.".to_owned())?;
+                let value_count = usize::try_from(operands[2])
+                    .map_err(|_| "HEAP_ALLOC value count is out of range.".to_owned())?;
+                if value_count > MAX_HEAP_SLOTS_PER_OBJECT {
+                    return Err(format!(
+                        "HEAP_ALLOC value count exceeds the sandbox limit of {MAX_HEAP_SLOTS_PER_OBJECT}."
+                    ));
+                }
+                if value_count == 0 {
+                    if value_start != 0 {
+                        return Err(
+                            "HEAP_ALLOC with no values must use register zero as its value start."
+                                .into(),
+                        );
+                    }
+                } else {
+                    let value_end = value_start
+                        .checked_add(value_count)
+                        .ok_or("HEAP_ALLOC value range is out of bounds.")?;
+                    if value_start >= register_count || value_end > register_count {
+                        return Err("HEAP_ALLOC value range is out of bounds.".into());
+                    }
+                }
+                Instruction::HeapAlloc {
+                    destination,
+                    value_start,
+                    value_count,
+                }
+            }
+            Opcode::HeapLoad => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "HEAP_LOAD destination register",
+                )?;
+                let object =
+                    register_index(operands[1], register_count, "HEAP_LOAD object register")?;
+                let index =
+                    register_index(operands[2], register_count, "HEAP_LOAD index register")?;
+                let result_tag = u8::try_from(operands[3])
+                    .map_err(|_| "HEAP_LOAD result type tag is out of range.".to_owned())?;
+                let result_type = value_type(result_tag, "HEAP_LOAD result type", true, false)?;
+                Instruction::HeapLoad {
+                    destination,
+                    object,
+                    index,
+                    result_type,
+                }
+            }
+            Opcode::HeapLength => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "HEAP_LENGTH destination register",
+                )?;
+                let object =
+                    register_index(operands[1], register_count, "HEAP_LENGTH object register")?;
+                Instruction::HeapLength {
+                    destination,
+                    object,
+                }
+            }
+            Opcode::HeapReplace => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "HEAP_REPLACE destination register",
+                )?;
+                let object =
+                    register_index(operands[1], register_count, "HEAP_REPLACE object register")?;
+                let index =
+                    register_index(operands[2], register_count, "HEAP_REPLACE index register")?;
+                let value =
+                    register_index(operands[3], register_count, "HEAP_REPLACE value register")?;
+                Instruction::HeapReplace {
+                    destination,
+                    object,
+                    index,
+                    value,
+                }
+            }
+            Opcode::HeapEqual => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "HEAP_EQUAL destination register",
+                )?;
+                let left = register_index(operands[1], register_count, "HEAP_EQUAL left register")?;
+                let right =
+                    register_index(operands[2], register_count, "HEAP_EQUAL right register")?;
+                Instruction::HeapEqual {
+                    destination,
+                    left,
+                    right,
+                }
+            }
+            Opcode::StringLength => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "STRING_LENGTH destination register",
+                )?;
+                let value =
+                    register_index(operands[1], register_count, "STRING_LENGTH value register")?;
+                Instruction::StringLength { destination, value }
+            }
+            Opcode::StringLoad => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "STRING_LOAD destination register",
+                )?;
+                let value =
+                    register_index(operands[1], register_count, "STRING_LOAD value register")?;
+                let index =
+                    register_index(operands[2], register_count, "STRING_LOAD index register")?;
+                Instruction::StringLoad {
+                    destination,
+                    value,
+                    index,
+                }
+            }
+            Opcode::StringSlice => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "STRING_SLICE destination register",
+                )?;
+                let value =
+                    register_index(operands[1], register_count, "STRING_SLICE value register")?;
+                let start =
+                    register_index(operands[2], register_count, "STRING_SLICE start register")?;
+                let end = register_index(operands[3], register_count, "STRING_SLICE end register")?;
+                Instruction::StringSlice {
+                    destination,
+                    value,
+                    start,
+                    end,
+                }
+            }
+            Opcode::StringConcat => {
+                let destination = register_index(
+                    operands[0],
+                    register_count,
+                    "STRING_CONCAT destination register",
+                )?;
+                let left =
+                    register_index(operands[1], register_count, "STRING_CONCAT left register")?;
+                let right =
+                    register_index(operands[2], register_count, "STRING_CONCAT right register")?;
+                Instruction::StringConcat {
+                    destination,
+                    left,
+                    right,
                 }
             }
             Opcode::Negate | Opcode::BoolNot => {

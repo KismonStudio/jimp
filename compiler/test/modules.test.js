@@ -77,6 +77,7 @@ test("analyzes imported calls and publishes exact export contracts", () => {
     returnType: "I64",
   }]);
   assert.deepEqual(program.exports, [{
+    kind: "function",
     name: "answer",
     moduleId: "main.jimp",
     functionIndex: 1,
@@ -183,7 +184,7 @@ test("qualifies parser diagnostics with the portable module ID", () => {
   }
   assert.match(
     diagnostic.message,
-    /Module "lib\/value\.jimp": Only a top-level function declaration may be exported at line 1/,
+    /Module "lib\/value\.jimp": Only a top-level function or record declaration may be exported at line 1/,
   );
   const normalized = normalizeError(diagnostic, ERROR_CODES.COMPILE);
   assert.deepEqual(normalized.location, {
@@ -192,4 +193,45 @@ test("qualifies parser diagnostics with the portable module ID", () => {
     moduleId: "lib/value.jimp",
   });
   assert.match(formatError(normalized), /at source lib\/value\.jimp:1/);
+});
+
+test("publishes and consumes exact nominal record contracts", () => {
+  const model = analyzeProgram(parseProgram(`
+    export record Point {
+      x: I64,
+      y: I64,
+    }
+    export function move(point: Point): Point {
+      return point with { x: 4 };
+    }
+  `, { moduleId: "model.jimp", isEntry: false }));
+  const record = model.exports.find(({ kind }) => kind === "record");
+  const move = model.exports.find(({ kind }) => kind === "function");
+  const main = analyzeProgram(parseProgram(`
+    import { Point, move } from "./model.jimp";
+    let point = move(Point { x: 0, y: 0 });
+    point.x;
+  `, { moduleId: "main.jimp" }), {
+    resolvedImports: [
+      {
+        specifier: "./model.jimp",
+        imported: "Point",
+        local: "Point",
+        moduleId: "model.jimp",
+        ...record,
+      },
+      {
+        specifier: "./model.jimp",
+        imported: "move",
+        local: "move",
+        moduleId: "model.jimp",
+        ...move,
+      },
+    ],
+  });
+
+  assert.equal(main.statements[0].type, record.type);
+  assert.equal(main.statements[1].type, "I64");
+  assert.deepEqual(move.parameterTypes, [record.type]);
+  assert.equal(move.returnType, record.type);
 });

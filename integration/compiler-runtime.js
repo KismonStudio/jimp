@@ -213,6 +213,51 @@ test("executes compiler output in the Rust runtime", () => {
   assert.equal(result.stderr, "");
 });
 
+test("executes independently verified generic heap bytecode in Rust", () => {
+  const constants = [
+    { type: "STRING", value: "std.console" },
+    { type: "STRING", value: "write" },
+    { type: "STRING", value: "Heap foundation\n" },
+    { type: "I64", value: 0n },
+  ];
+  const code = Buffer.concat([
+    encodeInstruction("LOAD_CONST", { destination: 0, constant: 2 }),
+    encodeInstruction("HEAP_ALLOC", { destination: 1, value_start: 0, value_count: 1 }),
+    encodeInstruction("LOAD_CONST", { destination: 2, constant: 3 }),
+    encodeInstruction("HEAP_LOAD", { destination: 3, object: 1, index: 2, result_type: 4 }),
+    encodeInstruction("HEAP_LENGTH", { destination: 4, object: 1 }),
+    encodeInstruction("HOST_CALL", {
+      import: 0,
+      argument_start: 3,
+      argument_count: 1,
+      result: NO_REGISTER,
+    }),
+    encodeInstruction("HALT"),
+  ]);
+  const bytecode = encodePortableModule({
+    constants,
+    imports: [{
+      namespace: 0,
+      name: 1,
+      parameterTypes: ["STRING"],
+      returnType: "VOID",
+    }],
+    functions: [{
+      name: null,
+      code,
+      registerCount: 5,
+      parameterTypes: [],
+      returnType: "VOID",
+    }],
+  });
+
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Heap foundation\n");
+  assert.equal(result.stderr, "");
+});
+
 test("reports compiler failures through the standard JSON error contract", () => {
   programCounter += 1;
   const sourcePath = join(temporaryDirectory, `invalid-${programCounter}.jimp`);
@@ -320,7 +365,9 @@ test("initializes a project without overwriting an existing directory", () => {
 
 test("executes every reviewed public example", () => {
   const positiveExamples = [
+    "aggregates.jimp",
     "conditionals.jimp",
+    "data.jimp",
     "expressions.jimp",
     "functions.jimp",
     "hello.jimp",
@@ -423,6 +470,81 @@ test("executes portable scalar literal statements without host output", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, "");
+});
+
+test("executes immutable arrays, records, updates, and structural equality", () => {
+  const bytecode = compile(`
+    record Point {
+      x: I64,
+      y: I64,
+    }
+    let original: [I64] = [1, 2, 3];
+    let changed = original with [1] = 5;
+    let nested: [[I64]] = [original, changed];
+    let point = Point { x: 0, y: 0 };
+    let moved = point with { x: 4 };
+    if original[1] == 2 && changed[1] == 5 && nested.length == 2 {
+      print "arrays";
+    }
+    if original != changed && point == Point { x: 0, y: 0 } && moved.x == 4 {
+      print "records";
+    }
+  `);
+  const result = runBytecode(bytecode);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "arrays\nrecords\n");
+});
+
+test("reports deterministic aggregate bounds failures", () => {
+  const result = runBytecode(
+    compile("let values = [1];\nvalues[1];"),
+    ["--error-format=json"],
+  );
+  const error = assertStandardError(result, "JIMP-4001", "execute");
+
+  assert.match(error.message, /HEAP_LOAD index 1 is out of bounds/);
+  assert.deepEqual(error.location, { kind: "source", line: 2 });
+});
+
+test("executes Unicode scalar string primitives", () => {
+  const result = runBytecode(compile(`
+    let value = "Olá";
+    if value.length == 3 && value[2] == "á" && value[0:2] == "Ol" {
+      print value[0:2] + "á";
+    }
+  `));
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Olá\n");
+});
+
+test("executes typed recoverable standard text, collection, and JSON APIs", async () => {
+  const sourcePath = join(temporaryDirectory, "recoverable-data.jimp");
+  writeFileSync(sourcePath, `
+    import { at } from "std:text";
+    import { replace } from "std:collections/i64";
+    import { parse, stringify } from "std:json";
+    let character = at("Olá", 2);
+    let changed = replace([1, 2], 1, 3);
+    let parsed = parse(" {\\"value\\": 1} ");
+    if character.ok && changed.ok && parsed.ok {
+      let encoded = stringify(parsed.value);
+      if encoded.ok && encoded.value == "{\\"value\\":1}" {
+        print "data APIs";
+      }
+    }
+    let invalid = parse("{\\"value\\":1,\\"value\\":2}");
+    if !invalid.ok {
+      print "recovered";
+    }
+  `);
+  const result = runBytecode(await compileProject(sourcePath, {
+    projectRoot: temporaryDirectory,
+  }));
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "data APIs\nrecovered\n");
 });
 
 test("executes analyzed immutable and mutable variables", () => {

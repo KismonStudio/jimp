@@ -6,7 +6,7 @@
 
 ## Status
 
-This document specifies the standard-library catalog and portable-fallback contract implemented end to end by P5.4. The compiler resolves these embedded modules without project-filesystem lookup and statically links only used exports.
+This document specifies the standard-library catalog and portable-source contract implemented through P7.6. The compiler resolves these embedded modules without project-filesystem lookup and statically links only used exports.
 
 ## Architecture
 
@@ -17,10 +17,15 @@ This document specifies the standard-library catalog and portable-fallback contr
 - A compiled `.jbc` does not require the standard-library source package at runtime.
 - Portable implementations are the default; optional native replacements are a link-time optimization selected only for an explicitly compatible target.
 
-## Initial catalog
+## Current catalog
 
 - `std:console`: Explicit console output through a typed Host ABI bridge and portable wrappers.
 - `std:math/i64`: Deterministic helpers for signed 64-bit integers implemented in portable JIMP.
+- `std:result`: Explicit nominal result values for recoverable string-producing operations.
+- `std:text`: Portable Unicode-scalar text length, concatenation, indexed access, and slicing.
+- `std:collections/i64`: Portable search and recoverable replacement helpers for immutable I64 arrays.
+- `std:json/support`: Total scalar Host ABI primitives used by the typed std:json wrapper.
+- `std:json`: Typed recoverable JSON parsing and deterministic serialization over validated documents.
 
 | Module | Kind | Export signature | Default implementation | Optional native capability | Contract |
 | --- | --- | --- | --- | --- | --- |
@@ -30,6 +35,24 @@ This document specifies the standard-library catalog and portable-fallback contr
 | `std:math/i64` | Portable JIMP | `minimum(left: I64, right: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.minimum` | Returns left when left is less than or equal to right; otherwise returns right. |
 | `std:math/i64` | Portable JIMP | `maximum(left: I64, right: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.maximum` | Returns left when left is greater than or equal to right; otherwise returns right. |
 | `std:math/i64` | Portable JIMP | `sign(value: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.sign` | Returns -1 for negative values, 0 for zero, and 1 for positive values. |
+| `std:result` | Portable JIMP | `record StringResult { ok: BOOL, value: STRING, error: STRING }` | Nominal portable type | — | Carries an explicit success flag, string value, and deterministic error message. |
+| `std:result` | Portable JIMP | `stringSuccess(value: STRING): StringResult` | Portable JIMP: [`src/result.jimp`](../../../stdlib/src/result.jimp) | — | Creates a successful StringResult. |
+| `std:result` | Portable JIMP | `stringFailure(error: STRING): StringResult` | Portable JIMP: [`src/result.jimp`](../../../stdlib/src/result.jimp) | — | Creates a failed StringResult with an empty fallback value. |
+| `std:text` | Portable JIMP | `length(value: STRING): I64` | Portable JIMP: [`src/text.jimp`](../../../stdlib/src/text.jimp) | — | Returns the Unicode scalar-value count. |
+| `std:text` | Portable JIMP | `concat(left: STRING, right: STRING): STRING` | Portable JIMP: [`src/text.jimp`](../../../stdlib/src/text.jimp) | — | Concatenates two strings. |
+| `std:text` | Portable JIMP | `at(value: STRING, index: I64): StringResult` | Portable JIMP: [`src/text.jimp`](../../../stdlib/src/text.jimp) | — | Returns one Unicode scalar value or an explicit bounds error. |
+| `std:text` | Portable JIMP | `slice(value: STRING, start: I64, end: I64): StringResult` | Portable JIMP: [`src/text.jimp`](../../../stdlib/src/text.jimp) | — | Returns a half-open Unicode scalar range or an explicit bounds error. |
+| `std:collections/i64` | Portable JIMP | `record I64ArrayResult { ok: BOOL, value: [I64], error: STRING }` | Nominal portable type | — | Carries an immutable I64 array or a recoverable error. |
+| `std:collections/i64` | Portable JIMP | `contains(values: [I64], expected: I64): BOOL` | Portable JIMP: [`src/collections/i64.jimp`](../../../stdlib/src/collections/i64.jimp) | — | Returns whether the array contains the expected value. |
+| `std:collections/i64` | Portable JIMP | `indexOf(values: [I64], expected: I64): I64` | Portable JIMP: [`src/collections/i64.jimp`](../../../stdlib/src/collections/i64.jimp) | — | Returns the first index or -1 when absent. |
+| `std:collections/i64` | Portable JIMP | `replace(values: [I64], index: I64, replacement: I64): I64ArrayResult` | Portable JIMP: [`src/collections/i64.jimp`](../../../stdlib/src/collections/i64.jimp) | — | Returns an updated array or an explicit bounds error while preserving the input. |
+| `std:json/support` | Host ABI bridge | `validate(source: STRING): BOOL` | Host ABI: `std.json.validate` | — | Returns whether the input is valid and within the JSON resource limits. |
+| `std:json/support` | Host ABI bridge | `canonicalize(source: STRING): STRING` | Host ABI: `std.json.canonicalize` | — | Returns deterministic compact JSON, or an empty string for invalid input. |
+| `std:json/support` | Host ABI bridge | `diagnostic(source: STRING): STRING` | Host ABI: `std.json.diagnostic` | — | Returns a deterministic validation diagnostic, or an empty string when valid. |
+| `std:json` | Portable JIMP | `record JsonDocument { text: STRING }` | Nominal portable type | — | A JSON document represented by deterministic compact UTF-8 text. |
+| `std:json` | Portable JIMP | `record JsonResult { ok: BOOL, value: JsonDocument, error: STRING }` | Nominal portable type | — | Carries a validated document or a recoverable deterministic parse error. |
+| `std:json` | Portable JIMP | `parse(source: STRING): JsonResult` | Portable JIMP: [`src/json.jimp`](../../../stdlib/src/json.jimp) | — | Validates and canonicalizes JSON without throwing a language-level exception. |
+| `std:json` | Portable JIMP | `stringify(document: JsonDocument): StringResult` | Portable JIMP: [`src/json.jimp`](../../../stdlib/src/json.jimp) | — | Serializes a document or reports an explicit validation error. |
 
 ## Resolution and versioning
 
@@ -58,12 +81,12 @@ Importing a host-backed export does not grant authority. The resulting Host ABI 
 
 ## Deliberate exclusions
 
-JSON, fetch/networking, files, time, randomness, collections, and text-processing APIs are not in the first catalog. Their contracts require structured or binary values, explicit capability models, deterministic limits, or asynchronous behavior that the current language does not yet define. They must not be simulated through new VM opcodes.
+Files, networking, time, randomness, and asynchronous I/O are not exposed by the current catalog. Their future contracts require explicit capability, binary-value, cancellation, and deterministic-limit semantics described in [IO_CAPABILITIES.md](IO_CAPABILITIES.md). They must not be simulated through new VM opcodes.
 
 ## P4.2 design acceptance
 
-P4.2 is complete because this catalog is the single reviewed source for the initial public module surface, its generated EN/PT references are current, and the VM-independent lowering boundary is explicit. P5.4 delivers the catalog through the compiler and linker.
+The catalog remains the single reviewed source for the public standard-module surface, its generated EN/PT references are current, and the VM-independent lowering boundary is explicit. P7.5 adds portable result, text, and I64 collection modules. P7.6 adds the typed `std:json` wrapper and its data-defined pure Host ABI support bridge.
 
 ## P4.3 design acceptance
 
-P4.3 and P5.4 are complete: every portable export has catalog-linked canonical source whose syntax, semantics, allowed host imports, and exact public signature pass generation checks; the compiler/linker consume that contract; and no optional-import flag, runtime probe, or standard-library opcode is added to the portable format.
+Every portable function export has catalog-linked canonical source whose syntax, semantics, allowed host imports, dependencies, and exact public signature pass generation checks. Nominal record exports are validated from the same source contract. The compiler and linker consume that data without optional-import flags, runtime probes, or standard-library opcodes.

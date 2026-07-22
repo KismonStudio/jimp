@@ -42,6 +42,13 @@ test("exposes the generated reference sandbox profile", () => {
   assert.deepEqual(SANDBOX_PROFILE, { name: "jimp-reference-sandbox", version: 1 });
   assert.equal(SANDBOX_LIMITS.MAX_MODULE_BYTES, 16 * 1024 * 1024);
   assert.equal(SANDBOX_LIMITS.MAX_RUNTIME_VALUE_BYTES, 32 * 1024 * 1024);
+  assert.equal(SANDBOX_LIMITS.MAX_HEAP_BYTES, 4 * 1024 * 1024);
+  assert.equal(SANDBOX_LIMITS.MAX_HEAP_DEPTH, 128);
+  assert.equal(SANDBOX_LIMITS.MAX_HEAP_EQUALITY_VISITS, 65_536);
+  assert.equal(SANDBOX_LIMITS.MAX_JSON_INPUT_BYTES, 1024 * 1024);
+  assert.equal(SANDBOX_LIMITS.MAX_JSON_OUTPUT_BYTES, 1024 * 1024);
+  assert.equal(SANDBOX_LIMITS.MAX_JSON_DEPTH, 128);
+  assert.equal(SANDBOX_LIMITS.MAX_JSON_VALUES, 65_536);
   assert.equal(SANDBOX_LIMITS.MAX_EXECUTION_STEPS, 1_000_000);
   assert.equal(SANDBOX_LIMITS.MAX_CALL_FRAMES, 1_024);
 });

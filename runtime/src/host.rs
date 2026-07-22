@@ -2,6 +2,7 @@ use std::io::{self, Write};
 
 use crate::{
     generated::isa::ValueType,
+    json,
     portable::{HostImport, Value},
 };
 
@@ -101,13 +102,13 @@ pub(crate) trait Host {
 
 pub(crate) struct ConsoleHost;
 
-const CONSOLE_WRITE_PARAMETERS: &[ValueType] = &[ValueType::String];
+const STRING_UNARY_PARAMETERS: &[ValueType] = &[ValueType::String];
 const I64_UNARY_PARAMETERS: &[ValueType] = &[ValueType::I64];
 const I64_BINARY_PARAMETERS: &[ValueType] = &[ValueType::I64, ValueType::I64];
 const CONSOLE_CAPABILITIES: &[HostCapability] = &[
     HostCapability {
         symbol: "std.console.write",
-        parameter_types: CONSOLE_WRITE_PARAMETERS,
+        parameter_types: STRING_UNARY_PARAMETERS,
         return_type: ValueType::Void,
         handle: HostHandle::new(0),
     },
@@ -135,6 +136,24 @@ const CONSOLE_CAPABILITIES: &[HostCapability] = &[
         return_type: ValueType::I64,
         handle: HostHandle::new(4),
     },
+    HostCapability {
+        symbol: "std.json.validate",
+        parameter_types: STRING_UNARY_PARAMETERS,
+        return_type: ValueType::Bool,
+        handle: HostHandle::new(5),
+    },
+    HostCapability {
+        symbol: "std.json.canonicalize",
+        parameter_types: STRING_UNARY_PARAMETERS,
+        return_type: ValueType::String,
+        handle: HostHandle::new(6),
+    },
+    HostCapability {
+        symbol: "std.json.diagnostic",
+        parameter_types: STRING_UNARY_PARAMETERS,
+        return_type: ValueType::String,
+        handle: HostHandle::new(7),
+    },
 ];
 
 impl Host for ConsoleHost {
@@ -160,6 +179,15 @@ impl Host for ConsoleHost {
             }
             (handle, [Value::I64(value)]) if handle == HostHandle::new(4) => {
                 Ok(Some(Value::I64(value.signum())))
+            }
+            (handle, [Value::String(value)]) if handle == HostHandle::new(5) => {
+                Ok(Some(Value::Bool(json::canonicalize(value).is_ok())))
+            }
+            (handle, [Value::String(value)]) if handle == HostHandle::new(6) => Ok(Some(
+                Value::String(json::canonicalize(value).unwrap_or_default()),
+            )),
+            (handle, [Value::String(value)]) if handle == HostHandle::new(7) => {
+                Ok(Some(Value::String(json::diagnostic(value))))
             }
             _ => Err("Reference host received an unknown capability handle or arguments.".into()),
         }

@@ -74,7 +74,7 @@ test("resolves source-order dependencies into a deterministic topological graph"
   const second = await compileProject(entry);
   assert(first.equals(second));
   const module = decodePortableModule(first);
-  assert.equal(module.header.minor, 6);
+  assert.equal(module.header.minor, 9);
   assert.equal(module.functions.length, 3);
   assert.deepEqual(
     [...new Set(module.debug.map(({ moduleId }) => moduleId))],
@@ -97,6 +97,34 @@ test("derives portable IDs from an explicit project root", async () => {
 
   assert.equal(graph.entryId, "src/main.jimp");
   assert.deepEqual(graph.modules.map(({ id }) => id), ["src/main.jimp"]);
+});
+
+test("links nominal records across module and function boundaries", async () => {
+  const root = project();
+  const entry = write(root, "main.jimp", [
+    'import { Point, move } from "./model.jimp";',
+    "let origin = Point { x: 0, y: 0 };",
+    "let moved = move(origin);",
+    "if moved.x == 4 && origin.x == 0 {",
+    '  print "records linked";',
+    "}",
+  ].join("\n"));
+  write(root, "model.jimp", [
+    "export record Point {",
+    "  x: I64,",
+    "  y: I64,",
+    "}",
+    "export function move(point: Point): Point {",
+    "  return point with { x: 4 };",
+    "}",
+  ].join("\n"));
+
+  const module = decodePortableModule(await compileProject(entry));
+
+  assert.equal(module.functions[1].parameterTypes[0], "HEAP_REF");
+  assert.equal(module.functions[1].returnType, "HEAP_REF");
+  assert(module.functions[0].instructions.some(({ name }) => name === "CALL"));
+  assert(module.functions[1].instructions.some(({ name }) => name === "HEAP_REPLACE"));
 });
 
 test("canonicalizes a project-root alias before resolving dependencies", async (context) => {
@@ -301,7 +329,7 @@ test("rejects missing and private exports with importing-module context", async 
 
   await assert.rejects(
     () => compileResolvedProject(graph),
-    /Module "main\.jimp": Import "hidden".*does not name an exported function at line 1/,
+    /Module "main\.jimp": Import "hidden".*does not name an exported declaration at line 1/,
   );
 });
 

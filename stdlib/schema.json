@@ -23,6 +23,10 @@
             "pattern": "^std:[a-z][a-z0-9]*(?:/[a-z][a-z0-9]*)*$"
           },
           "kind": { "enum": ["portable", "host-bridge", "hybrid"] },
+          "source": {
+            "type": "string",
+            "pattern": "^src/[a-z][a-z0-9]*(?:/[a-z][a-z0-9]*)*\\.jimp$"
+          },
           "description": { "$ref": "#/$defs/localizedText" },
           "exports": {
             "type": "array",
@@ -60,7 +64,7 @@
       "required": ["name", "type"],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
-        "type": { "enum": ["BOOL", "I64", "F64", "STRING"] }
+        "type": { "type": "string", "minLength": 1 }
       }
     },
     "implementation": {
@@ -94,14 +98,19 @@
     "export": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "parameters", "returnType", "implementation", "description"],
+      "required": ["kind", "name", "description"],
       "properties": {
-        "name": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
+        "kind": { "enum": ["function", "record"] },
+        "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*$" },
         "parameters": {
           "type": "array",
           "items": { "$ref": "#/$defs/parameter" }
         },
-        "returnType": { "enum": ["NULL", "BOOL", "I64", "F64", "STRING", "VOID"] },
+        "returnType": { "type": "string", "minLength": 1 },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/parameter" }
+        },
         "implementation": { "$ref": "#/$defs/implementation" },
         "description": { "$ref": "#/$defs/localizedText" }
       }

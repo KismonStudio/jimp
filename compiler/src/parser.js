@@ -1,16 +1,16 @@
 import { withModuleContext } from "./module-context.js";
 
 const IDENTIFIER_SOURCE = String.raw`[A-Za-z_][A-Za-z0-9_]*`;
-const VALUE_TYPE_SOURCE = String.raw`(?:NULL|BOOL|I64|F64|STRING|VOID)`;
 const VARIABLE_DECLARATION = new RegExp(
-  String.raw`^(let|var)\s+(${IDENTIFIER_SOURCE})\s*=\s*(.+)$`,
+  String.raw`^(let|var)\s+(${IDENTIFIER_SOURCE})(?:\s*:\s*(.+?))?\s*=\s*(.+)$`,
 );
 const VARIABLE_ASSIGNMENT = new RegExp(
   String.raw`^(${IDENTIFIER_SOURCE})\s*=(?!=)\s*(.+)$`,
 );
 const FUNCTION_HEADER = new RegExp(
-  String.raw`^function\s+(${IDENTIFIER_SOURCE})\s*\((.*)\)\s*:\s*(${VALUE_TYPE_SOURCE})\s*\{\s*$`,
+  String.raw`^function\s+(${IDENTIFIER_SOURCE})\s*\((.*)\)\s*:\s*(.+?)\s*\{\s*$`,
 );
+const RECORD_HEADER = new RegExp(String.raw`^record\s+(${IDENTIFIER_SOURCE})\s*\{\s*$`);
 const PRINT_STATEMENT = /^print\s+(.+)$/;
 const RETURN_STATEMENT = /^return(?:\s+(.+))?$/;
 const NUMBER_PREFIX = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+(?:[eE][+-]?[0-9]+)?|[eE][+-]?[0-9]+)?/;
@@ -18,6 +18,7 @@ const I64_MIN = -(1n << 63n);
 const I64_MAX = (1n << 63n) - 1n;
 const TWO_CHARACTER_OPERATORS = new Set(["==", "!=", "<=", ">=", "&&", "||"]);
 const ONE_CHARACTER_OPERATORS = new Set(["+", "-", "*", "/", "%", "!", "<", ">"]);
+const SCALAR_TYPES = new Set(["NULL", "BOOL", "I64", "F64", "STRING", "VOID"]);
 const STRING_ESCAPES = Object.freeze({
   "\\": "\\",
   '"': '"',
@@ -70,7 +71,19 @@ function canStartSignedNumber(tokens) {
   return !previous
     || previous.kind === "operator"
     || previous.kind === "leftParenthesis"
+    || previous.kind === "leftBracket"
     || previous.kind === "comma";
+}
+
+function parseType(source, line) {
+  const value = source.trim();
+  if (SCALAR_TYPES.has(value) || new RegExp(`^${IDENTIFIER_SOURCE}$`).test(value)) return value;
+  if (value.startsWith("[") && value.endsWith("]")) {
+    const element = value.slice(1, -1).trim();
+    if (element === "") throw new Error(`Array type requires an element type at line ${line}.`);
+    return `[${parseType(element, line)}]`;
+  }
+  throw new Error(`Invalid type ${JSON.stringify(value)} at line ${line}.`);
 }
 
 function tokenizeExpression(source, line) {
@@ -129,7 +142,14 @@ function tokenizeExpression(source, line) {
     const punctuation = {
       "(": "leftParenthesis",
       ")": "rightParenthesis",
+      "[": "leftBracket",
+      "]": "rightBracket",
+      "{": "leftBrace",
+      "}": "rightBrace",
       ",": "comma",
+      ":": "colon",
+      ".": "dot",
+      "=": "equals",
     }[character];
     if (punctuation) {
       tokens.push({ kind: punctuation, value: character });
@@ -154,9 +174,46 @@ class ExpressionParser {
   }
 
   parse() {
-    const expression = this.parseOr();
+    const expression = this.parseUpdate();
     if (this.current().kind !== "end") {
       throw new Error(`Unexpected token in expression at line ${this.line}.`);
+    }
+    return expression;
+  }
+
+  parseUpdate() {
+    let expression = this.parseOr();
+    while (this.current().kind === "identifier" && this.current().value === "with") {
+      this.offset += 1;
+      if (this.current().kind === "leftBracket") {
+        this.offset += 1;
+        const index = this.parseUpdate();
+        if (this.current().kind !== "rightBracket") {
+          throw new Error(`Expected closing bracket for array update at line ${this.line}.`);
+        }
+        this.offset += 1;
+        if (this.current().kind !== "equals") {
+          throw new Error(`Expected = in array update at line ${this.line}.`);
+        }
+        this.offset += 1;
+        expression = {
+          kind: "arrayUpdateExpression",
+          line: this.line,
+          object: expression,
+          index,
+          value: this.parseUpdate(),
+        };
+        continue;
+      }
+      if (this.current().kind !== "leftBrace") {
+        throw new Error(`Expected [ or { after with at line ${this.line}.`);
+      }
+      expression = {
+        kind: "recordUpdateExpression",
+        line: this.line,
+        object: expression,
+        fields: this.parseFieldInitializers("record update"),
+      };
     }
     return expression;
   }
@@ -220,7 +277,7 @@ class ExpressionParser {
     this.offset += 1;
     if (this.current().kind !== "rightParenthesis") {
       while (true) {
-        argumentsList.push(this.parseOr());
+        argumentsList.push(this.parseUpdate());
         if (this.current().kind !== "comma") break;
         this.offset += 1;
       }
@@ -232,32 +289,131 @@ class ExpressionParser {
     return argumentsList;
   }
 
+  parseFieldInitializers(context) {
+    const fields = [];
+    this.offset += 1;
+    if (this.current().kind !== "rightBrace") {
+      while (true) {
+        const name = this.current();
+        if (name.kind !== "identifier") {
+          throw new Error(`Expected a field name in ${context} at line ${this.line}.`);
+        }
+        this.offset += 1;
+        if (this.current().kind !== "colon") {
+          throw new Error(`Expected : after field "${name.value}" at line ${this.line}.`);
+        }
+        this.offset += 1;
+        fields.push({ name: name.value, expression: this.parseUpdate(), line: this.line });
+        if (this.current().kind !== "comma") break;
+        this.offset += 1;
+        if (this.current().kind === "rightBrace") break;
+      }
+    }
+    if (this.current().kind !== "rightBrace") {
+      throw new Error(`Expected closing brace for ${context} at line ${this.line}.`);
+    }
+    this.offset += 1;
+    return fields;
+  }
+
+  parsePostfix(expression) {
+    while (true) {
+      if (this.current().kind === "leftBracket") {
+        this.offset += 1;
+        const index = this.parseUpdate();
+        if (this.current().kind === "colon") {
+          this.offset += 1;
+          const end = this.parseUpdate();
+          if (this.current().kind !== "rightBracket") {
+            throw new Error(`Expected closing bracket for sliced access at line ${this.line}.`);
+          }
+          this.offset += 1;
+          expression = {
+            kind: "sliceExpression",
+            line: this.line,
+            object: expression,
+            start: index,
+            end,
+          };
+          continue;
+        }
+        if (this.current().kind !== "rightBracket") {
+          throw new Error(`Expected closing bracket for indexed access at line ${this.line}.`);
+        }
+        this.offset += 1;
+        expression = { kind: "indexExpression", line: this.line, object: expression, index };
+        continue;
+      }
+      if (this.current().kind === "dot") {
+        this.offset += 1;
+        const member = this.current();
+        if (member.kind !== "identifier") {
+          throw new Error(`Expected a member name after . at line ${this.line}.`);
+        }
+        this.offset += 1;
+        expression = {
+          kind: "memberExpression",
+          line: this.line,
+          object: expression,
+          member: member.value,
+        };
+        continue;
+      }
+      return expression;
+    }
+  }
+
   parsePrimary() {
     const token = this.current();
     if (token.kind === "literal") {
       this.offset += 1;
-      return { kind: "literal", line: this.line, value: token.value };
+      return this.parsePostfix({ kind: "literal", line: this.line, value: token.value });
+    }
+    if (token.kind === "leftBracket") {
+      this.offset += 1;
+      const elements = [];
+      if (this.current().kind !== "rightBracket") {
+        while (true) {
+          elements.push(this.parseUpdate());
+          if (this.current().kind !== "comma") break;
+          this.offset += 1;
+          if (this.current().kind === "rightBracket") break;
+        }
+      }
+      if (this.current().kind !== "rightBracket") {
+        throw new Error(`Expected closing bracket for array literal at line ${this.line}.`);
+      }
+      this.offset += 1;
+      return this.parsePostfix({ kind: "arrayLiteral", line: this.line, elements });
     }
     if (token.kind === "identifier") {
       this.offset += 1;
       if (this.current().kind === "leftParenthesis") {
-        return {
+        return this.parsePostfix({
           kind: "callExpression",
           line: this.line,
           callee: token.value,
           arguments: this.parseArguments(token.value),
-        };
+        });
       }
-      return { kind: "identifier", line: this.line, name: token.value };
+      if (this.current().kind === "leftBrace") {
+        return this.parsePostfix({
+          kind: "recordLiteral",
+          line: this.line,
+          recordName: token.value,
+          fields: this.parseFieldInitializers(`record literal ${token.value}`),
+        });
+      }
+      return this.parsePostfix({ kind: "identifier", line: this.line, name: token.value });
     }
     if (token.kind === "leftParenthesis") {
       this.offset += 1;
-      const expression = this.parseOr();
+      const expression = this.parseUpdate();
       if (this.current().kind !== "rightParenthesis") {
         throw new Error(`Expected closing parenthesis at line ${this.line}.`);
       }
       this.offset += 1;
-      return expression;
+      return this.parsePostfix(expression);
     }
     throw new Error(`Expected an expression at line ${this.line}.`);
   }
@@ -295,7 +451,8 @@ function parseSimpleStatement(source, line) {
       line,
       mutable: declarationMatch[1] === "var",
       name: declarationMatch[2],
-      initializer: parseExpression(declarationMatch[3], line),
+      annotation: declarationMatch[3] ? parseType(declarationMatch[3], line) : null,
+      initializer: parseExpression(declarationMatch[4], line),
     };
   }
   const assignmentMatch = statement.match(VARIABLE_ASSIGNMENT);
@@ -318,10 +475,10 @@ function parseParameters(source, line) {
   if (source.trim() === "") return [];
   return source.split(",").map((parameter) => {
     const match = parameter.trim().match(
-      new RegExp(String.raw`^(${IDENTIFIER_SOURCE})\s*:\s*(${VALUE_TYPE_SOURCE})$`),
+      new RegExp(String.raw`^(${IDENTIFIER_SOURCE})\s*:\s*(.+)$`),
     );
     if (!match) throw new Error(`Invalid function parameter at line ${line}.`);
-    return { name: match[1], type: match[2], line };
+    return { name: match[1], type: parseType(match[2], line), line };
   });
 }
 
@@ -406,8 +563,8 @@ class ProgramParser {
       }
 
       const exportMatch = current.text.match(/^export\s+(.+)$/);
-      const functionSource = exportMatch ? exportMatch[1] : current.text;
-      const functionMatch = functionSource.match(FUNCTION_HEADER);
+      const declarationSource = exportMatch ? exportMatch[1] : current.text;
+      const functionMatch = declarationSource.match(FUNCTION_HEADER);
       if (functionMatch) {
         if (openingLine !== null) {
           throw new Error(`Functions must be declared at program scope at line ${current.line}.`);
@@ -415,11 +572,22 @@ class ProgramParser {
         statements.push(this.parseFunction(current, functionMatch, exportMatch !== null));
         continue;
       }
+      const recordMatch = declarationSource.match(RECORD_HEADER);
+      if (recordMatch) {
+        if (openingLine !== null) {
+          throw new Error(`Records must be declared at program scope at line ${current.line}.`);
+        }
+        statements.push(this.parseRecord(current, recordMatch, exportMatch !== null));
+        continue;
+      }
       if (/^export(?:\s|$)/.test(current.text)) {
-        throw new Error(`Only a top-level function declaration may be exported at line ${current.line}.`);
+        throw new Error(`Only a top-level function or record declaration may be exported at line ${current.line}.`);
       }
       if (/^function(?:\s|$)/.test(current.text)) {
         throw new Error(`Invalid function declaration at line ${current.line}.`);
+      }
+      if (/^record(?:\s|$)/.test(current.text)) {
+        throw new Error(`Invalid record declaration at line ${current.line}.`);
       }
 
       const conditionalMatch = current.text.match(/^if\s+(.+?)\s*\{\s*$/);
@@ -457,8 +625,37 @@ class ProgramParser {
       name: match[1],
       exported,
       parameters: parseParameters(match[2], opening.line),
-      returnType: match[3],
+      returnType: parseType(match[3], opening.line),
       body: { kind: "block", line: opening.line, statements: body.statements },
+    };
+  }
+
+  parseRecord(opening, match, exported) {
+    this.offset += 1;
+    const fields = [];
+    while (true) {
+      this.skipTrivia();
+      const current = this.lines[this.offset];
+      if (!current) {
+        throw new Error(`Expected closing brace for record opened at line ${opening.line}.`);
+      }
+      if (current.text === "}") {
+        this.offset += 1;
+        break;
+      }
+      const field = current.text.match(
+        new RegExp(String.raw`^(${IDENTIFIER_SOURCE})\s*:\s*(.+?)\s*,?\s*$`),
+      );
+      if (!field) throw new Error(`Invalid record field at line ${current.line}.`);
+      fields.push({ name: field[1], type: parseType(field[2], current.line), line: current.line });
+      this.offset += 1;
+    }
+    return {
+      kind: "recordDeclaration",
+      line: opening.line,
+      name: match[1],
+      exported,
+      fields,
     };
   }
 

@@ -174,6 +174,126 @@
       }
     },
     {
+      "name": "MAX_HEAP_OBJECTS",
+      "value": 4096,
+      "unit": "objects",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum immutable objects allocated during one execution.",
+        "pt": "Quantidade maxima de objetos imutaveis alocados durante uma execucao."
+      }
+    },
+    {
+      "name": "MAX_HEAP_SLOTS_PER_OBJECT",
+      "value": 1024,
+      "unit": "slots",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum slots in one immutable heap object.",
+        "pt": "Quantidade maxima de slots em um objeto imutavel da heap."
+      }
+    },
+    {
+      "name": "MAX_TOTAL_HEAP_SLOTS",
+      "value": 65536,
+      "unit": "slots",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum cumulative slots allocated during one execution.",
+        "pt": "Quantidade maxima cumulativa de slots alocados durante uma execucao."
+      }
+    },
+    {
+      "name": "HEAP_OBJECT_HEADER_BYTES",
+      "value": 16,
+      "unit": "bytes",
+      "phase": "execute",
+      "description": {
+        "en": "Logical memory charged for every immutable heap object.",
+        "pt": "Memoria logica cobrada por objeto imutavel da heap."
+      }
+    },
+    {
+      "name": "HEAP_SLOT_BYTES",
+      "value": 16,
+      "unit": "bytes",
+      "phase": "execute",
+      "description": {
+        "en": "Logical memory charged for every heap slot, excluding string payload bytes.",
+        "pt": "Memoria logica cobrada por slot da heap, sem os bytes do conteudo de strings."
+      }
+    },
+    {
+      "name": "MAX_HEAP_BYTES",
+      "value": 4194304,
+      "unit": "bytes",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum cumulative logical bytes allocated for heap objects, slots, and direct string payloads.",
+        "pt": "Maximo cumulativo de bytes logicos alocados para objetos, slots e conteudos diretos de strings na heap."
+      }
+    },
+    {
+      "name": "MAX_HEAP_DEPTH",
+      "value": 128,
+      "unit": "levels",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum immutable heap-reference nesting depth.",
+        "pt": "Profundidade maxima de aninhamento de referencias imutaveis da heap."
+      }
+    },
+    {
+      "name": "MAX_HEAP_EQUALITY_VISITS",
+      "value": 65536,
+      "unit": "value pairs",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum value pairs examined by one structural heap equality operation.",
+        "pt": "Quantidade maxima de pares de valores examinados por uma operacao de igualdade estrutural da heap."
+      }
+    },
+    {
+      "name": "MAX_JSON_INPUT_BYTES",
+      "value": 1048576,
+      "unit": "bytes",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum UTF-8 input accepted by one reference std:json operation.",
+        "pt": "Quantidade maxima de entrada UTF-8 aceita por uma operacao de referencia de std:json."
+      }
+    },
+    {
+      "name": "MAX_JSON_OUTPUT_BYTES",
+      "value": 1048576,
+      "unit": "bytes",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum canonical UTF-8 output produced by one reference std:json operation.",
+        "pt": "Quantidade maxima de saida UTF-8 canonica produzida por uma operacao de referencia de std:json."
+      }
+    },
+    {
+      "name": "MAX_JSON_DEPTH",
+      "value": 128,
+      "unit": "levels",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum array and object nesting depth accepted by reference std:json.",
+        "pt": "Profundidade maxima de arrays e objetos aceita pela implementacao de referencia de std:json."
+      }
+    },
+    {
+      "name": "MAX_JSON_VALUES",
+      "value": 65536,
+      "unit": "values",
+      "phase": "execute",
+      "description": {
+        "en": "Maximum values parsed by one reference std:json operation.",
+        "pt": "Quantidade maxima de valores analisados por uma operacao de referencia de std:json."
+      }
+    },
+    {
       "name": "MAX_EXECUTION_STEPS",
       "value": 1000000,
       "unit": "instructions",
