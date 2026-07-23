@@ -67,6 +67,22 @@
         "type": { "type": "string", "minLength": 1 }
       }
     },
+    "typeParameter": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]*$"
+    },
+    "variantAlternative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fields"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/parameter" }
+        }
+      }
+    },
     "implementation": {
       "type": "object",
       "additionalProperties": false,
@@ -100,8 +116,12 @@
       "additionalProperties": false,
       "required": ["kind", "name", "description"],
       "properties": {
-        "kind": { "enum": ["function", "record"] },
+        "kind": { "enum": ["function", "record", "variant"] },
         "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*$" },
+        "typeParameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/typeParameter" }
+        },
         "parameters": {
           "type": "array",
           "items": { "$ref": "#/$defs/parameter" }
@@ -110,6 +130,11 @@
         "fields": {
           "type": "array",
           "items": { "$ref": "#/$defs/parameter" }
+        },
+        "alternatives": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/variantAlternative" }
         },
         "implementation": { "$ref": "#/$defs/implementation" },
         "description": { "$ref": "#/$defs/localizedText" }

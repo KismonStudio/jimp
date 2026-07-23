@@ -1,0 +1,19 @@
+import { Option } from "std:option";
+import { Result } from "std:result";
+
+variant List<T> {
+  Nil,
+  Cons(head: T, tail: List<T>),
+}
+
+function length<T>(items: List<T>): I64 {
+  return match(items) { Nil => 0, Cons(_, tail) => 1 + length(tail) };
+}
+
+let option: Option<I64> = Option::Some(42);
+let result: Result<STRING, I64> = Result::Ok("ready");
+let items: List<I64> = List::Cons(1, List::Cons(2, List::Nil()));
+
+if match(option) { Some(value) => value == 42, None => false } && match(result) { Ok(value) => value == "ready", Error(_) => false } && length(items) == 2 {
+  print "p8 ready";
+}

@@ -4,7 +4,9 @@
 
 ## Scope
 
-Format `2.7` introduced the generic, immutable, resource-bounded heap foundation, and format `2.8` added generic functional replacement and structural equality for typed arrays and records. Active format `2.9` preserves that heap contract and adds generic STRING operations. The VM still does not define JSON, files, networking, host handles, or native pointers.
+Format `2.7` introduced the generic, immutable, resource-bounded heap foundation, and format `2.8` added generic functional replacement and structural equality for typed arrays and records. Active format `2.9` preserves that heap contract, adds generic STRING operations, and is sufficient for P8.1–P8.4 variant, generic, and recursive-value lowering without new instructions. The VM still does not define JSON, files, networking, host handles, or native pointers.
+
+The compiler represents a variant as an immutable object whose first slot is an I64 alternative tag and whose remaining slots are the ordered payload. Generic-dependent payloads and naked type variables use verified one-slot heap boxes at uniform function boundaries. Matching is lowered to typed loads, tag equality, and generic jumps. These layouts are compiler conventions, not new VM types or public-name-specific behavior.
 
 ## Representation and instructions
 

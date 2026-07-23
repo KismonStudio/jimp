@@ -6,7 +6,7 @@
 
 ## Status
 
-This document specifies the standard-library catalog and portable-source contract implemented through P7.6. The compiler resolves these embedded modules without project-filesystem lookup and statically links only used exports.
+This document specifies the standard-library catalog and portable-source contract implemented through P8.3. The compiler resolves these embedded modules without project-filesystem lookup and statically links only used exports.
 
 ## Architecture
 
@@ -21,6 +21,7 @@ This document specifies the standard-library catalog and portable-source contrac
 
 - `std:console`: Explicit console output through a typed Host ABI bridge and portable wrappers.
 - `std:math/i64`: Deterministic helpers for signed 64-bit integers implemented in portable JIMP.
+- `std:option`: Generic optional values with exhaustive pattern matching.
 - `std:result`: Explicit nominal result values for recoverable string-producing operations.
 - `std:text`: Portable Unicode-scalar text length, concatenation, indexed access, and slicing.
 - `std:collections/i64`: Portable search and recoverable replacement helpers for immutable I64 arrays.
@@ -35,6 +36,8 @@ This document specifies the standard-library catalog and portable-source contrac
 | `std:math/i64` | Portable JIMP | `minimum(left: I64, right: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.minimum` | Returns left when left is less than or equal to right; otherwise returns right. |
 | `std:math/i64` | Portable JIMP | `maximum(left: I64, right: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.maximum` | Returns left when left is greater than or equal to right; otherwise returns right. |
 | `std:math/i64` | Portable JIMP | `sign(value: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.sign` | Returns -1 for negative values, 0 for zero, and 1 for positive values. |
+| `std:option` | Portable JIMP | `variant Option<T> { None(), Some(value: T) }` | Nominal portable type | — | Represents either no value or one value of type T. |
+| `std:result` | Portable JIMP | `variant Result<T, E> { Ok(value: T), Error(error: E) }` | Nominal portable type | — | Represents either a successful value of type T or an error of type E. |
 | `std:result` | Portable JIMP | `record StringResult { ok: BOOL, value: STRING, error: STRING }` | Nominal portable type | — | Carries an explicit success flag, string value, and deterministic error message. |
 | `std:result` | Portable JIMP | `stringSuccess(value: STRING): StringResult` | Portable JIMP: [`src/result.jimp`](../../../stdlib/src/result.jimp) | — | Creates a successful StringResult. |
 | `std:result` | Portable JIMP | `stringFailure(error: STRING): StringResult` | Portable JIMP: [`src/result.jimp`](../../../stdlib/src/result.jimp) | — | Creates a failed StringResult with an empty fallback value. |
@@ -89,4 +92,4 @@ The catalog remains the single reviewed source for the public standard-module su
 
 ## P4.3 design acceptance
 
-Every portable function export has catalog-linked canonical source whose syntax, semantics, allowed host imports, dependencies, and exact public signature pass generation checks. Nominal record exports are validated from the same source contract. The compiler and linker consume that data without optional-import flags, runtime probes, or standard-library opcodes.
+Every portable function export has catalog-linked canonical source whose syntax, semantics, allowed host imports, dependencies, and exact public signature pass generation checks. Nominal record and variant exports are validated from the same source contract. The compiler and linker consume that data without optional-import flags, runtime probes, or standard-library opcodes.

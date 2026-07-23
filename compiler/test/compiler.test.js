@@ -402,3 +402,41 @@ test("lowers portable Unicode string operations", () => {
     assert(names.includes(name), `Expected ${name} in string lowering.`);
   }
 });
+
+test("lowers variants, exhaustive match, and generics to generic heap instructions", () => {
+  const module = decodePortableModule(compile(`
+    variant Option<T> {
+      None,
+      Some(value: T),
+    }
+    function identity<T>(value: T): T {
+      return value;
+    }
+    let option: Option<I64> = Option::Some(41);
+    match(option) { Some(value) => identity(value) + 1, None => 0 };
+  `));
+  const names = module.functions.flatMap((func) =>
+    func.instructions.map((instruction) => instruction.name));
+
+  assert.ok(names.includes("HEAP_ALLOC"));
+  assert.ok(names.includes("HEAP_LOAD"));
+  assert.ok(names.includes("JUMP_IF_FALSE"));
+  assert.ok(names.includes("CALL"));
+  assert.equal(names.some((name) => name.includes("MATCH") || name.includes("OPTION")), false);
+});
+
+test("lowers recursive generic variants without monomorphized functions", () => {
+  const module = decodePortableModule(compile(`
+    variant List<T> {
+      Nil,
+      Cons(head: T, tail: List<T>),
+    }
+    function length<T>(items: List<T>): I64 {
+      return match(items) { Nil => 0, Cons(_, tail) => 1 + length(tail) };
+    }
+    let items: List<I64> = List::Cons(1, List::Cons(2, List::Nil()));
+    length(items);
+  `));
+
+  assert.equal(module.functions.length, 2);
+});

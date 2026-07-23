@@ -53,14 +53,17 @@ function linkProject(graph, { targetProfile = "portable" } = {}) {
           imported: item.imported,
           local: item.local,
           moduleId: dependency.moduleId,
-          ...(exported.kind === "record" ? {
+          ...(exported.kind === "record" || exported.kind === "variant" ? {
             name: exported.name,
             type: exported.type,
-            fields: exported.fields,
+            typeParameters: exported.typeParameters,
+            fields: exported.fields ?? [],
+            alternatives: exported.alternatives ?? [],
             dependencies: exported.dependencies,
           } : {
             parameterTypes: exported.parameterTypes,
             returnType: exported.returnType,
+            typeParameters: exported.typeParameters ?? [],
             dependencies: exported.dependencies,
           }),
         });
@@ -71,10 +74,11 @@ function linkProject(graph, { targetProfile = "portable" } = {}) {
     if (module.standard) {
       for (const catalogExport of module.catalogModule.exports) {
         const analyzed = moduleExports.get(catalogExport.name);
-        if ((catalogExport.kind ?? "function") === "record") {
-          if (analyzed?.kind !== "record") {
+        if ((catalogExport.kind ?? "function") === "record"
+          || (catalogExport.kind ?? "function") === "variant") {
+          if (analyzed?.kind !== catalogExport.kind) {
             throw withModuleContext(
-              new Error(`Standard record export "${catalogExport.name}" is missing.`),
+              new Error(`Standard type export "${catalogExport.name}" is missing.`),
               module.id,
             );
           }

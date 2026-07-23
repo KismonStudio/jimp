@@ -3,6 +3,7 @@ import { NO_REGISTER, VALUE_TYPES } from "./generated/isa.js";
 import { SANDBOX_LIMITS } from "./generated/sandbox.js";
 import { parseProgram } from "./parser.js";
 import { encodeInstruction, encodePortableModule } from "./portable/module.js";
+import { isAggregateType, isTypeVariable } from "./type-system.js";
 
 const UNARY_INSTRUCTIONS = Object.freeze({ "-": "NEGATE", "!": "BOOL_NOT" });
 const BINARY_INSTRUCTIONS = Object.freeze({
@@ -18,10 +19,6 @@ const BINARY_INSTRUCTIONS = Object.freeze({
   ">": "GREATER_THAN",
   ">=": "GREATER_EQUAL",
 });
-
-function isAggregateType(type) {
-  return type.startsWith("[") || type.startsWith("RECORD<");
-}
 
 function vmType(type) {
   return isAggregateType(type) ? "HEAP_REF" : type;
@@ -220,8 +217,40 @@ export function emitAnalyzedProgram(program, {
     const registers = new RegisterAllocator(variableCount);
     const loopStack = [];
 
+    function emitIndexConstant(value) {
+      const constant = constants.length;
+      constants.push({ type: "I64", value: BigInt(value) });
+      const index = registers.allocate();
+      assembler.emit("LOAD_CONST", { destination: index, constant });
+      return index;
+    }
+
+    function boxRegister(register) {
+      assembler.emit("HEAP_ALLOC", {
+        destination: register,
+        value_start: register,
+        value_count: 1,
+      });
+      return register;
+    }
+
+    function unboxRegister(register, type) {
+      const index = emitIndexConstant(0);
+      assembler.emit("HEAP_LOAD", {
+        destination: register,
+        object: register,
+        index,
+        result_type: VALUE_TYPES[vmType(type)],
+      });
+      registers.release(index);
+      return register;
+    }
+
     function compileCall(expression) {
-      const argumentsList = expression.arguments.map(compileExpression);
+      const argumentsList = expression.arguments.map((argument, index) => {
+        const register = compileExpression(argument);
+        return expression.boxArguments?.[index] ? boxRegister(register) : register;
+      });
       const argumentStart = registers.allocateRange(argumentsList.length);
       for (let index = 0; index < argumentsList.length; index += 1) {
         assembler.emit("MOVE", {
@@ -248,6 +277,7 @@ export function emitAnalyzedProgram(program, {
         });
       }
       registers.releaseRange(argumentStart, argumentsList.length);
+      if (result !== NO_REGISTER && expression.unboxResult) unboxRegister(result, expression.type);
       return result;
     }
 
@@ -268,7 +298,12 @@ export function emitAnalyzedProgram(program, {
       if (expression.kind === "arrayLiteral" || expression.kind === "recordLiteral") {
         const values = expression.kind === "arrayLiteral"
           ? expression.elements.map(compileExpression)
-          : expression.fields.map(({ expression: field }) => compileExpression(field));
+          : expression.fields.map((field) => {
+            const register = compileExpression(field.expression);
+            return field.boxed && !isTypeVariable(field.expression.type)
+              ? boxRegister(register)
+              : register;
+          });
         const valueStart = registers.allocateRange(values.length);
         for (let index = 0; index < values.length; index += 1) {
           assembler.emit("MOVE", { destination: valueStart + index, source: values[index] });
@@ -282,6 +317,85 @@ export function emitAnalyzedProgram(program, {
         });
         registers.releaseRange(valueStart, values.length);
         return destination;
+      }
+      if (expression.kind === "variantLiteral") {
+        const values = [emitIndexConstant(expression.alternative.tag)];
+        for (const argument of expression.arguments) {
+          const register = compileExpression(argument.expression);
+          values.push(argument.boxed && !isTypeVariable(argument.expression.type)
+            ? boxRegister(register)
+            : register);
+        }
+        const valueStart = registers.allocateRange(values.length);
+        for (let index = 0; index < values.length; index += 1) {
+          assembler.emit("MOVE", { destination: valueStart + index, source: values[index] });
+          registers.release(values[index]);
+        }
+        const destination = registers.allocate();
+        assembler.emit("HEAP_ALLOC", {
+          destination,
+          value_start: valueStart,
+          value_count: values.length,
+        });
+        registers.releaseRange(valueStart, values.length);
+        return destination;
+      }
+      if (expression.kind === "matchExpression") {
+        const object = compileExpression(expression.value);
+        const tagIndex = emitIndexConstant(0);
+        const tag = registers.allocate();
+        assembler.emit("HEAP_LOAD", {
+          destination: tag,
+          object,
+          index: tagIndex,
+          result_type: VALUE_TYPES.I64,
+        });
+        registers.release(tagIndex);
+        const result = registers.allocate();
+        const end = assembler.createLabel();
+        for (let armIndex = 0; armIndex < expression.arms.length; armIndex += 1) {
+          const arm = expression.arms[armIndex];
+          const last = armIndex === expression.arms.length - 1;
+          let next = null;
+          if (!last) {
+            const expectedTag = emitIndexConstant(arm.alternative.tag);
+            const matches = registers.allocate();
+            assembler.emit("EQUAL", { destination: matches, left: tag, right: expectedTag });
+            registers.release(expectedTag);
+            next = assembler.createLabel();
+            assembler.emit("JUMP_IF_FALSE", { condition: matches, target: next });
+            registers.release(matches);
+          }
+          for (let index = 0; index < arm.bindings.length; index += 1) {
+            const binding = arm.bindings[index];
+            if (binding.ignored) continue;
+            const fieldIndex = emitIndexConstant(index + 1);
+            const loaded = registers.allocate();
+            assembler.emit("HEAP_LOAD", {
+              destination: loaded,
+              object,
+              index: fieldIndex,
+              result_type: VALUE_TYPES[binding.field.boxed ? "HEAP_REF" : vmType(binding.type)],
+            });
+            registers.release(fieldIndex);
+            if (binding.field.boxed && !isTypeVariable(binding.type)) {
+              unboxRegister(loaded, binding.type);
+            }
+            assembler.emit("MOVE", { destination: binding.register, source: loaded });
+            registers.release(loaded);
+          }
+          const armResult = compileExpression(arm.expression);
+          assembler.emit("MOVE", { destination: result, source: armResult });
+          registers.release(armResult);
+          if (!last) {
+            assembler.emit("JUMP", { target: end });
+            assembler.mark(next);
+          }
+        }
+        assembler.mark(end);
+        registers.release(tag);
+        registers.release(object);
+        return result;
       }
       if (expression.kind === "indexExpression") {
         const object = compileExpression(expression.object);
@@ -326,9 +440,12 @@ export function emitAnalyzedProgram(program, {
           destination: object,
           object,
           index,
-          result_type: VALUE_TYPES[vmType(expression.type)],
+          result_type: VALUE_TYPES[expression.boxed ? "HEAP_REF" : vmType(expression.type)],
         });
         registers.release(index);
+        if (expression.boxed && !isTypeVariable(expression.type)) {
+          unboxRegister(object, expression.type);
+        }
         return object;
       }
       if (expression.kind === "arrayUpdateExpression") {
@@ -348,6 +465,7 @@ export function emitAnalyzedProgram(program, {
           const index = registers.allocate();
           assembler.emit("LOAD_CONST", { destination: index, constant });
           const value = compileExpression(field.expression);
+          if (field.boxed && !isTypeVariable(field.expression.type)) boxRegister(value);
           assembler.emit("HEAP_REPLACE", { destination: object, object, index, value });
           registers.release(index);
           registers.release(value);

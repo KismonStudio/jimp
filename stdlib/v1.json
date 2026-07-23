@@ -140,6 +140,30 @@
       ]
     },
     {
+      "specifier": "std:option",
+      "kind": "portable",
+      "source": "src/option.jimp",
+      "description": {
+        "en": "Generic optional values with exhaustive pattern matching.",
+        "pt": "Valores opcionais genéricos com correspondência de padrões exaustiva."
+      },
+      "exports": [
+        {
+          "kind": "variant",
+          "name": "Option",
+          "typeParameters": ["T"],
+          "alternatives": [
+            { "name": "None", "fields": [] },
+            { "name": "Some", "fields": [{ "name": "value", "type": "T" }] }
+          ],
+          "description": {
+            "en": "Represents either no value or one value of type T.",
+            "pt": "Representa a ausência de valor ou um valor do tipo T."
+          }
+        }
+      ]
+    },
+    {
       "specifier": "std:result",
       "kind": "portable",
       "source": "src/result.jimp",
@@ -148,6 +172,19 @@
         "pt": "Valores nominais e explícitos de resultado para operações recuperáveis que produzem strings."
       },
       "exports": [
+        {
+          "kind": "variant",
+          "name": "Result",
+          "typeParameters": ["T", "E"],
+          "alternatives": [
+            { "name": "Ok", "fields": [{ "name": "value", "type": "T" }] },
+            { "name": "Error", "fields": [{ "name": "error", "type": "E" }] }
+          ],
+          "description": {
+            "en": "Represents either a successful value of type T or an error of type E.",
+            "pt": "Representa um valor bem-sucedido do tipo T ou um erro do tipo E."
+          }
+        },
         {
           "kind": "record",
           "name": "StringResult",

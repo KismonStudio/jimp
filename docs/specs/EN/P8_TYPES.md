@@ -4,54 +4,46 @@
 
 ## Status
 
-This document is the approved implementation roadmap for P8. It is not an implemented language contract. Syntax, bytecode encodings, and public APIs remain unavailable until their individual specification-first tasks are completed and pass the full quality gate.
+P8.1 through P8.4 are implemented. Their normative source and representation contract is defined in [VARIANTS_AND_GENERICS.md](VARIANTS_AND_GENERICS.md). P8.5 through P8.7 remain planned and unavailable.
 
-P8 provides the type-system and value-model prerequisites for structured JSON, binary data, and later asynchronous I/O. It must preserve immutable value semantics, exact static typing, deterministic resource accounting, independent JavaScript/Rust verification, and the rule that standard-library API names never become VM instructions.
+The implementation preserves immutable value semantics, exact static typing, deterministic resource accounting, cross-module nominal identity, and a VM whose instructions do not depend on public language or library names.
 
-## P8.1 — Tagged variants
+## P8.1 — Tagged variants — complete
 
-Specify and implement nominal tagged variants capable of carrying differently typed payloads. The design must define declaration and construction syntax, module visibility, nominal identity, equality, nesting, function contracts, control-flow joins, and representation in portable bytecode.
+Nominal `variant` declarations support ordered alternatives with typed payloads, construction through `Type::Alternative(...)`, exact equality, nesting, functions, and module exports. Variants lower to the existing immutable heap representation as an integer tag followed by payload slots.
 
-Acceptance requires valid cross-module construction and transport, deterministic rejection of unknown or duplicate alternatives, exact payload types, independently verified lowering, and no exposed storage identity or native pointer.
+## P8.2 — Exhaustive pattern matching — complete
 
-## P8.2 — Exhaustive pattern matching
+`match(value) { Alternative(bindings) => expression, ... }` is statically exhaustive. The compiler rejects missing, duplicate, unknown, incorrectly bound, and result-type-incompatible arms. Bindings are immutable and arm-scoped; `_` discards one payload field. Lowering uses `HEAP_LOAD`, equality, and generic jumps.
 
-Specify and implement pattern matching over tagged variants. Matching must be statically exhaustive unless an explicit catch-all form is approved. The contract must define binding scope, alternative ordering, unreachable patterns, nested patterns, guards if any, result-type joins, and left-to-right evaluation.
+Nested patterns, guards, and catch-all alternatives are deliberately deferred. Each match expression currently occupies one logical source line.
 
-Acceptance requires the compiler to reject missing, duplicate, impossible, type-incompatible, and unreachable alternatives before bytecode emission. Lowering must use generic control flow and value access rather than an opcode for `match` or any public variant name.
+## P8.3 — Parametric types and functions — complete
 
-## P8.3 — Parametric types and functions
+Records, variants, and functions accept type parameters. Type arguments are inferred from exact argument or expected-result types. Unresolved type parameters are compile errors. A generic function is emitted once and uses verified uniform heap boxing at type-variable boundaries, avoiding monomorphized code growth and runtime casts or reflection.
 
-Specify and implement compile-time generics for records, variants, and functions. The first required public abstractions are `Option<T>` and `Result<T, E>`. The design must choose and document monomorphization or another statically verifiable representation, generic constraints, inference boundaries, module export identity, recursion rules, diagnostic presentation, and code-size limits.
+The standard catalog exports `Option<T>` from `std:option` and `Result<T, E>` from `std:result`. Existing P7 result records remain supported. Indexed access and functional indexed update over a naked generic array element type are not yet supported.
 
-There is no runtime reflection or erased unchecked cast. Every instantiated call and value must have an exact verified contract. Existing nominal P7 result records remain supported until a documented compatibility and migration policy is delivered.
+## P8.4 — Bounded recursive immutable values — complete
 
-## P8.4 — Bounded recursive immutable values
+Variants may refer recursively to their own instantiated nominal type, enabling finite structures such as `List<T>`. Values remain acyclic because bytecode can only allocate immutable objects from already verified values and cannot mutate heap slots or forge references. Existing heap allocation, slot, byte, depth, equality-visit, call-frame, and execution-step budgets bound construction and traversal.
 
-Specify recursive type declarations and finite immutable runtime values without permitting cyclic object graphs. The compiler must reject invalid infinite-size declarations or require an approved indirection through a tagged alternative. The runtime must enforce depth, allocation, traversal, equality, and serialization budgets without relying on the native call stack for untrusted depth.
+Source complexity is additionally bounded by generated limits for type parameters, type nesting, nominal fields, variant alternatives, and match arms.
 
-Acceptance requires construction, matching, equality, and function transport for finite recursive values; deterministic rejection or bounded failure for excessive depth; and proof through tests that bytecode cannot manufacture a cycle or forge a heap reference.
+## P8.5 — Immutable `BYTES` — planned
 
-## P8.5 — Immutable `BYTES`
+Specify and implement an immutable, resource-charged octet sequence distinct from `STRING` and `[I64]`, including length, indexing, slicing, concatenation, equality, UTF-8 conversion, module contracts, and inspector output.
 
-Specify and implement `BYTES` as an immutable, resource-charged sequence of octets distinct from STRING and `[I64]`. The approved surface must cover literals or constructors, length, indexed load, half-open slicing, concatenation, equality, UTF-8 encode/decode with typed failures, function and module contracts, and inspector output.
+## P8.6 — Structured `JsonValue` — planned
 
-Bounds use I64 indices. Invalid direct access fails deterministically, while standard-library helpers expose recoverable results. Bytecode adds only generic binary-value primitives required by the value model; file formats, HTTP bodies, compression, images, and other domains remain standard-library or host concerns.
+Evolve `std:json` from the P7 text-backed `JsonDocument` boundary to a typed recursive JSON value while preserving duplicate-key, ordering, Unicode, canonicalization, number-lexeme, diagnostic, and resource-limit behavior.
 
-## P8.6 — Structured `JsonValue`
+## P8.7 — Compatibility and conformance — planned
 
-Evolve `std:json` from the P7 text-backed `JsonDocument` boundary to a typed recursive JSON value built from variants, immutable collections, and exact number text. The contract must preserve the existing duplicate-key, ordering, Unicode, canonicalization, number-lexeme, diagnostic, and resource-limit decisions.
+Complete cross-platform conformance, malformed-bytecode, resource-limit, package-install, compatibility, and migration coverage for the entire P8 surface.
 
-Migration must retain a documented path for `JsonDocument`. Parsing, serialization, and conversion remain catalog-defined APIs; JSON does not become a keyword, source intrinsic, bytecode type, or opcode.
+## Delivery constraints
 
-## P8.7 — Compatibility and conformance
+P8.5, P8.6, and P8.7 remain unavailable until implemented. No bytecode version change was required for P8.1–P8.4 because their compiler lowering uses the existing verified immutable-heap and control-flow instructions in `.jbc` 2.9.
 
-Publish bilingual normative specifications, generated artifacts where applicable, compatibility consequences, positive and negative conformance fixtures, malformed-bytecode cases, resource-limit tests, and package/install coverage for the complete P8 surface.
-
-P8 is complete only when tagged variants, exhaustive matching, generics, recursive values, `BYTES`, and structured JSON work across source modules and the independently validating runtime under deterministic limits.
-
-## Delivery order and constraints
-
-The required order is P8.1, P8.2, P8.3, P8.4, P8.5, P8.6, then P8.7. A task may refine a previous design, but implementation must not skip an unmet prerequisite. Format changes remain exact and pre-stable; a new bytecode minor is introduced only when portable representation or instruction changes require it.
-
-P8 does not add asynchronous execution, filesystem or network authority, a package registry, runtime type reflection, exceptions, implicit nullability, or domain-specific VM instructions.
+P8 does not add asynchronous execution, filesystem or network authority, packages, runtime reflection, exceptions, implicit nullability, or domain-specific VM instructions.

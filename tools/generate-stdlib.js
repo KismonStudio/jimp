@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { compile } from "../compiler/src/compiler.js";
 import { parseProgram } from "../compiler/src/parser.js";
 import { decodePortableModule } from "../compiler/src/portable/module.js";
+import { parseTypeSyntax } from "../compiler/src/type-system.js";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const standardLibraryRoot = resolve(repositoryRoot, "stdlib");
@@ -17,14 +18,26 @@ function invariant(condition, message) {
 }
 
 function validSourceType(type, { allowNull = false, allowVoid = false } = {}) {
-  if (scalarParameterTypes.has(type)) return true;
-  if (allowNull && type === "NULL") return true;
-  if (allowVoid && type === "VOID") return true;
-  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(type)) return true;
-  if (type.startsWith("[") && type.endsWith("]")) {
-    return validSourceType(type.slice(1, -1), { allowNull: false, allowVoid: false });
+  if (!allowNull && type === "NULL") return false;
+  if (!allowVoid && type === "VOID") return false;
+  try {
+    parseTypeSyntax(type);
+    return true;
+  } catch {
+    return false;
   }
-  return false;
+}
+
+function validateTypeParameters(exported, identity) {
+  const parameters = exported.typeParameters ?? [];
+  invariant(Array.isArray(parameters), `${identity} type parameters must be an array`);
+  invariant(new Set(parameters).size === parameters.length,
+    `${identity} contains duplicate type parameters`);
+  for (const parameter of parameters) {
+    invariant(/^[A-Z][A-Za-z0-9]*$/.test(parameter)
+      && !scalarReturnTypes.has(parameter),
+    `invalid type parameter ${identity}.${parameter}`);
+  }
 }
 
 function validatePortableSources(sourceRecords) {
@@ -42,7 +55,8 @@ function validatePortableSources(sourceRecords) {
     const declarations = parsed.statements.filter(({ exported }) => exported);
     const exportedNames = declarations.map(({ name }) => name);
     invariant(parsed.statements.every(({ kind }) =>
-      kind === "functionDeclaration" || kind === "recordDeclaration"),
+      kind === "functionDeclaration" || kind === "recordDeclaration"
+        || kind === "variantDeclaration"),
       `portable source ${sourcePath} cannot contain entry statements`);
     invariant(new Set(exportedNames).size === exportedNames.length,
       `portable source ${sourcePath} contains duplicate exports`);
@@ -56,6 +70,9 @@ function validatePortableSources(sourceRecords) {
       const kind = expected.kind ?? "function";
       invariant(actual?.kind === `${kind}Declaration`,
         `portable source ${sourcePath} does not define ${kind} ${name}`);
+      invariant(JSON.stringify(actual.typeParameters ?? [])
+        === JSON.stringify(expected.typeParameters ?? []),
+      `portable source ${sourcePath} has the wrong type parameters for ${name}`);
       if (kind === "record") {
         invariant(actual.fields.length === expected.fields.length,
           `portable source ${sourcePath} has the wrong field count for ${name}`);
@@ -63,6 +80,27 @@ function validatePortableSources(sourceRecords) {
           invariant(actual.fields[index].name === expected.fields[index].name
             && actual.fields[index].type === expected.fields[index].type,
           `portable source ${sourcePath} has the wrong field ${index} for ${name}`);
+        }
+      } else if (kind === "variant") {
+        invariant(actual.alternatives.length === expected.alternatives.length,
+          `portable source ${sourcePath} has the wrong alternative count for ${name}`);
+        for (let alternativeIndex = 0;
+          alternativeIndex < expected.alternatives.length;
+          alternativeIndex += 1) {
+          const actualAlternative = actual.alternatives[alternativeIndex];
+          const expectedAlternative = expected.alternatives[alternativeIndex];
+          invariant(actualAlternative.name === expectedAlternative.name
+            && actualAlternative.fields.length === expectedAlternative.fields.length,
+          `portable source ${sourcePath} has the wrong alternative ${alternativeIndex} for ${name}`);
+          for (let fieldIndex = 0;
+            fieldIndex < expectedAlternative.fields.length;
+            fieldIndex += 1) {
+            invariant(actualAlternative.fields[fieldIndex].name
+                === expectedAlternative.fields[fieldIndex].name
+              && actualAlternative.fields[fieldIndex].type
+                === expectedAlternative.fields[fieldIndex].type,
+            `portable source ${sourcePath} has the wrong alternative field ${fieldIndex} for ${name}`);
+          }
         }
       } else {
         invariant(actual.returnType === expected.returnType,
@@ -125,9 +163,9 @@ function validateDefinition(definition) {
     let hasHost = false;
     for (const exported of module.exports) {
       const exportKind = exported.kind ?? "function";
-      invariant(["function", "record"].includes(exportKind),
+      invariant(["function", "record", "variant"].includes(exportKind),
         `invalid export kind for ${module.specifier}.${exported.name}`);
-      invariant(exportKind === "record"
+      invariant(exportKind === "record" || exportKind === "variant"
         ? /^[A-Z][A-Za-z0-9]*$/.test(exported.name)
         : /^[a-z][A-Za-z0-9]*$/.test(exported.name),
         `invalid export name ${module.specifier}.${exported.name}`);
@@ -136,23 +174,40 @@ function validateDefinition(definition) {
       exportNames.add(exported.name);
       invariant(exported.description?.en && exported.description?.pt,
         `missing descriptions for ${module.specifier}.${exported.name}`);
-      if (exportKind === "record") {
+      validateTypeParameters(exported, `${module.specifier}.${exported.name}`);
+      if (exportKind === "record" || exportKind === "variant") {
         hasPortable = true;
         invariant(module.source !== undefined,
-          `record export ${module.specifier}.${exported.name} requires a module source`);
-        invariant(Array.isArray(exported.fields),
-          `record export ${module.specifier}.${exported.name} requires fields`);
-        const fieldNames = new Set();
-        for (const field of exported.fields) {
-          invariant(/^[a-z][A-Za-z0-9]*$/.test(field.name)
-            && !fieldNames.has(field.name)
-            && validSourceType(field.type, { allowNull: true }),
-          `invalid field ${module.specifier}.${exported.name}.${field.name}`);
-          fieldNames.add(field.name);
+          `${exportKind} export ${module.specifier}.${exported.name} requires a module source`);
+        const fieldGroups = exportKind === "record"
+          ? [exported.fields]
+          : exported.alternatives?.map((alternative) => alternative.fields);
+        invariant(Array.isArray(fieldGroups) && fieldGroups.every(Array.isArray),
+          `${exportKind} export ${module.specifier}.${exported.name} requires its fields`);
+        const alternativeNames = new Set();
+        if (exportKind === "variant") {
+          invariant(exported.alternatives.length > 0,
+            `variant export ${module.specifier}.${exported.name} requires alternatives`);
+          for (const alternative of exported.alternatives) {
+            invariant(/^[A-Z][A-Za-z0-9]*$/.test(alternative.name)
+              && !alternativeNames.has(alternative.name),
+            `invalid alternative ${module.specifier}.${exported.name}.${alternative.name}`);
+            alternativeNames.add(alternative.name);
+          }
+        }
+        for (const fields of fieldGroups) {
+          const fieldNames = new Set();
+          for (const field of fields) {
+            invariant(/^[a-z][A-Za-z0-9]*$/.test(field.name)
+              && !fieldNames.has(field.name)
+              && validSourceType(field.type, { allowNull: true }),
+            `invalid field ${module.specifier}.${exported.name}.${field.name}`);
+            fieldNames.add(field.name);
+          }
         }
         invariant(exported.parameters === undefined && exported.returnType === undefined
           && exported.implementation === undefined,
-        `record export ${module.specifier}.${exported.name} cannot define a function contract`);
+        `${exportKind} export ${module.specifier}.${exported.name} cannot define a function contract`);
         const record = sourceRecords.get(module.source) ?? {
           expectedExports: new Map(),
           allowedCapabilities: new Set(),
@@ -252,9 +307,19 @@ function generateJavaScript(definition) {
 }
 
 function signature(exported) {
-  if ((exported.kind ?? "function") === "record") {
-    return `record ${exported.name} { ${exported.fields
+  const kind = exported.kind ?? "function";
+  const typeParameters = exported.typeParameters?.length > 0
+    ? `<${exported.typeParameters.join(", ")}>`
+    : "";
+  if (kind === "record") {
+    return `record ${exported.name}${typeParameters} { ${exported.fields
       .map((field) => `${field.name}: ${field.type}`)
+      .join(", ")} }`;
+  }
+  if (kind === "variant") {
+    return `variant ${exported.name}${typeParameters} { ${exported.alternatives
+      .map((alternative) => `${alternative.name}(${alternative.fields
+        .map((field) => `${field.name}: ${field.type}`).join(", ")})`)
       .join(", ")} }`;
   }
   const parameters = exported.parameters
@@ -273,8 +338,8 @@ function generateDocumentation(definition, language) {
     ? "This file is generated from [`stdlib/v1.json`](../../../stdlib/v1.json). Do not edit it manually."
     : "Este arquivo é gerado a partir de [`stdlib/v1.json`](../../../stdlib/v1.json). Não o edite manualmente.";
   const status = english
-    ? "This document specifies the standard-library catalog and portable-source contract implemented through P7.6. The compiler resolves these embedded modules without project-filesystem lookup and statically links only used exports."
-    : "Este documento especifica o catálogo da biblioteca padrão e o contrato de código-fonte portátil implementados até o P7.6. O compilador resolve esses módulos embutidos sem consultar o sistema de arquivos do projeto e vincula estaticamente apenas os exports usados.";
+    ? "This document specifies the standard-library catalog and portable-source contract implemented through P8.3. The compiler resolves these embedded modules without project-filesystem lookup and statically links only used exports."
+    : "Este documento especifica o catálogo da biblioteca padrão e o contrato de código-fonte portátil implementados até o P8.3. O compilador resolve esses módulos embutidos sem consultar o sistema de arquivos do projeto e vincula estaticamente apenas os exports usados.";
   const principles = english
     ? [
       "Standard modules are resolved by the compiler from a selected toolchain catalog; they are never searched in the project filesystem.",
@@ -296,7 +361,8 @@ function generateDocumentation(definition, language) {
     ? { portable: "Portable JIMP", "host-bridge": "Host ABI bridge", hybrid: "Hybrid" }
     : { portable: "JIMP portátil", "host-bridge": "Ponte da Host ABI", hybrid: "Híbrido" };
   const implementation = (exported) => {
-    if ((exported.kind ?? "function") === "record") {
+    if ((exported.kind ?? "function") === "record"
+      || (exported.kind ?? "function") === "variant") {
       return english ? "Nominal portable type" : "Tipo nominal portátil";
     }
     if (exported.implementation.kind === "host") {
@@ -368,8 +434,8 @@ function generateDocumentation(definition, language) {
     ? "The catalog remains the single reviewed source for the public standard-module surface, its generated EN/PT references are current, and the VM-independent lowering boundary is explicit. P7.5 adds portable result, text, and I64 collection modules. P7.6 adds the typed `std:json` wrapper and its data-defined pure Host ABI support bridge."
     : "O catálogo permanece como a única fonte revisada da superfície pública dos módulos padrão, suas referências geradas EN/PT estão atualizadas e a fronteira de redução independente da VM está explícita. O P7.5 adiciona módulos portáteis de resultados, texto e coleções de I64. O P7.6 adiciona o wrapper tipado `std:json` e sua ponte pura de suporte definida por dados na Host ABI.";
   const acceptanceP43 = english
-    ? "Every portable function export has catalog-linked canonical source whose syntax, semantics, allowed host imports, dependencies, and exact public signature pass generation checks. Nominal record exports are validated from the same source contract. The compiler and linker consume that data without optional-import flags, runtime probes, or standard-library opcodes."
-    : "Todo export de função portátil possui código-fonte canônico associado pelo catálogo cuja sintaxe, semântica, imports permitidos do host, dependências e assinatura pública exata passam pelas verificações de geração. Exports de records nominais são validados pelo mesmo contrato de código-fonte. O compilador e o vinculador consomem esses dados sem flags de import opcional, sondagens em runtime ou opcodes de biblioteca padrão.";
+    ? "Every portable function export has catalog-linked canonical source whose syntax, semantics, allowed host imports, dependencies, and exact public signature pass generation checks. Nominal record and variant exports are validated from the same source contract. The compiler and linker consume that data without optional-import flags, runtime probes, or standard-library opcodes."
+    : "Todo export de função portátil possui código-fonte canônico associado pelo catálogo cuja sintaxe, semântica, imports permitidos do host, dependências e assinatura pública exata passam pelas verificações de geração. Exports nominais de records e variants são validados pelo mesmo contrato de código-fonte. O compilador e o vinculador consomem esses dados sem flags de import opcional, sondagens em runtime ou opcodes de biblioteca padrão.";
   const moduleDescriptions = definition.modules.map((module) =>
     `- \`${module.specifier}\`: ${module.description[language]}`).join("\n");
   return `${title}\n\n${alternate}\n\n> ${warning}\n\n${sections.status}\n\n${status}\n\n${sections.principles}\n\n${principles.map((principle) => `- ${principle}`).join("\n")}\n\n${sections.catalog}\n\n${moduleDescriptions}\n\n${tableHeader}\n${rows}\n\n${sections.resolution}\n\n${resolution}\n\n${sections.behavior}\n\n${behavior}\n\n${sections.fallbacks}\n\n${fallbacks.map((rule) => `- ${rule}`).join("\n")}\n\n${sections.equivalence}\n\n${equivalence}\n\n${sections.security}\n\n${security}\n\n${sections.exclusions}\n\n${exclusions}\n\n${sections.acceptanceP42}\n\n${acceptanceP42}\n\n${sections.acceptanceP43}\n\n${acceptanceP43}\n`;

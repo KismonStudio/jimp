@@ -127,6 +127,48 @@ test("links nominal records across module and function boundaries", async () => 
   assert(module.functions[1].instructions.some(({ name }) => name === "HEAP_REPLACE"));
 });
 
+test("links exported generic variants and functions without monomorphization", async () => {
+  const root = project();
+  const entry = write(root, "main.jimp", [
+    'import { Option, unwrapOr } from "./option.jimp";',
+    "let value: Option<I64> = Option::Some(42);",
+    "unwrapOr(value, 0);",
+  ].join("\n"));
+  write(root, "option.jimp", [
+    "export variant Option<T> {",
+    "  None,",
+    "  Some(value: T),",
+    "}",
+    "export function unwrapOr<T>(value: Option<T>, fallback: T): T {",
+    "  return match(value) { Some(item) => item, None => fallback };",
+    "}",
+  ].join("\n"));
+
+  const module = decodePortableModule(await compileProject(entry));
+
+  assert.equal(module.functions.length, 2);
+  assert.deepEqual(module.functions[1].parameterTypes, ["HEAP_REF", "HEAP_REF"]);
+  assert.equal(module.functions[1].returnType, "HEAP_REF");
+  assert(module.functions[0].instructions.some(({ name }) => name === "CALL"));
+});
+
+test("resolves standard Option and Result generic variants", async () => {
+  const root = project();
+  const entry = write(root, "main.jimp", [
+    'import { Option } from "std:option";',
+    'import { Result } from "std:result";',
+    "let optional: Option<I64> = Option::Some(42);",
+    'let result: Result<I64, STRING> = Result::Error("failed");',
+    "match(optional) { Some(value) => value, None => 0 };",
+    "match(result) { Ok(value) => value, Error(_) => 0 };",
+  ].join("\n"));
+
+  const module = decodePortableModule(await compileProject(entry));
+
+  assert.equal(module.functions.length, 1);
+  assert(module.functions[0].instructions.some(({ name }) => name === "HEAP_ALLOC"));
+});
+
 test("canonicalizes a project-root alias before resolving dependencies", async (context) => {
   const physicalRoot = project();
   write(

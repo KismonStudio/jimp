@@ -1,3 +1,8 @@
+export variant Result<T, E> {
+  Ok(value: T),
+  Error(error: E),
+}
+
 export record StringResult {
   ok: BOOL,
   value: STRING,

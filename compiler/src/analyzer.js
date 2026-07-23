@@ -1,9 +1,23 @@
 import { SANDBOX_LIMITS } from "./generated/sandbox.js";
 import { withModuleContext } from "./module-context.js";
+import {
+  arrayElementType,
+  canonicalNominalType,
+  containsTypeVariable,
+  isAggregateType,
+  isArrayType,
+  isTypeVariable,
+  parseNamedType,
+  parseNominalType,
+  substituteType,
+  typeVariable,
+  unifyType,
+} from "./type-system.js";
 
 const RESERVED_WORDS = new Set([
   "as", "break", "continue", "else", "export", "false", "from", "function",
-  "if", "import", "let", "null", "print", "record", "return", "true", "var", "while", "with",
+  "if", "import", "let", "match", "null", "print", "record", "return", "true", "var",
+  "variant", "while", "with",
 ]);
 const VALUE_TYPES = new Set(["NULL", "BOOL", "I64", "F64", "STRING"]);
 const NUMERIC_TYPES = new Set(["I64", "F64"]);
@@ -12,24 +26,74 @@ const EQUALITY_OPERATORS = new Set(["==", "!="]);
 const COMPARISON_OPERATORS = new Set(["<", "<=", ">", ">="]);
 const BOOLEAN_OPERATORS = new Set(["&&", "||"]);
 
-function isArrayType(type) {
-  return typeof type === "string" && type.startsWith("[") && type.endsWith("]");
-}
-
-function arrayElementType(type) {
-  return type.slice(1, -1);
-}
-
 function isRecordType(type) {
-  return typeof type === "string" && type.startsWith("RECORD<") && type.endsWith(">");
+  return parseNominalType(type)?.kind === "record";
 }
 
-function isAggregateType(type) {
-  return isArrayType(type) || isRecordType(type);
+function isVariantType(type) {
+  return parseNominalType(type)?.kind === "variant";
 }
 
 function canonicalRecordType(moduleId, name) {
-  return `RECORD<${moduleId ?? "<entry>"}::${name}>`;
+  return canonicalNominalType("RECORD", moduleId, name);
+}
+
+function canonicalVariantType(moduleId, name) {
+  return canonicalNominalType("VARIANT", moduleId, name);
+}
+
+function definitionType(definition, argumentsList) {
+  return canonicalNominalType(
+    definition.kind.toUpperCase(),
+    definition.moduleId,
+    definition.name,
+    argumentsList,
+  );
+}
+
+function materializeDefinition(instance) {
+  const substitutions = new Map(instance.definition.typeParameters
+    .map((parameter, index) => [parameter.type, instance.arguments[index]]));
+  if (instance.kind === "record") {
+    return {
+      ...instance,
+      fields: instance.definition.fields.map((field) => ({
+        ...field,
+        type: substituteType(field.type, substitutions),
+        boxed: instance.definition.typeParameters.length > 0 && containsTypeVariable(field.type),
+      })),
+    };
+  }
+  return {
+    ...instance,
+    alternatives: instance.definition.alternatives.map((alternative, tag) => ({
+      ...alternative,
+      tag,
+      fields: alternative.fields.map((field) => ({
+        ...field,
+        type: substituteType(field.type, substitutions),
+        boxed: instance.definition.typeParameters.length > 0 && containsTypeVariable(field.type),
+      })),
+    })),
+  };
+}
+
+function instantiateDefinition(definition, argumentsList, state) {
+  const type = definitionType(definition, argumentsList);
+  const instances = definition.kind === "record" ? state.recordsByType : state.variantsByType;
+  if (!instances.has(type)) {
+    instances.set(type, {
+      kind: definition.kind,
+      name: definition.name,
+      moduleId: definition.moduleId,
+      type,
+      arguments: [...argumentsList],
+      definition,
+      imported: definition.imported,
+      line: definition.line,
+    });
+  }
+  return materializeDefinition(instances.get(type));
 }
 
 function resolveType(type, state, line, { allowNull = true, allowVoid = false } = {}) {
@@ -48,15 +112,37 @@ function resolveType(type, state, line, { allowNull = true, allowVoid = false } 
     if (allowVoid) return type;
     throw new Error(`Type VOID is not valid here at line ${line}.`);
   }
-  const record = state.types.get(type);
-  if (!record) throw new Error(`Type "${type}" is not declared at line ${line}.`);
-  return record.type;
+  const variable = state.typeVariables?.get(type);
+  if (variable) return variable;
+  const named = parseNamedType(type);
+  if (!named) throw new Error(`Type "${type}" is not declared at line ${line}.`);
+  const definition = state.types.get(named.name);
+  if (!definition) throw new Error(`Type "${named.name}" is not declared at line ${line}.`);
+  if (named.arguments.length !== definition.typeParameters.length) {
+    throw new Error(
+      `Type "${named.name}" expects ${definition.typeParameters.length} type argument(s), `
+      + `received ${named.arguments.length} at line ${line}.`,
+    );
+  }
+  const argumentsList = named.arguments.map((argument) => resolveType(argument, state, line, {
+    allowNull: true,
+    allowVoid: false,
+  }));
+  return instantiateDefinition(definition, argumentsList, state).type;
 }
 
 function requireRecord(state, type, line) {
-  const record = state.recordsByType.get(type);
+  const instance = state.recordsByType.get(type);
+  const record = instance && materializeDefinition(instance);
   if (!record) throw new Error(`Expected a record value, received ${type} at line ${line}.`);
   return record;
+}
+
+function requireVariant(state, type, line) {
+  const instance = state.variantsByType.get(type);
+  const variant = instance && materializeDefinition(instance);
+  if (!variant) throw new Error(`Expected a variant value, received ${type} at line ${line}.`);
+  return variant;
 }
 
 function assertName(name, line, kind, functions) {
@@ -105,7 +191,7 @@ function typeError(operator, leftType, rightType, line) {
   throw new Error(`Operator "${operator}" does not accept ${operands} at line ${line}.`);
 }
 
-function analyzeCall(expression, state) {
+function analyzeCall(expression, state, expectedType = null) {
   const signature = state.functions.get(expression.callee);
   if (!signature) {
     throw new Error(`Function "${expression.callee}" is not declared at line ${expression.line}.`);
@@ -116,13 +202,42 @@ function analyzeCall(expression, state) {
       + `received ${expression.arguments.length} at line ${expression.line}.`,
     );
   }
-  const argumentsList = expression.arguments.map((argument, index) =>
-    analyzeExpression(argument, state, signature.parameterTypes[index]));
+  const typeParameters = signature.typeParameters ?? [];
+  const substitutions = new Map();
+  if (expectedType !== null && typeParameters.length > 0) {
+    unifyType(signature.returnType, expectedType, substitutions);
+  }
+  const argumentsList = expression.arguments.map((argument, index) => {
+    const template = signature.parameterTypes[index];
+    const contextualType = substituteType(template, substitutions);
+    const analyzed = analyzeExpression(
+      argument,
+      state,
+      containsTypeVariable(contextualType) ? null : contextualType,
+    );
+    if (!unifyType(template, analyzed.type, substitutions)) {
+      throw new Error(
+        `Function "${expression.callee}" argument ${index} requires ${template}, `
+        + `received ${analyzed.type} at line ${expression.line}.`,
+      );
+    }
+    return analyzed;
+  });
+  for (const parameter of typeParameters) {
+    if (!substitutions.has(parameter.type)) {
+      throw new Error(
+        `Function "${expression.callee}" cannot infer type parameter ${parameter.name} `
+        + `at line ${expression.line}.`,
+      );
+    }
+  }
+  const parameterTypes = signature.parameterTypes.map((type) => substituteType(type, substitutions));
+  const returnType = substituteType(signature.returnType, substitutions);
   for (let index = 0; index < argumentsList.length; index += 1) {
-    if (argumentsList[index].type !== signature.parameterTypes[index]) {
+    if (argumentsList[index].type !== parameterTypes[index]) {
       throw new Error(
         `Function "${expression.callee}" argument ${index} requires `
-        + `${signature.parameterTypes[index]}, received ${argumentsList[index].type} `
+        + `${parameterTypes[index]}, received ${argumentsList[index].type} `
         + `at line ${expression.line}.`,
       );
     }
@@ -132,7 +247,12 @@ function analyzeCall(expression, state) {
     arguments: argumentsList,
     functionIndex: signature.kind === "local" ? signature.index : null,
     functionIdentity: signature.kind === "imported" ? signature.identity : null,
-    type: signature.returnType,
+    typeArguments: typeParameters.map((parameter) => substitutions.get(parameter.type)),
+    parameterTypes,
+    boxArguments: signature.parameterTypes.map((template, index) =>
+      isTypeVariable(template) && !isTypeVariable(argumentsList[index].type)),
+    unboxResult: isTypeVariable(signature.returnType) && !isTypeVariable(returnType),
+    type: returnType,
   };
 }
 
@@ -144,7 +264,7 @@ function analyzeExpression(expression, state, expectedType = null) {
     const variable = requireVariable(state, expression.name, expression.line);
     return { ...expression, register: variable.register, type: variable.type };
   }
-  if (expression.kind === "callExpression") return analyzeCall(expression, state);
+  if (expression.kind === "callExpression") return analyzeCall(expression, state, expectedType);
   if (expression.kind === "arrayLiteral") {
     const contextualElement = expectedType && isArrayType(expectedType)
       ? arrayElementType(expectedType)
@@ -171,12 +291,23 @@ function analyzeExpression(expression, state, expectedType = null) {
     return { ...expression, elements, elementType, type };
   }
   if (expression.kind === "recordLiteral") {
-    const record = state.types.get(expression.recordName);
-    if (!record || record.kind !== "record") {
+    const definition = state.types.get(expression.recordName);
+    if (!definition || definition.kind !== "record") {
       throw new Error(`Record "${expression.recordName}" is not declared at line ${expression.line}.`);
     }
-    if (expectedType !== null && expectedType !== record.type) {
-      throw new Error(`Expected ${expectedType}, received ${record.type} at line ${expression.line}.`);
+    const substitutions = new Map();
+    if (expectedType !== null) {
+      const expected = parseNominalType(expectedType);
+      if (!expected
+        || expected.kind !== "record"
+        || expected.moduleId !== (definition.moduleId ?? "<entry>")
+        || expected.name !== definition.name
+        || expected.arguments.length !== definition.typeParameters.length) {
+        throw new Error(`Expected ${expectedType}, received record ${definition.name} at line ${expression.line}.`);
+      }
+      definition.typeParameters.forEach((parameter, index) => {
+        substitutions.set(parameter.type, expected.arguments[index]);
+      });
     }
     const provided = new Map();
     for (const field of expression.fields) {
@@ -185,25 +316,198 @@ function analyzeExpression(expression, state, expectedType = null) {
       }
       provided.set(field.name, field);
     }
-    const fields = record.fields.map((definition, index) => {
-      const field = provided.get(definition.name);
+    const analyzedFields = definition.fields.map((fieldTemplate, index) => {
+      const field = provided.get(fieldTemplate.name);
       if (!field) {
-        throw new Error(`Record "${record.name}" is missing field "${definition.name}" at line ${expression.line}.`);
+        throw new Error(`Record "${definition.name}" is missing field "${fieldTemplate.name}" at line ${expression.line}.`);
       }
-      provided.delete(definition.name);
-      const analyzed = analyzeExpression(field.expression, state, definition.type);
-      if (analyzed.type !== definition.type) {
+      provided.delete(fieldTemplate.name);
+      const contextualType = substituteType(fieldTemplate.type, substitutions);
+      const analyzed = analyzeExpression(
+        field.expression,
+        state,
+        containsTypeVariable(contextualType) ? null : contextualType,
+      );
+      if (!unifyType(fieldTemplate.type, analyzed.type, substitutions)) {
         throw new Error(
-          `Record field "${definition.name}" requires ${definition.type}, received ${analyzed.type} at line ${field.line}.`,
+          `Record field "${fieldTemplate.name}" requires ${fieldTemplate.type}, `
+          + `received ${analyzed.type} at line ${field.line}.`,
         );
       }
-      return { ...field, expression: analyzed, type: definition.type, index };
+      return { ...field, expression: analyzed, index };
     });
     if (provided.size > 0) {
       const field = provided.values().next().value;
-      throw new Error(`Record "${record.name}" has no field "${field.name}" at line ${field.line}.`);
+      throw new Error(`Record "${definition.name}" has no field "${field.name}" at line ${field.line}.`);
     }
+    for (const parameter of definition.typeParameters) {
+      if (!substitutions.has(parameter.type)) {
+        throw new Error(
+          `Record "${definition.name}" cannot infer type parameter ${parameter.name} `
+          + `at line ${expression.line}.`,
+        );
+      }
+    }
+    const record = instantiateDefinition(
+      definition,
+      definition.typeParameters.map((parameter) => substitutions.get(parameter.type)),
+      state,
+    );
+    const fields = analyzedFields.map((field, index) => {
+      const fieldDefinition = record.fields[index];
+      if (field.expression.type !== fieldDefinition.type) {
+        throw new Error(
+          `Record field "${fieldDefinition.name}" requires ${fieldDefinition.type}, `
+          + `received ${field.expression.type} at line ${field.line}.`,
+        );
+      }
+      return { ...field, type: fieldDefinition.type, boxed: fieldDefinition.boxed };
+    });
     return { ...expression, fields, record, type: record.type };
+  }
+  if (expression.kind === "variantLiteral") {
+    const definition = state.types.get(expression.variantName);
+    if (!definition || definition.kind !== "variant") {
+      throw new Error(`Variant "${expression.variantName}" is not declared at line ${expression.line}.`);
+    }
+    const alternativeTemplate = definition.alternatives
+      .find(({ name }) => name === expression.alternative);
+    if (!alternativeTemplate) {
+      throw new Error(
+        `Variant "${definition.name}" has no alternative "${expression.alternative}" `
+        + `at line ${expression.line}.`,
+      );
+    }
+    if (expression.arguments.length !== alternativeTemplate.fields.length) {
+      throw new Error(
+        `Variant alternative "${expression.alternative}" expects ${alternativeTemplate.fields.length} `
+        + `payload value(s), received ${expression.arguments.length} at line ${expression.line}.`,
+      );
+    }
+    const substitutions = new Map();
+    if (expectedType !== null) {
+      const expected = parseNominalType(expectedType);
+      if (!expected
+        || expected.kind !== "variant"
+        || expected.moduleId !== (definition.moduleId ?? "<entry>")
+        || expected.name !== definition.name
+        || expected.arguments.length !== definition.typeParameters.length) {
+        throw new Error(`Expected ${expectedType}, received variant ${definition.name} at line ${expression.line}.`);
+      }
+      definition.typeParameters.forEach((parameter, index) => {
+        substitutions.set(parameter.type, expected.arguments[index]);
+      });
+    }
+    const argumentsList = expression.arguments.map((argument, index) => {
+      const template = alternativeTemplate.fields[index].type;
+      const contextualType = substituteType(template, substitutions);
+      const analyzed = analyzeExpression(
+        argument,
+        state,
+        containsTypeVariable(contextualType) ? null : contextualType,
+      );
+      if (!unifyType(template, analyzed.type, substitutions)) {
+        throw new Error(
+          `Variant payload ${index} requires ${template}, received ${analyzed.type} `
+          + `at line ${expression.line}.`,
+        );
+      }
+      return analyzed;
+    });
+    for (const parameter of definition.typeParameters) {
+      if (!substitutions.has(parameter.type)) {
+        throw new Error(
+          `Variant "${definition.name}" cannot infer type parameter ${parameter.name} `
+          + `at line ${expression.line}.`,
+        );
+      }
+    }
+    const variant = instantiateDefinition(
+      definition,
+      definition.typeParameters.map((parameter) => substitutions.get(parameter.type)),
+      state,
+    );
+    const alternative = variant.alternatives.find(({ name }) => name === expression.alternative);
+    return {
+      ...expression,
+      arguments: argumentsList.map((argument, index) => ({
+        expression: argument,
+        type: alternative.fields[index].type,
+        boxed: alternative.fields[index].boxed,
+      })),
+      variant,
+      alternative,
+      type: variant.type,
+    };
+  }
+  if (expression.kind === "matchExpression") {
+    const value = analyzeExpression(expression.value, state);
+    const variant = requireVariant(state, value.type, expression.line);
+    if (expression.arms.length === 0) {
+      throw new Error(`match requires at least one arm at line ${expression.line}.`);
+    }
+    const seen = new Set();
+    let resultType = expectedType;
+    const arms = expression.arms.map((arm) => {
+      if (seen.has(arm.alternative)) {
+        throw new Error(`Match alternative "${arm.alternative}" is duplicated at line ${arm.line}.`);
+      }
+      seen.add(arm.alternative);
+      const alternative = variant.alternatives.find(({ name }) => name === arm.alternative);
+      if (!alternative) {
+        throw new Error(
+          `Variant "${variant.name}" has no alternative "${arm.alternative}" at line ${arm.line}.`,
+        );
+      }
+      if (arm.bindings.length !== alternative.fields.length) {
+        throw new Error(
+          `Match alternative "${arm.alternative}" requires ${alternative.fields.length} binding(s), `
+          + `received ${arm.bindings.length} at line ${arm.line}.`,
+        );
+      }
+      const scope = new Map();
+      const bindings = arm.bindings.map((name, index) => {
+        if (name === "_") return { name, ignored: true, field: alternative.fields[index] };
+        assertName(name, arm.line, "match binding", state.functions);
+        if (scope.has(name) || state.types.has(name)) {
+          throw new Error(`Match binding "${name}" is duplicated or conflicts with a type at line ${arm.line}.`);
+        }
+        if (state.context.nextRegister >= SANDBOX_LIMITS.MAX_REGISTERS_PER_FUNCTION) {
+          throw new Error(
+            `Function scope exceeds the sandbox register limit at line ${arm.line}.`,
+          );
+        }
+        const binding = {
+          name,
+          line: arm.line,
+          mutable: false,
+          register: state.context.nextRegister,
+          type: alternative.fields[index].type,
+          field: alternative.fields[index],
+        };
+        state.context.nextRegister += 1;
+        scope.set(name, binding);
+        return binding;
+      });
+      state.scopes.push(scope);
+      const analyzed = analyzeExpression(arm.expression, state, resultType);
+      state.scopes.pop();
+      resultType ??= analyzed.type;
+      if (analyzed.type !== resultType) {
+        throw new Error(
+          `Match arms require one result type ${resultType}, received ${analyzed.type} at line ${arm.line}.`,
+        );
+      }
+      return { ...arm, alternative, bindings, expression: analyzed };
+    });
+    const missing = variant.alternatives.filter(({ name }) => !seen.has(name));
+    if (missing.length > 0) {
+      throw new Error(
+        `Match for variant "${variant.name}" is not exhaustive; missing `
+        + `${missing.map(({ name }) => name).join(", ")} at line ${expression.line}.`,
+      );
+    }
+    return { ...expression, value, variant, arms, type: resultType };
   }
   if (expression.kind === "indexExpression") {
     const object = analyzeExpression(expression.object, state);
@@ -212,6 +516,11 @@ function analyzeExpression(expression, state, expectedType = null) {
       throw new Error(`Indexed access requires an I64 index, received ${index.type} at line ${expression.line}.`);
     }
     if (isArrayType(object.type)) {
+      if (isTypeVariable(arrayElementType(object.type))) {
+        throw new Error(
+          `Indexed access over an array of a generic type parameter is not supported at line ${expression.line}.`,
+        );
+      }
       return {
         ...expression,
         object,
@@ -264,6 +573,7 @@ function analyzeExpression(expression, state, expectedType = null) {
       field: { ...record.fields[index], index },
       type: record.fields[index].type,
       memberKind: "recordField",
+      boxed: record.fields[index].boxed,
     };
   }
   if (expression.kind === "arrayUpdateExpression") {
@@ -276,6 +586,11 @@ function analyzeExpression(expression, state, expectedType = null) {
       throw new Error(`Array update index requires I64, received ${index.type} at line ${expression.line}.`);
     }
     const elementType = arrayElementType(object.type);
+    if (isTypeVariable(elementType)) {
+      throw new Error(
+        `Array update over a generic type parameter is not supported at line ${expression.line}.`,
+      );
+    }
     const value = analyzeExpression(expression.value, state, elementType);
     if (value.type !== elementType) {
       throw new Error(`Array update requires ${elementType}, received ${value.type} at line ${expression.line}.`);
@@ -305,7 +620,13 @@ function analyzeExpression(expression, state, expectedType = null) {
           `Record field "${field.name}" requires ${definition.type}, received ${value.type} at line ${field.line}.`,
         );
       }
-      return { ...field, expression: value, type: definition.type, index };
+      return {
+        ...field,
+        expression: value,
+        type: definition.type,
+        index,
+        boxed: definition.boxed,
+      };
     });
     return { ...expression, object, fields, record, type: object.type };
   }
@@ -592,9 +913,10 @@ function validateImportedResolution(resolution, declaration, item) {
     }
     return;
   }
-  if (kind === "record"
+  if ((kind === "record" || kind === "variant")
     && typeof resolution.type === "string"
-    && Array.isArray(resolution.fields)) return;
+    && (resolution.typeParameters === undefined || Array.isArray(resolution.typeParameters))
+    && (kind === "record" ? Array.isArray(resolution.fields) : Array.isArray(resolution.alternatives))) return;
   throw new Error(
     `Import "${item.imported}" from "${declaration.specifier}" has an invalid export contract at line ${item.line}.`,
   );
@@ -620,6 +942,58 @@ function collectDeclarations(program, resolvedImports) {
   const imports = [];
   const types = new Map();
   const recordsByType = new Map();
+  const variantsByType = new Map();
+  const instanceState = { recordsByType, variantsByType };
+
+  function registerImportedDefinition(source, localName, line) {
+    const definition = {
+      kind: source.kind,
+      name: source.name,
+      localName,
+      moduleId: source.moduleId,
+      type: source.type,
+      typeParameters: (source.typeParameters ?? []).map((parameter) => ({ ...parameter })),
+      fields: (source.fields ?? []).map((field) => ({ ...field })),
+      alternatives: (source.alternatives ?? []).map((alternative) => ({
+        ...alternative,
+        fields: alternative.fields.map((field) => ({ ...field })),
+      })),
+      imported: true,
+      line,
+    };
+    types.set(localName, definition);
+    const templateArguments = definition.typeParameters.map(({ type }) => type);
+    instantiateDefinition(definition, templateArguments, instanceState);
+    return definition;
+  }
+
+  function registerDependencies(dependencies) {
+    for (const dependency of dependencies ?? []) {
+      const instances = dependency.kind === "variant" ? variantsByType : recordsByType;
+      if (instances.has(dependency.type)) continue;
+      const definition = {
+        ...dependency,
+        typeParameters: (dependency.typeParameters ?? []).map((parameter) => ({ ...parameter })),
+        fields: (dependency.fields ?? []).map((field) => ({ ...field })),
+        alternatives: (dependency.alternatives ?? []).map((alternative) => ({
+          ...alternative,
+          fields: alternative.fields.map((field) => ({ ...field })),
+        })),
+        imported: true,
+      };
+      const nominal = parseNominalType(dependency.type);
+      instances.set(dependency.type, {
+        kind: dependency.kind,
+        name: dependency.name,
+        moduleId: dependency.moduleId,
+        type: dependency.type,
+        arguments: nominal?.arguments ?? definition.typeParameters.map(({ type }) => type),
+        definition,
+        imported: true,
+        line: dependency.line ?? 1,
+      });
+    }
+  }
   for (const declaration of program.imports) {
     for (const item of declaration.items) {
       if (functions.has(item.local) || types.has(item.local)) {
@@ -638,28 +1012,9 @@ function collectDeclarations(program, resolvedImports) {
       }
       validateImportedResolution(resolution, declaration, item);
       resolutions.delete(key);
-      if (resolution.kind === "record") {
-        const record = {
-          kind: "record",
-          name: resolution.name,
-          localName: item.local,
-          moduleId: resolution.moduleId,
-          type: resolution.type,
-          fields: resolution.fields.map((field) => ({ ...field })),
-          imported: true,
-          line: item.line,
-        };
-        types.set(item.local, record);
-        recordsByType.set(record.type, record);
-        for (const dependency of resolution.dependencies ?? []) {
-          if (!recordsByType.has(dependency.type)) {
-            recordsByType.set(dependency.type, {
-              ...dependency,
-              kind: "record",
-              imported: true,
-            });
-          }
-        }
+      if (resolution.kind === "record" || resolution.kind === "variant") {
+        registerImportedDefinition(resolution, item.local, item.line);
+        registerDependencies(resolution.dependencies);
       } else {
         assertName(item.local, item.line, "import", functions);
         const signature = {
@@ -674,18 +1029,13 @@ function collectDeclarations(program, resolvedImports) {
           },
           parameterTypes: [...resolution.parameterTypes],
           returnType: resolution.returnType,
+          ...((resolution.typeParameters?.length ?? 0) === 0 ? {} : {
+            typeParameters: resolution.typeParameters.map((parameter) => ({ ...parameter })),
+          }),
         };
         functions.set(item.local, signature);
         imports.push(signature);
-        for (const dependency of resolution.dependencies ?? []) {
-          if (!recordsByType.has(dependency.type)) {
-            recordsByType.set(dependency.type, {
-              ...dependency,
-              kind: "record",
-              imported: true,
-            });
-          }
-        }
+        registerDependencies(resolution.dependencies);
       }
     }
   }
@@ -695,41 +1045,91 @@ function collectDeclarations(program, resolvedImports) {
       `Resolved import "${resolution.local}" from "${resolution.specifier}" is not declared by the module.`,
     );
   }
-  const localRecords = program.statements.filter(({ kind }) => kind === "recordDeclaration");
-  for (const declaration of localRecords) {
-    assertName(declaration.name, declaration.line, "record", functions);
+  const localTypeDeclarations = program.statements.filter(({ kind }) =>
+    kind === "recordDeclaration" || kind === "variantDeclaration");
+  for (const declaration of localTypeDeclarations) {
+    const kind = declaration.kind === "recordDeclaration" ? "record" : "variant";
+    assertName(declaration.name, declaration.line, kind, functions);
     if (types.has(declaration.name) || functions.has(declaration.name)) {
-      throw new Error(`Record "${declaration.name}" is already declared at line ${declaration.line}.`);
+      throw new Error(`Type "${declaration.name}" is already declared at line ${declaration.line}.`);
     }
-    const record = {
-      kind: "record",
+    const typeParameters = declaration.typeParameters.map((name) => {
+      assertName(name, declaration.line, "type parameter", functions);
+      return {
+        name,
+        type: typeVariable(`${program.moduleId ?? "<entry>"}::${declaration.name}`, name),
+      };
+    });
+    const definition = {
+      kind,
       name: declaration.name,
       moduleId: program.moduleId,
-      type: canonicalRecordType(program.moduleId, declaration.name),
+      type: kind === "record"
+        ? canonicalRecordType(program.moduleId, declaration.name)
+        : canonicalVariantType(program.moduleId, declaration.name),
+      typeParameters,
       fields: [],
+      alternatives: [],
       declaration,
       imported: false,
       line: declaration.line,
     };
-    types.set(declaration.name, record);
-    recordsByType.set(record.type, record);
+    types.set(declaration.name, definition);
+    instantiateDefinition(definition, typeParameters.map(({ type }) => type), instanceState);
   }
-  const typeState = { types };
-  for (const declaration of localRecords) {
-    const record = types.get(declaration.name);
-    const names = new Set();
-    record.fields = declaration.fields.map((field) => {
-      assertName(field.name, field.line, "field", functions);
-      if (names.has(field.name)) {
-        throw new Error(`Record field "${field.name}" is duplicated at line ${field.line}.`);
-      }
-      names.add(field.name);
-      return {
-        name: field.name,
-        type: resolveType(field.type, typeState, field.line, { allowNull: true }),
-        line: field.line,
-      };
-    });
+  for (const declaration of localTypeDeclarations) {
+    const definition = types.get(declaration.name);
+    const typeState = {
+      types,
+      recordsByType,
+      variantsByType,
+      typeVariables: new Map(definition.typeParameters.map(({ name, type }) => [name, type])),
+    };
+    if (definition.kind === "record") {
+      const names = new Set();
+      definition.fields = declaration.fields.map((field) => {
+        assertName(field.name, field.line, "field", functions);
+        if (names.has(field.name)) {
+          throw new Error(`Record field "${field.name}" is duplicated at line ${field.line}.`);
+        }
+        names.add(field.name);
+        return {
+          name: field.name,
+          type: resolveType(field.type, typeState, field.line, { allowNull: true }),
+          line: field.line,
+        };
+      });
+    } else {
+      const alternatives = new Set();
+      definition.alternatives = declaration.alternatives.map((alternative) => {
+        assertName(alternative.name, alternative.line, "variant alternative", functions);
+        if (alternatives.has(alternative.name)) {
+          throw new Error(
+            `Variant alternative "${alternative.name}" is duplicated at line ${alternative.line}.`,
+          );
+        }
+        alternatives.add(alternative.name);
+        const fields = new Set();
+        return {
+          name: alternative.name,
+          line: alternative.line,
+          fields: alternative.fields.map((field) => {
+            assertName(field.name, field.line, "variant field", functions);
+            if (fields.has(field.name)) {
+              throw new Error(
+                `Variant field "${field.name}" is duplicated at line ${field.line}.`,
+              );
+            }
+            fields.add(field.name);
+            return {
+              name: field.name,
+              type: resolveType(field.type, typeState, field.line, { allowNull: true }),
+              line: field.line,
+            };
+          }),
+        };
+      });
+    }
   }
 
   let index = 1;
@@ -752,7 +1152,20 @@ function collectDeclarations(program, resolvedImports) {
       }
       throw new Error(`Function "${declaration.name}" is already declared at line ${declaration.line}.`);
     }
-    const returnType = resolveType(declaration.returnType, typeState, declaration.line, {
+    const typeParameters = declaration.typeParameters.map((name) => {
+      assertName(name, declaration.line, "type parameter", functions);
+      return {
+        name,
+        type: typeVariable(`${program.moduleId ?? "<entry>"}::function::${declaration.name}`, name),
+      };
+    });
+    const functionTypeState = {
+      types,
+      recordsByType,
+      variantsByType,
+      typeVariables: new Map(typeParameters.map(({ name, type }) => [name, type])),
+    };
+    const returnType = resolveType(declaration.returnType, functionTypeState, declaration.line, {
       allowNull: true,
       allowVoid: true,
     });
@@ -767,7 +1180,7 @@ function collectDeclarations(program, resolvedImports) {
       if (types.has(parameter.name)) {
         throw new Error(`Parameter "${parameter.name}" conflicts with a record name at line ${parameter.line}.`);
       }
-      parameter.type = resolveType(parameter.type, typeState, parameter.line, {
+      parameter.type = resolveType(parameter.type, functionTypeState, parameter.line, {
         allowNull: false,
       });
       if (parameterNames.has(parameter.name)) {
@@ -781,13 +1194,14 @@ function collectDeclarations(program, resolvedImports) {
       index,
       parameterTypes: declaration.parameters.map(({ type }) => type),
       returnType,
+      typeParameters,
     });
     index += 1;
   }
-  return { functions, imports, types, recordsByType };
+  return { functions, imports, types, recordsByType, variantsByType };
 }
 
-function analyzeFunction(signature, functions, types, recordsByType) {
+function analyzeFunction(signature, functions, types, recordsByType, variantsByType) {
   const context = { nextRegister: signature.parameterTypes.length };
   const scope = new Map();
   const parameters = signature.declaration.parameters.map((parameter, register) => {
@@ -805,7 +1219,12 @@ function analyzeFunction(signature, functions, types, recordsByType) {
     functions,
     types,
     recordsByType,
-    currentFunction: { name: signature.declaration.name, returnType: signature.returnType },
+    variantsByType,
+    currentFunction: {
+      name: signature.declaration.name,
+      returnType: signature.returnType,
+      typeParameters: signature.typeParameters,
+    },
     loopDepth: 0,
     loopTypeGuards: [],
   };
@@ -821,6 +1240,7 @@ function analyzeFunction(signature, functions, types, recordsByType) {
     parameters,
     parameterTypes: signature.parameterTypes,
     returnType: signature.returnType,
+    typeParameters: signature.typeParameters,
     body: { ...signature.declaration.body, statements: body.statements },
     variableCount: context.nextRegister,
   };
@@ -830,7 +1250,9 @@ function analyzeProgramInternal(program, { resolvedImports = [] } = {}) {
   if (!Array.isArray(resolvedImports)) {
     throw new Error("resolvedImports must be an array.");
   }
-  const { functions, imports, types, recordsByType } = collectDeclarations(program, resolvedImports);
+  const {
+    functions, imports, types, recordsByType, variantsByType,
+  } = collectDeclarations(program, resolvedImports);
   const entryContext = { nextRegister: 0 };
   const entryState = {
     context: entryContext,
@@ -838,12 +1260,15 @@ function analyzeProgramInternal(program, { resolvedImports = [] } = {}) {
     functions,
     types,
     recordsByType,
+    variantsByType,
     currentFunction: null,
     loopDepth: 0,
     loopTypeGuards: [],
   };
   const entryStatements = program.statements.filter(({ kind }) =>
-    kind !== "functionDeclaration" && kind !== "recordDeclaration");
+    kind !== "functionDeclaration"
+    && kind !== "recordDeclaration"
+    && kind !== "variantDeclaration");
   if (program.isEntry === false && entryStatements.length > 0) {
     throw new Error(
       `Executable statements are only valid in the entry module at line ${entryStatements[0].line}.`,
@@ -852,7 +1277,19 @@ function analyzeProgramInternal(program, { resolvedImports = [] } = {}) {
   const entry = analyzeStatements(entryStatements, entryState);
   const localFunctions = [...functions.values()].filter(({ kind }) => kind === "local");
   const analyzedFunctions = localFunctions.map((signature) =>
-    analyzeFunction(signature, functions, types, recordsByType));
+    analyzeFunction(signature, functions, types, recordsByType, variantsByType));
+  const dependencies = [...types.values()].map((dependency) => ({
+    kind: dependency.kind,
+    name: dependency.name,
+    moduleId: dependency.moduleId,
+    type: dependency.type,
+    typeParameters: dependency.typeParameters.map(({ name, type }) => ({ name, type })),
+    fields: dependency.fields.map(({ name, type }) => ({ name, type })),
+    alternatives: dependency.alternatives.map((alternative) => ({
+      name: alternative.name,
+      fields: alternative.fields.map(({ name, type }) => ({ name, type })),
+    })),
+  }));
   const functionExports = localFunctions
     .filter(({ declaration }) => declaration.exported)
     .map((signature) => ({
@@ -862,42 +1299,60 @@ function analyzeProgramInternal(program, { resolvedImports = [] } = {}) {
       functionIndex: signature.index,
       parameterTypes: [...signature.parameterTypes],
       returnType: signature.returnType,
-      ...(recordsByType.size === 0 ? {} : {
-        dependencies: [...recordsByType.values()].map((dependency) => ({
-          name: dependency.name,
-          moduleId: dependency.moduleId,
-          type: dependency.type,
-          fields: dependency.fields.map(({ name, type }) => ({ name, type })),
-        })),
+      ...(signature.typeParameters.length === 0 ? {} : {
+        typeParameters: signature.typeParameters.map(({ name, type }) => ({ name, type })),
       }),
+      ...(dependencies.length === 0 ? {} : { dependencies }),
     }));
   const recordExports = [...types.values()]
-    .filter((record) => !record.imported && record.declaration.exported)
+    .filter((record) => record.kind === "record" && !record.imported && record.declaration.exported)
     .map((record) => ({
       kind: "record",
       name: record.name,
       moduleId: program.moduleId,
       type: record.type,
+      typeParameters: record.typeParameters.map(({ name, type }) => ({ name, type })),
       fields: record.fields.map(({ name, type }) => ({ name, type })),
-      dependencies: [...recordsByType.values()].map((dependency) => ({
-        name: dependency.name,
-        moduleId: dependency.moduleId,
-        type: dependency.type,
-        fields: dependency.fields.map(({ name, type }) => ({ name, type })),
+      dependencies,
+    }));
+  const variantExports = [...types.values()]
+    .filter((variant) => variant.kind === "variant" && !variant.imported && variant.declaration.exported)
+    .map((variant) => ({
+      kind: "variant",
+      name: variant.name,
+      moduleId: program.moduleId,
+      type: variant.type,
+      typeParameters: variant.typeParameters.map(({ name, type }) => ({ name, type })),
+      alternatives: variant.alternatives.map((alternative) => ({
+        name: alternative.name,
+        fields: alternative.fields.map(({ name, type }) => ({ name, type })),
       })),
+      dependencies,
     }));
   return {
     kind: "analyzedProgram",
     moduleId: program.moduleId,
     isEntry: program.isEntry,
     imports,
-    exports: [...functionExports, ...recordExports],
-    records: [...types.values()].filter((record) => !record.imported).map((record) => ({
+    exports: [...functionExports, ...recordExports, ...variantExports],
+    records: [...types.values()].filter((record) => record.kind === "record" && !record.imported).map((record) => ({
       name: record.name,
       type: record.type,
       fields: record.fields.map(({ name, type }) => ({ name, type })),
       exported: record.declaration.exported,
       line: record.line,
+    })),
+    variants: [...types.values()].filter((variant) =>
+      variant.kind === "variant" && !variant.imported).map((variant) => ({
+      name: variant.name,
+      type: variant.type,
+      typeParameters: variant.typeParameters.map(({ name, type }) => ({ name, type })),
+      alternatives: variant.alternatives.map((alternative) => ({
+        name: alternative.name,
+        fields: alternative.fields.map(({ name, type }) => ({ name, type })),
+      })),
+      exported: variant.declaration.exported,
+      line: variant.line,
     })),
     statements: entry.statements,
     functions: analyzedFunctions,

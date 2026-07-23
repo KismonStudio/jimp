@@ -1,0 +1,7 @@
+variant Option<T> {
+  None,
+  Some(value: T),
+}
+
+let option: Option<I64> = Option::Some(42);
+match(option) { Some(value) => value };

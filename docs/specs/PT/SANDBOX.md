@@ -17,6 +17,11 @@ Estes limites definem o perfil obrigatório de recursos implementado pelas ferra
 | Carregamento | `MAX_HOST_IMPORTS` | 1,024 | imports | Quantidade máxima de imports tipados do host. |
 | Carregamento | `MAX_FUNCTIONS` | 4,096 | functions | Quantidade máxima de funções, incluindo a entrada. |
 | Carregamento | `MAX_PARAMETERS` | 256 | parameters | Quantidade máxima de parâmetros em uma assinatura de host ou função. |
+| Verificação | `MAX_TYPE_PARAMETERS` | 16 | type parameters | Quantidade máxima de parâmetros de tipo genéricos em uma declaração. |
+| Verificação | `MAX_TYPE_NESTING` | 64 | levels | Profundidade máxima de tipos-fonte genéricos e arrays aninhados. |
+| Verificação | `MAX_NOMINAL_FIELDS` | 256 | fields | Quantidade máxima de campos em um record ou em uma alternativa de variant. |
+| Verificação | `MAX_VARIANT_ALTERNATIVES` | 256 | alternatives | Quantidade máxima de alternativas em uma declaração variant. |
+| Verificação | `MAX_MATCH_ARMS` | 256 | arms | Quantidade máxima de braços em uma expressão match. |
 | Carregamento | `MAX_CODE_BYTES` | 8,388,608 | bytes | Tamanho máximo combinado do código codificado das funções. |
 | Verificação | `MAX_TOTAL_INSTRUCTIONS` | 262,144 | instructions | Quantidade máxima de instruções decodificadas no módulo. |
 | Verificação | `MAX_REGISTERS_PER_FUNCTION` | 4,096 | registers | Quantidade máxima de registradores virtuais em um frame de função. |

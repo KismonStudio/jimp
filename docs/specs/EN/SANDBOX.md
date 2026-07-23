@@ -17,6 +17,11 @@ These limits define the mandatory resource profile implemented by the official c
 | Load | `MAX_HOST_IMPORTS` | 1,024 | imports | Maximum number of typed host imports. |
 | Load | `MAX_FUNCTIONS` | 4,096 | functions | Maximum number of functions, including entry. |
 | Load | `MAX_PARAMETERS` | 256 | parameters | Maximum parameters in a host or function signature. |
+| Verify | `MAX_TYPE_PARAMETERS` | 16 | type parameters | Maximum generic type parameters on one declaration. |
+| Verify | `MAX_TYPE_NESTING` | 64 | levels | Maximum nesting depth of array and generic source types. |
+| Verify | `MAX_NOMINAL_FIELDS` | 256 | fields | Maximum fields in one record or one variant alternative. |
+| Verify | `MAX_VARIANT_ALTERNATIVES` | 256 | alternatives | Maximum alternatives in one variant declaration. |
+| Verify | `MAX_MATCH_ARMS` | 256 | arms | Maximum arms in one match expression. |
 | Load | `MAX_CODE_BYTES` | 8,388,608 | bytes | Maximum combined encoded function-code size. |
 | Verify | `MAX_TOTAL_INSTRUCTIONS` | 262,144 | instructions | Maximum decoded instructions across the module. |
 | Verify | `MAX_REGISTERS_PER_FUNCTION` | 4,096 | registers | Maximum virtual registers in one function frame. |

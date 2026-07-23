@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- P8.1–P8.4 nominal tagged variants, exhaustive flat pattern matching, generic records/variants/functions, and bounded recursive immutable values.
+- Catalog-defined `Option<T>` in `std:option` and `Result<T, E>` in `std:result`, preserving existing P7 result records.
+- Generated source-complexity sandbox limits, bilingual normative specifications, cross-module tests, and the runnable `examples/p8-types.jimp` sample.
 - P7.5 nominal recoverable result records plus portable `std:result`, Unicode-scalar `std:text`, and immutable `std:collections/i64` APIs.
 - Portable `.jbc` 2.9 generic `STRING_LENGTH`, `STRING_LOAD`, `STRING_SLICE`, and `STRING_CONCAT` instructions with independent JavaScript/Rust verification and deterministic bounds failures.
 - P7.6 typed `std:json` document/result API backed by data-defined, pure Host ABI support rather than a keyword or JSON-specific VM instruction.
@@ -117,6 +120,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Generic declarations use one verified uniform-boxed function representation across modules instead of monomorphized copies; variants and matching lower to existing `.jbc` 2.9 heap and control-flow instructions.
 - The active compiler and runtime now use exact portable `.jbc` format `2.9`; legacy format 1 and portable formats `2.0` through `2.8` are no longer accepted.
 - Standard-library generation now validates module-level canonical sources, nominal record exports, array and record type contracts, and transitive portable dependencies.
 - The standalone runtime now exposes bounded pure JSON support capabilities in addition to console output; it still grants no filesystem or network authority.

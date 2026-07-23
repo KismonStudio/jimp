@@ -166,6 +166,43 @@ export const STANDARD_LIBRARY = Object.freeze({
       ]
     },
     {
+      "specifier": "std:option",
+      "kind": "portable",
+      "source": "src/option.jimp",
+      "description": {
+        "en": "Generic optional values with exhaustive pattern matching.",
+        "pt": "Valores opcionais genéricos com correspondência de padrões exaustiva."
+      },
+      "exports": [
+        {
+          "kind": "variant",
+          "name": "Option",
+          "typeParameters": [
+            "T"
+          ],
+          "alternatives": [
+            {
+              "name": "None",
+              "fields": []
+            },
+            {
+              "name": "Some",
+              "fields": [
+                {
+                  "name": "value",
+                  "type": "T"
+                }
+              ]
+            }
+          ],
+          "description": {
+            "en": "Represents either no value or one value of type T.",
+            "pt": "Representa a ausência de valor ou um valor do tipo T."
+          }
+        }
+      ]
+    },
+    {
       "specifier": "std:result",
       "kind": "portable",
       "source": "src/result.jimp",
@@ -174,6 +211,38 @@ export const STANDARD_LIBRARY = Object.freeze({
         "pt": "Valores nominais e explícitos de resultado para operações recuperáveis que produzem strings."
       },
       "exports": [
+        {
+          "kind": "variant",
+          "name": "Result",
+          "typeParameters": [
+            "T",
+            "E"
+          ],
+          "alternatives": [
+            {
+              "name": "Ok",
+              "fields": [
+                {
+                  "name": "value",
+                  "type": "T"
+                }
+              ]
+            },
+            {
+              "name": "Error",
+              "fields": [
+                {
+                  "name": "error",
+                  "type": "E"
+                }
+              ]
+            }
+          ],
+          "description": {
+            "en": "Represents either a successful value of type T or an error of type E.",
+            "pt": "Representa um valor bem-sucedido do tipo T ou um erro do tipo E."
+          }
+        },
         {
           "kind": "record",
           "name": "StringResult",
@@ -603,7 +672,8 @@ export const STANDARD_LIBRARY = Object.freeze({
 export const STANDARD_LIBRARY_SOURCES = Object.freeze({
   "src/console.jimp": "export function writeLine(message: STRING): VOID {\n  print message;\n}\n",
   "src/math/i64.jimp": "export function absolute(value: I64): I64 {\n  if value < 0 {\n    return -value;\n  } else {\n    return value;\n  }\n}\n\nexport function minimum(left: I64, right: I64): I64 {\n  if left <= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function maximum(left: I64, right: I64): I64 {\n  if left >= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function sign(value: I64): I64 {\n  if value < 0 {\n    return -1;\n  } else {\n    if value > 0 {\n      return 1;\n    } else {\n      return 0;\n    }\n  }\n}\n",
-  "src/result.jimp": "export record StringResult {\n  ok: BOOL,\n  value: STRING,\n  error: STRING,\n}\n\nexport function stringSuccess(value: STRING): StringResult {\n  return StringResult { ok: true, value: value, error: \"\" };\n}\n\nexport function stringFailure(error: STRING): StringResult {\n  return StringResult { ok: false, value: \"\", error: error };\n}\n",
+  "src/option.jimp": "export variant Option<T> {\n  None,\n  Some(value: T),\n}\n",
+  "src/result.jimp": "export variant Result<T, E> {\n  Ok(value: T),\n  Error(error: E),\n}\n\nexport record StringResult {\n  ok: BOOL,\n  value: STRING,\n  error: STRING,\n}\n\nexport function stringSuccess(value: STRING): StringResult {\n  return StringResult { ok: true, value: value, error: \"\" };\n}\n\nexport function stringFailure(error: STRING): StringResult {\n  return StringResult { ok: false, value: \"\", error: error };\n}\n",
   "src/text.jimp": "import { StringResult, stringSuccess, stringFailure } from \"std:result\";\n\nexport function length(value: STRING): I64 {\n  return value.length;\n}\n\nexport function concat(left: STRING, right: STRING): STRING {\n  return left + right;\n}\n\nexport function at(value: STRING, index: I64): StringResult {\n  if index < 0 || index >= value.length {\n    return stringFailure(\"String index is out of bounds.\");\n  }\n  return stringSuccess(value[index]);\n}\n\nexport function slice(value: STRING, start: I64, end: I64): StringResult {\n  if start < 0 || end < start || end > value.length {\n    return stringFailure(\"String slice is out of bounds.\");\n  }\n  return stringSuccess(value[start:end]);\n}\n",
   "src/collections/i64.jimp": "export record I64ArrayResult {\n  ok: BOOL,\n  value: [I64],\n  error: STRING,\n}\n\nexport function contains(values: [I64], expected: I64): BOOL {\n  var index = 0;\n  while index < values.length {\n    if values[index] == expected {\n      return true;\n    }\n    index = index + 1;\n  }\n  return false;\n}\n\nexport function indexOf(values: [I64], expected: I64): I64 {\n  var index = 0;\n  while index < values.length {\n    if values[index] == expected {\n      return index;\n    }\n    index = index + 1;\n  }\n  return -1;\n}\n\nexport function replace(values: [I64], index: I64, replacement: I64): I64ArrayResult {\n  if index < 0 || index >= values.length {\n    return I64ArrayResult { ok: false, value: values, error: \"Array index is out of bounds.\" };\n  }\n  return I64ArrayResult { ok: true, value: values with [index] = replacement, error: \"\" };\n}\n",
   "src/json.jimp": "import { StringResult, stringSuccess, stringFailure } from \"std:result\";\nimport { validate, canonicalize, diagnostic } from \"std:json/support\";\n\nexport record JsonDocument {\n  text: STRING,\n}\n\nexport record JsonResult {\n  ok: BOOL,\n  value: JsonDocument,\n  error: STRING,\n}\n\nexport function parse(source: STRING): JsonResult {\n  if validate(source) {\n    return JsonResult { ok: true, value: JsonDocument { text: canonicalize(source) }, error: \"\" };\n  }\n  return JsonResult { ok: false, value: JsonDocument { text: \"null\" }, error: diagnostic(source) };\n}\n\nexport function stringify(document: JsonDocument): StringResult {\n  if validate(document.text) {\n    return stringSuccess(canonicalize(document.text));\n  }\n  return stringFailure(diagnostic(document.text));\n}\n"

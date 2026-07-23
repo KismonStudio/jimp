@@ -94,6 +94,56 @@
       }
     },
     {
+      "name": "MAX_TYPE_PARAMETERS",
+      "value": 16,
+      "unit": "type parameters",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum generic type parameters on one declaration.",
+        "pt": "Quantidade máxima de parâmetros de tipo genéricos em uma declaração."
+      }
+    },
+    {
+      "name": "MAX_TYPE_NESTING",
+      "value": 64,
+      "unit": "levels",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum nesting depth of array and generic source types.",
+        "pt": "Profundidade máxima de tipos-fonte genéricos e arrays aninhados."
+      }
+    },
+    {
+      "name": "MAX_NOMINAL_FIELDS",
+      "value": 256,
+      "unit": "fields",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum fields in one record or one variant alternative.",
+        "pt": "Quantidade máxima de campos em um record ou em uma alternativa de variant."
+      }
+    },
+    {
+      "name": "MAX_VARIANT_ALTERNATIVES",
+      "value": 256,
+      "unit": "alternatives",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum alternatives in one variant declaration.",
+        "pt": "Quantidade máxima de alternativas em uma declaração variant."
+      }
+    },
+    {
+      "name": "MAX_MATCH_ARMS",
+      "value": 256,
+      "unit": "arms",
+      "phase": "verify",
+      "description": {
+        "en": "Maximum arms in one match expression.",
+        "pt": "Quantidade máxima de braços em uma expressão match."
+      }
+    },
+    {
       "name": "MAX_CODE_BYTES",
       "value": 8388608,
       "unit": "bytes",

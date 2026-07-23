@@ -4,54 +4,46 @@
 
 ## Status
 
-Este documento é o roadmap de implementação aprovado para o P8. Ele não é um contrato de linguagem já implementado. Sintaxe, codificações de bytecode e APIs públicas permanecem indisponíveis até que suas tarefas individuais orientadas por especificação sejam concluídas e passem pelo gate completo de qualidade.
+P8.1 até P8.4 estão implementados. O contrato normativo de fonte e representação está definido em [VARIANTS_AND_GENERICS.md](VARIANTS_AND_GENERICS.md). P8.5 até P8.7 continuam planejados e indisponíveis.
 
-O P8 fornece os pré-requisitos de sistema de tipos e modelo de valores para JSON estruturado, dados binários e I/O assíncrono posterior. Ele deve preservar semântica de valores imutáveis, tipagem estática exata, contabilização determinística de recursos, verificação independente em JavaScript/Rust e a regra de que nomes de APIs da biblioteca padrão nunca se tornam instruções da VM.
+A implementação preserva semântica de valores imutáveis, tipagem estática exata, contabilização determinística de recursos, identidade nominal entre módulos e uma VM cujas instruções não dependem de nomes públicos da linguagem ou da biblioteca.
 
-## P8.1 — Variantes etiquetadas
+## P8.1 — Variantes etiquetadas — concluído
 
-Especificar e implementar variantes nominais etiquetadas capazes de transportar payloads de tipos diferentes. O projeto deve definir sintaxe de declaração e construção, visibilidade entre módulos, identidade nominal, igualdade, aninhamento, contratos de funções, junções de fluxo de controle e representação no bytecode portátil.
+Declarações nominais `variant` aceitam alternativas ordenadas com payloads tipados, construção por `Type::Alternative(...)`, igualdade exata, aninhamento, funções e exports de módulos. Variantes são reduzidas à representação existente da heap imutável como uma etiqueta inteira seguida por slots de payload.
 
-A aceitação exige construção e transporte válidos entre módulos, rejeição determinística de alternativas desconhecidas ou duplicadas, tipos exatos de payload, redução verificada independentemente e nenhuma identidade de armazenamento ou ponteiro nativo exposto.
+## P8.2 — Correspondência exaustiva de padrões — concluído
 
-## P8.2 — Correspondência exaustiva de padrões
+`match(value) { Alternative(bindings) => expression, ... }` é estaticamente exaustivo. O compilador rejeita braços ausentes, duplicados, desconhecidos, com bindings incorretos ou tipos de resultado incompatíveis. Bindings são imutáveis e restritos ao braço; `_` descarta um campo do payload. A redução usa `HEAP_LOAD`, igualdade e saltos genéricos.
 
-Especificar e implementar correspondência de padrões sobre variantes etiquetadas. A correspondência deve ser estaticamente exaustiva, exceto se uma forma curinga explícita for aprovada. O contrato deve definir escopo de bindings, ordem das alternativas, padrões inalcançáveis, padrões aninhados, guards caso existam, junções do tipo resultante e avaliação da esquerda para a direita.
+Padrões aninhados, guards e alternativas catch-all foram intencionalmente adiados. Atualmente, cada expressão match ocupa uma única linha lógica do código-fonte.
 
-A aceitação exige que o compilador rejeite alternativas ausentes, duplicadas, impossíveis, incompatíveis em tipo e inalcançáveis antes da emissão do bytecode. A redução deve usar fluxo de controle e acesso a valores genéricos, não um opcode para `match` nem nomes públicos de variantes.
+## P8.3 — Tipos e funções paramétricos — concluído
 
-## P8.3 — Tipos e funções paramétricos
+Records, variants e funções aceitam parâmetros de tipo. Argumentos de tipo são inferidos a partir dos tipos exatos dos argumentos ou do resultado esperado. Parâmetros não resolvidos causam erro de compilação. Uma função genérica é emitida uma única vez e usa boxing uniforme e verificado na heap nas fronteiras de variáveis de tipo, evitando crescimento por monomorfização, casts em runtime e reflexão.
 
-Especificar e implementar genéricos em tempo de compilação para records, variantes e funções. As primeiras abstrações públicas obrigatórias são `Option<T>` e `Result<T, E>`. O projeto deve escolher e documentar monomorfização ou outra representação estaticamente verificável, restrições genéricas, limites de inferência, identidade de exports entre módulos, regras de recursão, apresentação de diagnósticos e limites de tamanho do código.
+O catálogo padrão exporta `Option<T>` por `std:option` e `Result<T, E>` por `std:result`. Os records de resultado do P7 continuam suportados. Acesso indexado e atualização funcional indexada sobre um tipo de elemento genérico isolado ainda não são suportados.
 
-Não existe reflexão em runtime nem cast apagado e não verificado. Toda chamada e valor instanciado deve possuir contrato exato e verificável. Os records nominais de resultado do P7 continuam suportados até a entrega de uma política documentada de compatibilidade e migração.
+## P8.4 — Valores recursivos imutáveis e limitados — concluído
 
-## P8.4 — Valores recursivos imutáveis e limitados
+Variants podem referenciar recursivamente seu próprio tipo nominal instanciado, permitindo estruturas finitas como `List<T>`. Os valores permanecem acíclicos porque o bytecode somente aloca objetos imutáveis a partir de valores já verificados e não pode alterar slots da heap nem falsificar referências. Os limites existentes de alocação, slots, bytes, profundidade, visitas de igualdade, frames de chamada e passos de execução limitam construção e travessia.
 
-Especificar declarações de tipos recursivos e valores finitos e imutáveis em runtime sem permitir grafos cíclicos de objetos. O compilador deve rejeitar declarações inválidas de tamanho infinito ou exigir uma indireção aprovada por uma alternativa etiquetada. O runtime deve aplicar limites de profundidade, alocação, travessia, igualdade e serialização sem depender da pilha nativa para profundidade não confiável.
+A complexidade do código-fonte também é limitada por valores gerados para parâmetros de tipo, aninhamento de tipos, campos nominais, alternativas de variant e braços de match.
 
-A aceitação exige construção, correspondência, igualdade e transporte por funções para valores recursivos finitos; rejeição determinística ou falha limitada para profundidade excessiva; e testes que comprovem que o bytecode não consegue fabricar um ciclo nem falsificar uma referência da heap.
+## P8.5 — `BYTES` imutável — planejado
 
-## P8.5 — `BYTES` imutável
+Especificar e implementar uma sequência imutável e contabilizada de octetos, distinta de `STRING` e `[I64]`, incluindo comprimento, indexação, recorte, concatenação, igualdade, conversão UTF-8, contratos de módulos e saída do inspetor.
 
-Especificar e implementar `BYTES` como uma sequência imutável e contabilizada de octetos, distinta de STRING e `[I64]`. A superfície aprovada deve cobrir literais ou construtores, comprimento, leitura indexada, recorte semiaberto, concatenação, igualdade, codificação/decodificação UTF-8 com falhas tipadas, contratos de funções e módulos e saída do inspetor.
+## P8.6 — `JsonValue` estruturado — planejado
 
-Os limites usam índices I64. Acesso direto inválido falha deterministicamente, enquanto auxiliares da biblioteca padrão expõem resultados recuperáveis. O bytecode adiciona somente primitivas genéricas de valores binários exigidas pelo modelo de valores; formatos de arquivo, corpos HTTP, compressão, imagens e outros domínios permanecem responsabilidades da biblioteca padrão ou do host.
+Evoluir `std:json` da fronteira `JsonDocument` baseada em texto do P7 para um valor JSON recursivo e tipado, preservando o comportamento de chaves duplicadas, ordenação, Unicode, canonicalização, lexemas numéricos, diagnósticos e limites de recursos.
 
-## P8.6 — `JsonValue` estruturado
+## P8.7 — Compatibilidade e conformidade — planejado
 
-Evoluir `std:json` da fronteira `JsonDocument` baseada em texto do P7 para um valor JSON recursivo e tipado construído com variantes, coleções imutáveis e texto numérico exato. O contrato deve preservar as decisões existentes de chaves duplicadas, ordenação, Unicode, canonicalização, lexemas numéricos, diagnósticos e limites de recursos.
+Concluir a cobertura multiplataforma de conformidade, bytecode malformado, limites de recursos, instalação do pacote, compatibilidade e migração para toda a superfície do P8.
 
-A migração deve manter um caminho documentado para `JsonDocument`. Análise, serialização e conversão continuam como APIs definidas pelo catálogo; JSON não se torna palavra-chave, intrínseco de fonte, tipo de bytecode nem opcode.
+## Restrições de entrega
 
-## P8.7 — Compatibilidade e conformidade
+P8.5, P8.6 e P8.7 permanecem indisponíveis até sua implementação. Nenhuma mudança de versão do bytecode foi necessária para P8.1–P8.4, pois a redução do compilador usa as instruções existentes e verificadas de heap imutável e fluxo de controle no `.jbc` 2.9.
 
-Publicar especificações normativas bilíngues, artefatos gerados quando aplicável, consequências de compatibilidade, fixtures positivas e negativas de conformidade, casos de bytecode malformado, testes de limites de recursos e cobertura de empacotamento/instalação para toda a superfície do P8.
-
-O P8 somente está concluído quando variantes etiquetadas, correspondência exaustiva, genéricos, valores recursivos, `BYTES` e JSON estruturado funcionarem entre módulos-fonte e no runtime com validação independente sob limites determinísticos.
-
-## Ordem de entrega e restrições
-
-A ordem obrigatória é P8.1, P8.2, P8.3, P8.4, P8.5, P8.6 e então P8.7. Uma tarefa pode refinar um projeto anterior, mas a implementação não deve ignorar um pré-requisito não atendido. Mudanças de formato permanecem exatas e pré-estáveis; um novo minor do bytecode é introduzido somente quando alterações de representação portátil ou instruções o exigirem.
-
-O P8 não adiciona execução assíncrona, autoridade de arquivos ou rede, registry de pacotes, reflexão de tipos em runtime, exceções, nulabilidade implícita nem instruções de VM específicas de domínio.
+O P8 não adiciona execução assíncrona, autoridade de arquivos ou rede, pacotes, reflexão em runtime, exceções, nulabilidade implícita nem instruções de VM específicas de domínio.

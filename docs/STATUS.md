@@ -1,11 +1,11 @@
 # JIMP Implementation Status
 
-**Last updated:** July 21, 2026
+**Last updated:** July 22, 2026
 **Development version:** 0.1.0
 
 This document tracks the JIMP implementation. The conceptual project definition lives under `docs/specs`; this file records only executable work and the subsequent delivery plan.
 
-## Current milestone: P7 complete; P8–P10 planned
+## Current milestone: P8.1–P8.4 complete; P8.5–P10 planned
 
 The project has a complete, tested path from source code to execution:
 
@@ -315,16 +315,16 @@ P7 acceptance criterion: JIMP can safely represent and manipulate typed aggregat
 
 P8 provides the value-model prerequisites for structured JSON and safe external I/O. Its complete design contract is maintained in [`docs/specs/EN/P8_TYPES.md`](specs/EN/P8_TYPES.md) and [`docs/specs/PT/P8_TYPES.md`](specs/PT/P8_TYPES.md).
 
-1. [ ] Specify and implement nominal tagged variants.
+1. [x] Specify and implement nominal tagged variants.
    - Define construction, payload typing, module visibility, equality, nesting, control-flow joins, portable representation, and deterministic resource behavior.
    - Acceptance criterion: exact variant contracts cross module and function boundaries without exposing storage identity, native pointers, or public-name-specific VM behavior.
-2. [ ] Add exhaustive pattern matching.
+2. [x] Add exhaustive pattern matching.
    - Define binding scopes, nested patterns, alternative order, catch-all behavior, unreachable cases, result-type joins, and evaluation order.
    - Acceptance criterion: missing, duplicate, impossible, unreachable, or type-incompatible alternatives fail before bytecode emission and lowering uses only generic control flow and value access.
-3. [ ] Add compile-time parametric types and functions.
+3. [x] Add compile-time parametric types and functions.
    - Deliver `Option<T>` and `Result<T, E>`, document representation and instantiation, bound generated code size, and preserve exact independently verifiable contracts.
    - Acceptance criterion: generic records, variants, and functions work across modules without runtime casts or reflection; P7 result records retain a documented migration path.
-4. [ ] Add bounded recursive immutable values.
+4. [x] Add bounded recursive immutable values.
    - Permit finite recursive data while rejecting or preventing cyclic runtime object graphs; bound construction, depth, traversal, equality, and serialization.
    - Acceptance criterion: recursive values are usable through functions and pattern matching, excessive depth fails deterministically, and malformed bytecode cannot manufacture cycles.
 5. [ ] Add immutable `BYTES`.
@@ -337,7 +337,7 @@ P8 provides the value-model prerequisites for structured JSON and safe external 
    - Publish final bilingual normative specifications, format consequences, malformed-bytecode fixtures, resource-limit cases, and package/install coverage.
    - Acceptance criterion: the complete P8 surface passes the full cross-platform quality gate and independent JavaScript/Rust verification.
 
-P8 delivery order is P8.1 through P8.7. A new pre-stable bytecode minor is introduced only when portable representation or generic instruction changes require it.
+P8.1–P8.4 are implemented on `.jbc` 2.9 by lowering to the existing verified heap, call, equality, and control-flow instructions. P8 delivery continues with P8.5 through P8.7; a new pre-stable bytecode minor is introduced only when portable representation or generic instruction changes require it.
 
 ### P9 — asynchronous capability integrations
 
@@ -416,7 +416,8 @@ P10 manifest and local-workspace design may be researched during late P8/P9, but
 | Recoverable failures      | Nominal result records with explicit `ok`, typed fallback `value`, and `error`   |
 | JSON                      | Typed `std:json` wrapper with pure catalog-backed support and deterministic limits |
 | Future domain APIs        | Standard-library and Host ABI capabilities, never source keywords or domain opcodes  |
-| Planned language work     | P8 tagged variants, exhaustive matching, generics, recursive values, `BYTES`, and structured JSON |
+| Implemented P8 work       | Tagged variants, exhaustive matching, generic records/variants/functions, `Option<T>`, `Result<T, E>`, and bounded recursive immutable values |
+| Planned language work     | P8 immutable `BYTES`, structured JSON, and final compatibility/conformance |
 | Planned integrations      | P9 bounded async tasks, data-driven host registration, capability-gated files and HTTP |
 | Planned ecosystem         | P10 deterministic packages, lockfiles, verified cache, registry design, and host SDK |
 | Security boundary         | VM-level validation and capability confinement; OS/process isolation remains external |

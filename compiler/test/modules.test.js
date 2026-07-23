@@ -184,7 +184,7 @@ test("qualifies parser diagnostics with the portable module ID", () => {
   }
   assert.match(
     diagnostic.message,
-    /Module "lib\/value\.jimp": Only a top-level function or record declaration may be exported at line 1/,
+    /Module "lib\/value\.jimp": Only a top-level function, record, or variant declaration may be exported at line 1/,
   );
   const normalized = normalizeError(diagnostic, ERROR_CODES.COMPILE);
   assert.deepEqual(normalized.location, {

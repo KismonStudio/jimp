@@ -233,3 +233,125 @@ test("analyzes Unicode string length, indexing, slicing, and concatenation", () 
   assert.equal(program.statements[4].expression.operationKind, "stringConcat");
   assert(program.statements.slice(1).every(({ type }) => ["I64", "STRING"].includes(type)));
 });
+
+test("analyzes generic variants and exhaustive match expressions", () => {
+  const program = analyzeProgram(parseProgram(`
+    variant Option<T> {
+      None,
+      Some(value: T),
+    }
+    function identity<T>(value: T): T {
+      return value;
+    }
+    let option: Option<I64> = Option::Some(41);
+    let answer = match(option) { Some(value) => identity(value) + 1, None => 0 };
+  `));
+
+  assert.equal(program.variants[0].name, "Option");
+  assert.equal(program.variants[0].alternatives.length, 2);
+  assert.equal(program.statements[0].initializer.type, "VARIANT<<entry>::Option<I64>>");
+  assert.equal(program.statements[1].initializer.kind, "matchExpression");
+  assert.equal(program.statements[1].initializer.type, "I64");
+});
+
+test("analyzes generic records and recursive immutable variants", () => {
+  const program = analyzeProgram(parseProgram(`
+    record Box<T> {
+      value: T,
+    }
+    variant List<T> {
+      Nil,
+      Cons(head: T, tail: List<T>),
+    }
+    function unbox<T>(box: Box<T>): T {
+      return box.value;
+    }
+    function length<T>(items: List<T>): I64 {
+      return match(items) { Nil => 0, Cons(_, tail) => 1 + length(tail) };
+    }
+    let boxed: Box<STRING> = Box { value: "ready" };
+    let items: List<I64> = List::Cons(1, List::Nil());
+    unbox(boxed);
+    length(items);
+  `));
+
+  assert.equal(program.functions[0].typeParameters.length, 1);
+  assert.equal(program.functions[1].returnType, "I64");
+  assert.equal(program.statements[1].initializer.type, "VARIANT<<entry>::List<I64>>");
+});
+
+test("rejects invalid and non-exhaustive variant matches", () => {
+  const prefix = `
+    variant Option<T> {
+      None,
+      Some(value: T),
+    }
+    let value: Option<I64> = Option::Some(1);
+  `;
+
+  assert.throws(
+    () => analyzeProgram(parseProgram(`${prefix}\nmatch(value) { Some(item) => item };`)),
+    /not exhaustive.*None/,
+  );
+  assert.throws(
+    () => analyzeProgram(parseProgram(`${prefix}\nmatch(value) { Some() => 1, None => 0 };`)),
+    /requires 1 binding/,
+  );
+  assert.throws(
+    () => analyzeProgram(parseProgram(`${prefix}\nmatch(value) { Some(item) => item, Some(other) => other, None => 0 };`)),
+    /Match alternative "Some" is duplicated/,
+  );
+  assert.throws(
+    () => analyzeProgram(parseProgram(`${prefix}\nmatch(value) { Some(item) => item, Missing => 0, None => 0 };`)),
+    /has no alternative "Missing"/,
+  );
+});
+
+test("rejects generic calls whose type arguments cannot be inferred", () => {
+  assert.throws(
+    () => analyzeProgram(parseProgram(`
+      variant Option<T> {
+        None,
+      }
+      Option::None();
+    `)),
+    /cannot infer type parameter T/,
+  );
+});
+
+test("enforces P8 source-complexity sandbox limits", () => {
+  const typeParameters = Array.from({ length: 17 }, (_, index) => `T${index}`).join(", ");
+  assert.throws(
+    () => parseProgram(`function excessive<${typeParameters}>(): VOID {\n}`),
+    /Type parameter count exceeds the sandbox limit/,
+  );
+
+  const nestedType = `${"[".repeat(65)}I64${"]".repeat(65)}`;
+  assert.throws(
+    () => parseProgram(`let value: ${nestedType} = [];`),
+    /Type nesting exceeds the sandbox limit/,
+  );
+
+  const alternatives = Array.from({ length: 257 }, (_, index) => `A${index},`).join("\n");
+  assert.throws(
+    () => parseProgram(`variant Excessive {\n${alternatives}\n}`),
+    /Variant alternative count exceeds the sandbox limit/,
+  );
+
+  const arms = Array.from({ length: 257 }, () => "A => 0").join(", ");
+  assert.throws(
+    () => parseProgram(`match(value) { ${arms} };`),
+    /Match arm count exceeds the sandbox limit/,
+  );
+});
+
+test("rejects indexed operations over a naked generic array element", () => {
+  assert.throws(
+    () => analyzeProgram(parseProgram(`
+      function first<T>(values: [T]): T {
+        return values[0];
+      }
+    `)),
+    /Indexed access over an array of a generic type parameter is not supported/,
+  );
+});

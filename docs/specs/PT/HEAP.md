@@ -4,7 +4,9 @@
 
 ## Escopo
 
-O formato `2.7` introduziu a base generica, imutavel e limitada da heap, e o formato `2.8` adicionou substituicao funcional e igualdade estrutural genericas para arrays tipados e records. O formato ativo `2.9` preserva esse contrato da heap e adiciona operacoes genericas de STRING. A VM continua sem definir JSON, arquivos, rede, handles do host ou ponteiros nativos.
+O formato `2.7` introduziu a base generica, imutavel e limitada da heap, e o formato `2.8` adicionou substituicao funcional e igualdade estrutural genericas para arrays tipados e records. O formato ativo `2.9` preserva esse contrato da heap, adiciona operacoes genericas de STRING e e suficiente para a reducao de variants, genericos e valores recursivos do P8.1–P8.4 sem novas instrucoes. A VM continua sem definir JSON, arquivos, rede, handles do host ou ponteiros nativos.
+
+O compilador representa uma variant como um objeto imutavel cujo primeiro slot e uma etiqueta I64 da alternativa e cujos slots restantes sao o payload ordenado. Payloads dependentes de genericos e variaveis de tipo isoladas usam boxes verificados de um slot nas fronteiras uniformes de funcoes. Match e reduzido a leituras tipadas, igualdade da etiqueta e saltos genericos. Esses layouts sao convencoes do compilador, nao novos tipos da VM nem comportamento especifico de nomes publicos.
 
 ## Representacao e instrucoes
 

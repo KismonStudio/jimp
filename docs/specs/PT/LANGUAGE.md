@@ -4,7 +4,7 @@
 
 ## Status
 
-Este documento define a sintaxe e a semântica centrais da linguagem-fonte implementadas até o P7.6, incluindo operações de STRING por valores escalares Unicode, arrays tipados, records nominais, records de resultado recuperável, imports e exports nomeados, grafos estáticos seguros do projeto e módulos `std:` apoiados pelo catálogo. A linguagem e o formato portátil permanecem pré-estáveis.
+Este documento define a sintaxe e a semântica centrais da linguagem-fonte implementadas até o P8.4, incluindo operações de STRING por valores escalares Unicode, arrays tipados, records nominais e genéricos, variants etiquetadas, correspondência exaustiva, funções genéricas, valores recursivos imutáveis e limitados, imports e exports nomeados, grafos estáticos seguros do projeto e módulos `std:` apoiados pelo catálogo. A linguagem e o formato portátil permanecem pré-estáveis.
 
 As palavras-chave, a gramática, as regras de tipo e os exemplos são normativos. O texto explicativo é informativo, exceto quando utiliza **deve**, **não deve**, **obrigatório** ou **inválido**.
 
@@ -24,14 +24,14 @@ Comentários começam com `//` após espaços em branco opcionais e ocupam o res
 As palavras reservadas diferenciam maiúsculas de minúsculas:
 
 ```text
-as break continue else export false from function if import let null print record return true var while with
+as break continue else export false from function if import let match null print record return true var variant while with
 ```
 
 Identificadores começam com uma letra ASCII ou sublinhado e continuam com letras ASCII, dígitos ou sublinhados. Eles diferenciam maiúsculas de minúsculas.
 
 ## Tipos e literais
 
-Os tipos escalares de valor são `NULL`, `BOOL`, `I64`, `F64` e `STRING`. Um tipo de array é escrito `[T]`; seu elemento não pode ser `NULL` nem `VOID`. Um tipo de record é o nome de uma declaração nominal `record` visível. Tipos agregados podem ser aninhados. `VOID` é permitido somente como tipo de retorno de função e nunca representa um valor de runtime.
+Os tipos escalares de valor são `NULL`, `BOOL`, `I64`, `F64` e `STRING`. Um tipo de array é escrito `[T]`; seu elemento não pode ser `NULL` nem `VOID`. Tipos de record e variant usam o nome de uma declaração nominal visível e devem fornecer todos os argumentos genéricos declarados, como `Box<I64>` ou `Option<STRING>`. Tipos agregados e genéricos podem ser aninhados. `VOID` é permitido somente como tipo de retorno de função e nunca representa um valor de runtime.
 
 - Strings usam aspas duplas e aceitam `\\`, `\"`, `\n`, `\r` e `\t`.
 - Inteiros usam dígitos decimais com sinal negativo opcional e devem caber em `i64` com sinal.
@@ -101,9 +101,21 @@ let origin = Point { y: 0, x: 0 }
 let moved = origin with { x: 4 }
 ```
 
+Records genéricos, variants etiquetadas, correspondência exaustiva e valores recursivos limitados são definidos normativamente em [VARIANTS_AND_GENERICS.md](VARIANTS_AND_GENERICS.md). Por exemplo:
+
+```jimp
+variant Option<T> {
+  None,
+  Some(value: T),
+}
+
+let option: Option<I64> = Option::Some(42);
+let value = match(option) { Some(item) => item, None => 0 };
+```
+
 ## Funções
 
-Funções possuem nome, são declaradas no escopo do programa e exigem tipos explícitos nos parâmetros e no retorno:
+Funções possuem nome, são declaradas no escopo do programa e exigem tipos explícitos nos parâmetros e no retorno. Uma função pode declarar parâmetros de tipo invariantes e inferidos após seu nome:
 
 ```jimp
 function add(left: I64, right: I64): I64 {
@@ -111,6 +123,10 @@ function add(left: I64, right: I64): I64 {
 }
 
 let answer = add(20, 22);
+
+function identity<T>(value: T): T {
+  return value;
+}
 ```
 
 - Os tipos de parâmetro podem ser `BOOL`, `I64`, `F64`, `STRING` ou qualquer tipo agregado visível.
@@ -163,19 +179,32 @@ A gramática utiliza EBNF no estilo ISO/IEC 14977. Espaços em branco léxicos p
 
 ```ebnf
 program          = { trivia-line | top-level-item } ;
-top-level-item   = statement | function-declaration | record-declaration ;
+top-level-item   = statement | function-declaration | record-declaration
+                   | variant-declaration ;
 
 record-declaration = record-header, line-ending,
                      { trivia-line | record-field-line }, close-brace-line ;
 record-header    = whitespace, "record", required-whitespace,
-                   identifier, whitespace, "{" ;
+                   identifier, [ generic-parameters ], whitespace, "{" ;
 record-field-line = whitespace, identifier, whitespace, ":", whitespace,
                     value-type, [ whitespace, "," ], whitespace, line-boundary ;
+
+variant-declaration = variant-header, line-ending,
+                      { trivia-line | variant-alternative-line }, close-brace-line ;
+variant-header   = whitespace, "variant", required-whitespace,
+                   identifier, [ generic-parameters ], whitespace, "{" ;
+variant-alternative-line = whitespace, identifier,
+                           [ whitespace, "(", whitespace, [ parameter-list ],
+                             whitespace, ")" ], [ whitespace, "," ],
+                           whitespace, line-boundary ;
+generic-parameters = whitespace, "<", whitespace, identifier,
+                     { whitespace, ",", whitespace, identifier },
+                     whitespace, ">" ;
 
 function-declaration = function-header, line-ending, block-body,
                        close-brace-line ;
 function-header  = whitespace, "function", required-whitespace,
-                   identifier, whitespace, "(", whitespace,
+                   identifier, [ generic-parameters ], whitespace, "(", whitespace,
                    [ parameter-list ], whitespace, ")", whitespace,
                    ":", whitespace, return-type, whitespace, "{" ;
 parameter-list   = parameter, { whitespace, ",", whitespace, parameter } ;
@@ -183,7 +212,10 @@ parameter        = identifier, whitespace, ":", whitespace, parameter-type ;
 parameter-type   = "BOOL" | "I64" | "F64" | "STRING" | aggregate-type ;
 return-type      = "NULL" | parameter-type | "VOID" ;
 value-type       = "NULL" | "BOOL" | "I64" | "F64" | "STRING" | aggregate-type ;
-aggregate-type   = identifier | "[", whitespace, parameter-type, whitespace, "]" ;
+type-argument    = "NULL" | parameter-type ;
+aggregate-type   = identifier, [ whitespace, "<", whitespace, type-argument,
+                   { whitespace, ",", whitespace, type-argument }, whitespace, ">" ]
+                   | "[", whitespace, parameter-type, whitespace, "]" ;
 
 statement        = statement-line | if-statement | while-statement ;
 statement-line   = whitespace, simple-statement, whitespace, line-boundary ;
@@ -251,10 +283,20 @@ postfix-expression = primary-expression,
                          whitespace, "]"
                        | ".", identifier ) } ;
 primary-expression = value-literal | array-literal | record-literal
+                     | variant-literal | match-expression
                      | function-call | identifier
                      | "(", whitespace, expression, whitespace, ")" ;
 function-call    = identifier, whitespace, "(", whitespace,
                    [ argument-list ], whitespace, ")" ;
+variant-literal  = identifier, whitespace, "::", whitespace, identifier,
+                   whitespace, "(", whitespace, [ argument-list ], whitespace, ")" ;
+match-expression = "match", whitespace, "(", whitespace, expression, whitespace,
+                   ")", whitespace, "{", whitespace, match-arm,
+                   { whitespace, ",", whitespace, match-arm },
+                   [ whitespace, "," ], whitespace, "}" ;
+match-arm        = identifier, [ whitespace, "(", whitespace,
+                   [ identifier, { whitespace, ",", whitespace, identifier } ],
+                   whitespace, ")" ], whitespace, "=>", whitespace, expression ;
 argument-list    = expression, { whitespace, ",", whitespace, expression } ;
 array-literal    = "[", whitespace,
                    [ expression, { whitespace, ",", whitespace, expression },

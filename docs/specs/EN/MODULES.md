@@ -4,7 +4,7 @@
 
 ## Status
 
-This document specifies the implemented source-module contract for named function and record imports and exports, graph resolution, and static linking. The CLI securely loads an acyclic source graph, validates exact scalar and aggregate contracts, links module-qualified identities deterministically, and emits one self-contained `.jbc` 2.9 file with module-aware debug metadata.
+This document specifies the implemented source-module contract for named function, record, and variant imports and exports, including generic declarations, graph resolution, and static linking. The CLI securely loads an acyclic source graph, validates exact scalar and aggregate contracts, links module-qualified identities deterministically, and emits one self-contained `.jbc` 2.9 file with module-aware debug metadata.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -31,6 +31,8 @@ Supported:
 - optional local aliases;
 - exported typed functions;
 - exported nominal record declarations and schemas;
+- exported nominal variant declarations and payload schemas;
+- exported generic functions, records, and variants;
 - private module-local functions;
 - private module-local records;
 - transitive, acyclic dependency graphs;
@@ -47,11 +49,11 @@ Deferred:
 - runtime module loading and multiple `.jbc` linkage;
 - source-level Host ABI declarations.
 
-An imported non-entry module must contain only imports, record declarations, and function declarations. Executable statements are valid only in the entry module. This rule avoids hidden initialization order and observable import-time effects.
+An imported non-entry module must contain only imports, record declarations, variant declarations, and function declarations. Executable statements are valid only in the entry module. This rule avoids hidden initialization order and observable import-time effects.
 
 ## Syntax
 
-Imports occupy one logical line and must appear before every record declaration, function declaration, or executable statement, except for blank lines and comments.
+Imports occupy one logical line and must appear before every record, variant, or function declaration and every executable statement, except for blank lines and comments.
 
 ```jimp
 import { add, multiply as mul } from "./math.jimp";
@@ -60,7 +62,7 @@ let answer = add(20, 22);
 mul(answer, 2);
 ```
 
-Exports are written directly on function or record declarations:
+Exports are written directly on function, record, or variant declarations:
 
 ```jimp
 export function add(left: I64, right: I64): I64 {
@@ -74,6 +76,11 @@ function privateHelper(value: I64): I64 {
 export record Point {
   x: I64,
   y: I64,
+}
+
+export variant Option<T> {
+  None,
+  Some(value: T),
 }
 ```
 
@@ -91,7 +98,7 @@ export let value = 1;
 
 ## Imported bindings
 
-An import item names an exported function or record and may declare a different local name with `as`.
+An import item names an exported function, record, or variant and may declare a different local name with `as`.
 
 ```jimp
 import { calculate as calculateTotal } from "./totals.jimp";
@@ -101,6 +108,7 @@ import { calculate as calculateTotal } from "./totals.jimp";
 - The name after `as`, or the original name when no alias exists, is the local binding.
 - An imported function binding is immutable and callable wherever a module-local function is callable.
 - An imported record binding names the same nominal type and permits record literals, annotations, field access, and exact aggregate function contracts under its local alias.
+- An imported variant binding names the same nominal type and permits construction, annotations, matching, and exact generic function contracts under its local alias.
 - Imported bindings are available throughout their module, including in functions declared before the import's first call site.
 - Two imports must not create the same local binding.
 - An imported binding must not conflict with a module-local function or record, variable, parameter, or reserved word.
@@ -113,14 +121,16 @@ Calls must match the exported function's exact parameter and return contract. JI
 
 `export` changes visibility only. It does not change function evaluation, record identity, typing, calling convention, or runtime representation.
 
-- Only a top-level function or record declaration may use `export`.
-- Export names are the declared function or record names; export aliases are not supported.
+- Only a top-level function, record, or variant declaration may use `export`.
+- Export names are the declared function, record, or variant names; export aliases are not supported.
 - Export names must be unique in one module.
 - A private function remains callable inside its declaring module.
 - An exported function may call private functions and imported functions.
 - An exported function cannot capture entry-module variables, matching the existing isolated function-scope rule.
 - The entry module may export functions, although those exports are used only when another compilation treats that file as a dependency.
 - An exported record exposes its qualified nominal identity, ordered field names, and exact field types. Importing it does not create a structurally interchangeable local record.
+- An exported variant exposes its qualified nominal identity, type parameters, ordered alternatives, and exact payload fields. Importing it does not create a structurally interchangeable local variant.
+- A generic function is linked once with its uniform verified representation; imports do not create monomorphized copies.
 - An exported function may accept or return aggregates. Required record schemas are carried transitively for exact call and field-access analysis, but a caller must import a record declaration explicitly to name or construct that type.
 
 Export tables are compile-time metadata. They do not expose native pointers and need not remain observable in the linked runtime module.

@@ -6,7 +6,7 @@
 
 ## Status
 
-Este documento especifica o catálogo da biblioteca padrão e o contrato de código-fonte portátil implementados até o P7.6. O compilador resolve esses módulos embutidos sem consultar o sistema de arquivos do projeto e vincula estaticamente apenas os exports usados.
+Este documento especifica o catálogo da biblioteca padrão e o contrato de código-fonte portátil implementados até o P8.3. O compilador resolve esses módulos embutidos sem consultar o sistema de arquivos do projeto e vincula estaticamente apenas os exports usados.
 
 ## Arquitetura
 
@@ -21,6 +21,7 @@ Este documento especifica o catálogo da biblioteca padrão e o contrato de cód
 
 - `std:console`: Saída explícita no console por uma ponte tipada da Host ABI e funções auxiliares portáteis.
 - `std:math/i64`: Funções determinísticas para inteiros de 64 bits com sinal implementadas em JIMP portátil.
+- `std:option`: Valores opcionais genéricos com correspondência de padrões exaustiva.
 - `std:result`: Valores nominais e explícitos de resultado para operações recuperáveis que produzem strings.
 - `std:text`: Comprimento, concatenação, acesso indexado e recorte portáteis por valores escalares Unicode.
 - `std:collections/i64`: Operações portáteis de busca e substituição recuperável para arrays imutáveis de I64.
@@ -35,6 +36,8 @@ Este documento especifica o catálogo da biblioteca padrão e o contrato de cód
 | `std:math/i64` | JIMP portátil | `minimum(left: I64, right: I64): I64` | JIMP portátil: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.minimum` | Retorna left quando left é menor ou igual a right; caso contrário, retorna right. |
 | `std:math/i64` | JIMP portátil | `maximum(left: I64, right: I64): I64` | JIMP portátil: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.maximum` | Retorna left quando left é maior ou igual a right; caso contrário, retorna right. |
 | `std:math/i64` | JIMP portátil | `sign(value: I64): I64` | JIMP portátil: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.sign` | Retorna -1 para valores negativos, 0 para zero e 1 para valores positivos. |
+| `std:option` | JIMP portátil | `variant Option<T> { None(), Some(value: T) }` | Tipo nominal portátil | — | Representa a ausência de valor ou um valor do tipo T. |
+| `std:result` | JIMP portátil | `variant Result<T, E> { Ok(value: T), Error(error: E) }` | Tipo nominal portátil | — | Representa um valor bem-sucedido do tipo T ou um erro do tipo E. |
 | `std:result` | JIMP portátil | `record StringResult { ok: BOOL, value: STRING, error: STRING }` | Tipo nominal portátil | — | Transporta um indicador explícito de sucesso, uma string e uma mensagem determinística de erro. |
 | `std:result` | JIMP portátil | `stringSuccess(value: STRING): StringResult` | JIMP portátil: [`src/result.jimp`](../../../stdlib/src/result.jimp) | — | Cria um StringResult bem-sucedido. |
 | `std:result` | JIMP portátil | `stringFailure(error: STRING): StringResult` | JIMP portátil: [`src/result.jimp`](../../../stdlib/src/result.jimp) | — | Cria um StringResult com falha e valor alternativo vazio. |
@@ -89,4 +92,4 @@ O catálogo permanece como a única fonte revisada da superfície pública dos m
 
 ## Aceitação do projeto P4.3
 
-Todo export de função portátil possui código-fonte canônico associado pelo catálogo cuja sintaxe, semântica, imports permitidos do host, dependências e assinatura pública exata passam pelas verificações de geração. Exports de records nominais são validados pelo mesmo contrato de código-fonte. O compilador e o vinculador consomem esses dados sem flags de import opcional, sondagens em runtime ou opcodes de biblioteca padrão.
+Todo export de função portátil possui código-fonte canônico associado pelo catálogo cuja sintaxe, semântica, imports permitidos do host, dependências e assinatura pública exata passam pelas verificações de geração. Exports nominais de records e variants são validados pelo mesmo contrato de código-fonte. O compilador e o vinculador consomem esses dados sem flags de import opcional, sondagens em runtime ou opcodes de biblioteca padrão.

@@ -372,6 +372,7 @@ test("executes every reviewed public example", () => {
     "functions.jimp",
     "hello.jimp",
     "loops.jimp",
+    "p8-types.jimp",
     "scalar-values.jimp",
     "variables.jimp",
     "modules/main.jimp",
@@ -494,6 +495,58 @@ test("executes immutable arrays, records, updates, and structural equality", () 
 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.replaceAll("\r\n", "\n"), "arrays\nrecords\n");
+});
+
+test("executes variants, matching, generics, and recursive immutable values", () => {
+  const result = runBytecode(compile(`
+    variant Option<T> {
+      None,
+      Some(value: T),
+    }
+    record Box<T> {
+      value: T,
+    }
+    variant List<T> {
+      Nil,
+      Cons(head: T, tail: List<T>),
+    }
+    function identity<T>(value: T): T {
+      return value;
+    }
+    function unbox<T>(box: Box<T>): T {
+      return box.value;
+    }
+    function length<T>(items: List<T>): I64 {
+      return match(items) { Nil => 0, Cons(_, tail) => 1 + length(tail) };
+    }
+    let option: Option<I64> = Option::Some(42);
+    let box: Box<STRING> = Box { value: "generic" };
+    let list: List<I64> = List::Cons(1, List::Cons(2, List::Nil()));
+    let value = match(option) { Some(item) => identity(item), None => 0 };
+    if value == 42 && unbox(box) == "generic" && length(list) == 2 {
+      print "p8";
+    }
+  `));
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.replaceAll("\r\n", "\n"), "p8\n");
+});
+
+test("bounds recursive immutable variant depth", () => {
+  const bytecode = compile(`
+    variant Node {
+      End,
+      Next(value: Node),
+    }
+    var node: Node = Node::End();
+    var count = 0;
+    while count < 128 {
+      node = Node::Next(node);
+      count = count + 1;
+    }
+  `);
+
+  assertRejectedWithoutOutput(bytecode, /Heap nesting depth limit of 128 was exceeded/);
 });
 
 test("reports deterministic aggregate bounds failures", () => {

@@ -1,0 +1,4 @@
+export variant Option<T> {
+  None,
+  Some(value: T),
+}

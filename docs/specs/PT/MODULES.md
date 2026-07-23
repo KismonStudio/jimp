@@ -4,7 +4,7 @@
 
 ## Status
 
-Este documento especifica o contrato implementado de módulos-fonte para imports e exports nomeados de funções e records, resolução do grafo e vinculação estática. A CLI carrega com segurança um grafo acíclico de fontes, valida contratos escalares e agregados exatos, vincula identidades qualificadas por módulo deterministicamente e gera um único arquivo `.jbc` 2.9 autocontido com metadados de debug cientes do módulo.
+Este documento especifica o contrato implementado de módulos-fonte para imports e exports nomeados de funções, records e variants, incluindo declarações genéricas, resolução do grafo e vinculação estática. A CLI carrega com segurança um grafo acíclico de fontes, valida contratos escalares e agregados exatos, vincula identidades qualificadas por módulo deterministicamente e gera um único arquivo `.jbc` 2.9 autocontido com metadados de debug cientes do módulo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -31,6 +31,8 @@ Compatível:
 - aliases locais opcionais;
 - funções tipadas exportadas;
 - declarações e esquemas de records nominais exportados;
+- declarações de variants nominais e schemas de payload exportados;
+- funções, records e variants genéricos exportados;
 - funções privadas locais ao módulo;
 - records privados locais ao módulo;
 - grafos transitivos e acíclicos de dependências;
@@ -47,11 +49,11 @@ Adiado:
 - carregamento de módulos em runtime e vinculação de vários `.jbc`;
 - declarações da Host ABI no código-fonte.
 
-Um módulo importado que não seja o de entrada deve conter somente imports e declarações de records e funções. Instruções executáveis são válidas apenas no módulo de entrada. Essa regra evita ordem oculta de inicialização e efeitos observáveis durante o import.
+Um módulo importado que não seja o de entrada deve conter somente imports e declarações de records, variants e funções. Instruções executáveis são válidas apenas no módulo de entrada. Essa regra evita ordem oculta de inicialização e efeitos observáveis durante o import.
 
 ## Sintaxe
 
-Imports ocupam uma linha lógica e devem aparecer antes de toda declaração de record, função ou instrução executável, exceto linhas vazias e comentários.
+Imports ocupam uma linha lógica e devem aparecer antes de toda declaração de record, variant, função ou instrução executável, exceto linhas vazias e comentários.
 
 ```jimp
 import { add, multiply as mul } from "./math.jimp";
@@ -60,7 +62,7 @@ let answer = add(20, 22);
 mul(answer, 2);
 ```
 
-Exports são escritos diretamente nas declarações de funções ou records:
+Exports são escritos diretamente nas declarações de funções, records ou variants:
 
 ```jimp
 export function add(left: I64, right: I64): I64 {
@@ -74,6 +76,11 @@ function privateHelper(value: I64): I64 {
 export record Point {
   x: I64,
   y: I64,
+}
+
+export variant Option<T> {
+  None,
+  Some(value: T),
 }
 ```
 
@@ -91,7 +98,7 @@ export let value = 1;
 
 ## Bindings importados
 
-Um item de import nomeia uma função ou record exportado e pode declarar outro nome local com `as`.
+Um item de import nomeia uma função, record ou variant exportado e pode declarar outro nome local com `as`.
 
 ```jimp
 import { calculate as calculateTotal } from "./totals.jimp";
@@ -101,6 +108,7 @@ import { calculate as calculateTotal } from "./totals.jimp";
 - O nome posterior a `as`, ou o nome original quando não há alias, é o binding local.
 - Um binding de função importado é imutável e pode ser chamado onde uma função local ao módulo poderia ser chamada.
 - Um binding de record importado nomeia o mesmo tipo nominal e permite literais, anotações, acesso a campos e contratos agregados exatos sob seu alias local.
+- Um binding de variant importado nomeia o mesmo tipo nominal e permite construção, anotações, correspondência e contratos exatos de funções genéricas sob seu alias local.
 - Bindings importados ficam disponíveis em todo o módulo, inclusive em funções declaradas antes do primeiro local de chamada do import.
 - Dois imports não devem criar o mesmo binding local.
 - Um binding importado não deve conflitar com função ou record local ao módulo, variável, parâmetro ou palavra reservada.
@@ -113,14 +121,16 @@ As chamadas devem corresponder exatamente ao contrato de parâmetros e retorno d
 
 `export` altera somente a visibilidade. Ele não altera a avaliação, identidade do record, tipagem, convenção de chamada nem representação em runtime.
 
-- Somente uma declaração de função ou record no escopo superior pode usar `export`.
-- Os nomes dos exports são os nomes declarados das funções ou records; aliases de export não são permitidos.
+- Somente uma declaração de função, record ou variant no escopo superior pode usar `export`.
+- Os nomes dos exports são os nomes declarados das funções, records ou variants; aliases de export não são permitidos.
 - Os nomes dos exports devem ser únicos em um módulo.
 - Uma função privada permanece acessível dentro do módulo que a declarou.
 - Uma função exportada pode chamar funções privadas e importadas.
 - Uma função exportada não pode capturar variáveis do módulo de entrada, seguindo a regra existente de escopo isolado das funções.
 - O módulo de entrada pode exportar funções, embora esses exports sejam usados somente quando outra compilação tratar o arquivo como dependência.
 - Um record exportado expõe sua identidade nominal qualificada, os nomes ordenados dos campos e os tipos exatos. Importá-lo não cria um record local estruturalmente intercambiável.
+- Uma variant exportada expõe sua identidade nominal qualificada, parâmetros de tipo, alternativas ordenadas e campos exatos de payload. Importá-la não cria uma variant local estruturalmente intercambiável.
+- Uma função genérica é vinculada uma única vez com sua representação uniforme verificada; imports não criam cópias monomorfizadas.
 - Uma função exportada pode aceitar ou retornar agregados. Os esquemas necessários são transportados transitivamente para análise exata de chamadas e campos, mas o consumidor deve importar explicitamente o record para nomear ou construir esse tipo.
 
 As tabelas de exports são metadados de compilação. Elas não expõem ponteiros nativos e não precisam permanecer observáveis no módulo vinculado em runtime.

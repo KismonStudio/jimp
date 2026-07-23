@@ -1,4 +1,6 @@
 import { withModuleContext } from "./module-context.js";
+import { SANDBOX_LIMITS } from "./generated/sandbox.js";
+import { parseTypeSyntax, splitTypeArguments } from "./type-system.js";
 
 const IDENTIFIER_SOURCE = String.raw`[A-Za-z_][A-Za-z0-9_]*`;
 const VARIABLE_DECLARATION = new RegExp(
@@ -8,9 +10,14 @@ const VARIABLE_ASSIGNMENT = new RegExp(
   String.raw`^(${IDENTIFIER_SOURCE})\s*=(?!=)\s*(.+)$`,
 );
 const FUNCTION_HEADER = new RegExp(
-  String.raw`^function\s+(${IDENTIFIER_SOURCE})\s*\((.*)\)\s*:\s*(.+?)\s*\{\s*$`,
+  String.raw`^function\s+(${IDENTIFIER_SOURCE})(?:\s*<\s*([^>]+)\s*>)?\s*\((.*)\)\s*:\s*(.+?)\s*\{\s*$`,
 );
-const RECORD_HEADER = new RegExp(String.raw`^record\s+(${IDENTIFIER_SOURCE})\s*\{\s*$`);
+const RECORD_HEADER = new RegExp(
+  String.raw`^record\s+(${IDENTIFIER_SOURCE})(?:\s*<\s*([^>]+)\s*>)?\s*\{\s*$`,
+);
+const VARIANT_HEADER = new RegExp(
+  String.raw`^variant\s+(${IDENTIFIER_SOURCE})(?:\s*<\s*([^>]+)\s*>)?\s*\{\s*$`,
+);
 const PRINT_STATEMENT = /^print\s+(.+)$/;
 const RETURN_STATEMENT = /^return(?:\s+(.+))?$/;
 const NUMBER_PREFIX = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+(?:[eE][+-]?[0-9]+)?|[eE][+-]?[0-9]+)?/;
@@ -76,14 +83,28 @@ function canStartSignedNumber(tokens) {
 }
 
 function parseType(source, line) {
-  const value = source.trim();
-  if (SCALAR_TYPES.has(value) || new RegExp(`^${IDENTIFIER_SOURCE}$`).test(value)) return value;
-  if (value.startsWith("[") && value.endsWith("]")) {
-    const element = value.slice(1, -1).trim();
-    if (element === "") throw new Error(`Array type requires an element type at line ${line}.`);
-    return `[${parseType(element, line)}]`;
+  return parseTypeSyntax(source, line);
+}
+
+function parseTypeParameters(source, line) {
+  if (source === undefined) return [];
+  const names = splitTypeArguments(source).map((item) => item.trim());
+  if (names.length > SANDBOX_LIMITS.MAX_TYPE_PARAMETERS) {
+    throw new Error(
+      `Type parameter count exceeds the sandbox limit of ${SANDBOX_LIMITS.MAX_TYPE_PARAMETERS} at line ${line}.`,
+    );
   }
-  throw new Error(`Invalid type ${JSON.stringify(value)} at line ${line}.`);
+  const seen = new Set();
+  for (const name of names) {
+    if (!new RegExp(`^${IDENTIFIER_SOURCE}$`).test(name)) {
+      throw new Error(`Invalid type parameter at line ${line}.`);
+    }
+    if (SCALAR_TYPES.has(name) || seen.has(name)) {
+      throw new Error(`Type parameter "${name}" is duplicated or reserved at line ${line}.`);
+    }
+    seen.add(name);
+  }
+  return names;
 }
 
 function tokenizeExpression(source, line) {
@@ -129,6 +150,11 @@ function tokenizeExpression(source, line) {
     }
 
     const pair = source.slice(offset, offset + 2);
+    if (pair === "=>" || pair === "::") {
+      tokens.push({ kind: pair === "=>" ? "fatArrow" : "doubleColon", value: pair });
+      offset += 2;
+      continue;
+    }
     if (TWO_CHARACTER_OPERATORS.has(pair)) {
       tokens.push({ kind: "operator", value: pair });
       offset += 2;
@@ -387,7 +413,26 @@ class ExpressionParser {
       return this.parsePostfix({ kind: "arrayLiteral", line: this.line, elements });
     }
     if (token.kind === "identifier") {
+      if (token.value === "match") return this.parseMatchExpression();
       this.offset += 1;
+      if (this.current().kind === "doubleColon") {
+        this.offset += 1;
+        const alternative = this.current();
+        if (alternative.kind !== "identifier") {
+          throw new Error(`Expected a variant alternative after :: at line ${this.line}.`);
+        }
+        this.offset += 1;
+        if (this.current().kind !== "leftParenthesis") {
+          throw new Error(`Variant construction requires parentheses at line ${this.line}.`);
+        }
+        return this.parsePostfix({
+          kind: "variantLiteral",
+          line: this.line,
+          variantName: token.value,
+          alternative: alternative.value,
+          arguments: this.parseArguments(`${token.value}::${alternative.value}`),
+        });
+      }
       if (this.current().kind === "leftParenthesis") {
         return this.parsePostfix({
           kind: "callExpression",
@@ -416,6 +461,72 @@ class ExpressionParser {
       return this.parsePostfix(expression);
     }
     throw new Error(`Expected an expression at line ${this.line}.`);
+  }
+
+  parseMatchExpression() {
+    this.offset += 1;
+    if (this.current().kind !== "leftParenthesis") {
+      throw new Error(`match requires a parenthesized value at line ${this.line}.`);
+    }
+    this.offset += 1;
+    const value = this.parseUpdate();
+    if (this.current().kind !== "rightParenthesis") {
+      throw new Error(`Expected ) after match value at line ${this.line}.`);
+    }
+    this.offset += 1;
+    if (this.current().kind !== "leftBrace") {
+      throw new Error(`Expected { after match value at line ${this.line}.`);
+    }
+    this.offset += 1;
+    const arms = [];
+    while (this.current().kind !== "rightBrace") {
+      const alternative = this.current();
+      if (alternative.kind !== "identifier") {
+        throw new Error(`Expected a variant alternative in match at line ${this.line}.`);
+      }
+      this.offset += 1;
+      const bindings = [];
+      if (this.current().kind === "leftParenthesis") {
+        this.offset += 1;
+        while (this.current().kind !== "rightParenthesis") {
+          const binding = this.current();
+          if (binding.kind !== "identifier") {
+            throw new Error(`Expected a match binding at line ${this.line}.`);
+          }
+          bindings.push(binding.value);
+          this.offset += 1;
+          if (this.current().kind !== "comma") break;
+          this.offset += 1;
+        }
+        if (this.current().kind !== "rightParenthesis") {
+          throw new Error(`Expected ) after match bindings at line ${this.line}.`);
+        }
+        this.offset += 1;
+      }
+      if (this.current().kind !== "fatArrow") {
+        throw new Error(`Expected => in match arm at line ${this.line}.`);
+      }
+      this.offset += 1;
+      arms.push({
+        alternative: alternative.value,
+        bindings,
+        expression: this.parseUpdate(),
+        line: this.line,
+      });
+      if (arms.length > SANDBOX_LIMITS.MAX_MATCH_ARMS) {
+        throw new Error(
+          `Match arm count exceeds the sandbox limit of ${SANDBOX_LIMITS.MAX_MATCH_ARMS} at line ${this.line}.`,
+        );
+      }
+      if (this.current().kind !== "comma") break;
+      this.offset += 1;
+      if (this.current().kind === "rightBrace") break;
+    }
+    if (this.current().kind !== "rightBrace") {
+      throw new Error(`Expected } after match arms at line ${this.line}.`);
+    }
+    this.offset += 1;
+    return this.parsePostfix({ kind: "matchExpression", line: this.line, value, arms });
   }
 }
 
@@ -473,7 +584,13 @@ function parseSimpleStatement(source, line) {
 
 function parseParameters(source, line) {
   if (source.trim() === "") return [];
-  return source.split(",").map((parameter) => {
+  const parameters = splitTypeArguments(source);
+  if (parameters.length > SANDBOX_LIMITS.MAX_PARAMETERS) {
+    throw new Error(
+      `Parameter count exceeds the sandbox limit of ${SANDBOX_LIMITS.MAX_PARAMETERS} at line ${line}.`,
+    );
+  }
+  return parameters.map((parameter) => {
     const match = parameter.trim().match(
       new RegExp(String.raw`^(${IDENTIFIER_SOURCE})\s*:\s*(.+)$`),
     );
@@ -580,14 +697,25 @@ class ProgramParser {
         statements.push(this.parseRecord(current, recordMatch, exportMatch !== null));
         continue;
       }
+      const variantMatch = declarationSource.match(VARIANT_HEADER);
+      if (variantMatch) {
+        if (openingLine !== null) {
+          throw new Error(`Variants must be declared at program scope at line ${current.line}.`);
+        }
+        statements.push(this.parseVariant(current, variantMatch, exportMatch !== null));
+        continue;
+      }
       if (/^export(?:\s|$)/.test(current.text)) {
-        throw new Error(`Only a top-level function or record declaration may be exported at line ${current.line}.`);
+        throw new Error(`Only a top-level function, record, or variant declaration may be exported at line ${current.line}.`);
       }
       if (/^function(?:\s|$)/.test(current.text)) {
         throw new Error(`Invalid function declaration at line ${current.line}.`);
       }
       if (/^record(?:\s|$)/.test(current.text)) {
         throw new Error(`Invalid record declaration at line ${current.line}.`);
+      }
+      if (/^variant(?:\s|$)/.test(current.text)) {
+        throw new Error(`Invalid variant declaration at line ${current.line}.`);
       }
 
       const conditionalMatch = current.text.match(/^if\s+(.+?)\s*\{\s*$/);
@@ -624,8 +752,9 @@ class ProgramParser {
       line: opening.line,
       name: match[1],
       exported,
-      parameters: parseParameters(match[2], opening.line),
-      returnType: parseType(match[3], opening.line),
+      typeParameters: parseTypeParameters(match[2], opening.line),
+      parameters: parseParameters(match[3], opening.line),
+      returnType: parseType(match[4], opening.line),
       body: { kind: "block", line: opening.line, statements: body.statements },
     };
   }
@@ -648,6 +777,11 @@ class ProgramParser {
       );
       if (!field) throw new Error(`Invalid record field at line ${current.line}.`);
       fields.push({ name: field[1], type: parseType(field[2], current.line), line: current.line });
+      if (fields.length > SANDBOX_LIMITS.MAX_NOMINAL_FIELDS) {
+        throw new Error(
+          `Record field count exceeds the sandbox limit of ${SANDBOX_LIMITS.MAX_NOMINAL_FIELDS} at line ${opening.line}.`,
+        );
+      }
       this.offset += 1;
     }
     return {
@@ -655,7 +789,57 @@ class ProgramParser {
       line: opening.line,
       name: match[1],
       exported,
+      typeParameters: parseTypeParameters(match[2], opening.line),
       fields,
+    };
+  }
+
+  parseVariant(opening, match, exported) {
+    this.offset += 1;
+    const alternatives = [];
+    while (true) {
+      this.skipTrivia();
+      const current = this.lines[this.offset];
+      if (!current) {
+        throw new Error(`Expected closing brace for variant opened at line ${opening.line}.`);
+      }
+      if (current.text === "}") {
+        this.offset += 1;
+        break;
+      }
+      const alternative = current.text.match(
+        new RegExp(String.raw`^(${IDENTIFIER_SOURCE})(?:\s*\((.*)\))?\s*,?\s*$`),
+      );
+      if (!alternative) throw new Error(`Invalid variant alternative at line ${current.line}.`);
+      alternatives.push({
+        name: alternative[1],
+        fields: alternative[2] === undefined
+          ? []
+          : parseParameters(alternative[2], current.line),
+        line: current.line,
+      });
+      if (alternatives.at(-1).fields.length > SANDBOX_LIMITS.MAX_NOMINAL_FIELDS) {
+        throw new Error(
+          `Variant field count exceeds the sandbox limit of ${SANDBOX_LIMITS.MAX_NOMINAL_FIELDS} at line ${current.line}.`,
+        );
+      }
+      if (alternatives.length > SANDBOX_LIMITS.MAX_VARIANT_ALTERNATIVES) {
+        throw new Error(
+          `Variant alternative count exceeds the sandbox limit of ${SANDBOX_LIMITS.MAX_VARIANT_ALTERNATIVES} at line ${opening.line}.`,
+        );
+      }
+      this.offset += 1;
+    }
+    if (alternatives.length === 0) {
+      throw new Error(`Variant "${match[1]}" requires at least one alternative at line ${opening.line}.`);
+    }
+    return {
+      kind: "variantDeclaration",
+      line: opening.line,
+      name: match[1],
+      exported,
+      typeParameters: parseTypeParameters(match[2], opening.line),
+      alternatives,
     };
   }
 

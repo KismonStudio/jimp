@@ -27,6 +27,20 @@
       "expected": { "status": 1, "error": { "code": "JIMP-1001", "phase": "compile" } }
     },
     {
+      "id": "language-p8-types",
+      "contract": "language",
+      "command": "run",
+      "fixture": "language/p8-types.jimp",
+      "expected": { "status": 0, "stdout": "p8 ready\n" }
+    },
+    {
+      "id": "language-p8-non-exhaustive",
+      "contract": "language",
+      "command": "compile",
+      "fixture": "language/p8-non-exhaustive.jimp",
+      "expected": { "status": 1, "error": { "code": "JIMP-1001", "phase": "compile", "messageIncludes": "not exhaustive" } }
+    },
+    {
       "id": "bytecode-invalid-magic",
       "contract": "bytecode",
       "command": "check",

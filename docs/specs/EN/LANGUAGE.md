@@ -4,7 +4,7 @@
 
 ## Status
 
-This document defines the core source-language syntax and semantics implemented through P7.6, including Unicode-scalar STRING operations, typed arrays, nominal records, recoverable result records, named imports and exports, secure static project graphs, and catalog-backed `std:` modules. The language and portable format remain pre-stable.
+This document defines the core source-language syntax and semantics implemented through P8.4, including Unicode-scalar STRING operations, typed arrays, nominal and generic records, tagged variants, exhaustive matching, generic functions, bounded recursive immutable values, named imports and exports, secure static project graphs, and catalog-backed `std:` modules. The language and portable format remain pre-stable.
 
 The keywords, grammar, type rules, and examples are normative. Explanatory prose is informative unless it uses **must**, **must not**, **required**, or **invalid**.
 
@@ -24,14 +24,14 @@ Comments begin with `//` after optional leading whitespace and occupy the rest o
 Reserved words are case-sensitive:
 
 ```text
-as break continue else export false from function if import let null print record return true var while with
+as break continue else export false from function if import let match null print record return true var variant while with
 ```
 
 Identifiers begin with an ASCII letter or underscore and continue with ASCII letters, digits, or underscores. They are case-sensitive.
 
 ## Types and literals
 
-The scalar value types are `NULL`, `BOOL`, `I64`, `F64`, and `STRING`. An array type is written `[T]`; its element type cannot be `NULL` or `VOID`. A record type is the name of a visible nominal `record` declaration. Aggregate types may be nested. `VOID` is permitted only as a function return type and never denotes a runtime value.
+The scalar value types are `NULL`, `BOOL`, `I64`, `F64`, and `STRING`. An array type is written `[T]`; its element type cannot be `NULL` or `VOID`. Record and variant types use the name of a visible nominal declaration and must provide all declared generic arguments, such as `Box<I64>` or `Option<STRING>`. Aggregate and generic types may be nested. `VOID` is permitted only as a function return type and never denotes a runtime value.
 
 - Strings use double quotes and support `\\`, `\"`, `\n`, `\r`, and `\t`.
 - Integers use base-ten digits with an optional leading minus sign and must fit signed `i64`.
@@ -101,9 +101,21 @@ let origin = Point { y: 0, x: 0 }
 let moved = origin with { x: 4 }
 ```
 
+Generic records, tagged variants, exhaustive matching, and bounded recursive values are defined normatively in [VARIANTS_AND_GENERICS.md](VARIANTS_AND_GENERICS.md). For example:
+
+```jimp
+variant Option<T> {
+  None,
+  Some(value: T),
+}
+
+let option: Option<I64> = Option::Some(42);
+let value = match(option) { Some(item) => item, None => 0 };
+```
+
 ## Functions
 
-Functions are named, declared at program scope, and require explicit parameter and return types:
+Functions are named, declared at program scope, and require explicit parameter and return types. A function may declare inferred invariant type parameters after its name:
 
 ```jimp
 function add(left: I64, right: I64): I64 {
@@ -111,6 +123,10 @@ function add(left: I64, right: I64): I64 {
 }
 
 let answer = add(20, 22);
+
+function identity<T>(value: T): T {
+  return value;
+}
 ```
 
 - Parameter types may be `BOOL`, `I64`, `F64`, `STRING`, or any visible aggregate type.
@@ -163,19 +179,32 @@ The grammar uses ISO/IEC 14977-style EBNF. Lexical whitespace may surround opera
 
 ```ebnf
 program          = { trivia-line | top-level-item } ;
-top-level-item   = statement | function-declaration | record-declaration ;
+top-level-item   = statement | function-declaration | record-declaration
+                   | variant-declaration ;
 
 record-declaration = record-header, line-ending,
                      { trivia-line | record-field-line }, close-brace-line ;
 record-header    = whitespace, "record", required-whitespace,
-                   identifier, whitespace, "{" ;
+                   identifier, [ generic-parameters ], whitespace, "{" ;
 record-field-line = whitespace, identifier, whitespace, ":", whitespace,
                     value-type, [ whitespace, "," ], whitespace, line-boundary ;
+
+variant-declaration = variant-header, line-ending,
+                      { trivia-line | variant-alternative-line }, close-brace-line ;
+variant-header   = whitespace, "variant", required-whitespace,
+                   identifier, [ generic-parameters ], whitespace, "{" ;
+variant-alternative-line = whitespace, identifier,
+                           [ whitespace, "(", whitespace, [ parameter-list ],
+                             whitespace, ")" ], [ whitespace, "," ],
+                           whitespace, line-boundary ;
+generic-parameters = whitespace, "<", whitespace, identifier,
+                     { whitespace, ",", whitespace, identifier },
+                     whitespace, ">" ;
 
 function-declaration = function-header, line-ending, block-body,
                        close-brace-line ;
 function-header  = whitespace, "function", required-whitespace,
-                   identifier, whitespace, "(", whitespace,
+                   identifier, [ generic-parameters ], whitespace, "(", whitespace,
                    [ parameter-list ], whitespace, ")", whitespace,
                    ":", whitespace, return-type, whitespace, "{" ;
 parameter-list   = parameter, { whitespace, ",", whitespace, parameter } ;
@@ -183,7 +212,10 @@ parameter        = identifier, whitespace, ":", whitespace, parameter-type ;
 parameter-type   = "BOOL" | "I64" | "F64" | "STRING" | aggregate-type ;
 return-type      = "NULL" | parameter-type | "VOID" ;
 value-type       = "NULL" | "BOOL" | "I64" | "F64" | "STRING" | aggregate-type ;
-aggregate-type   = identifier | "[", whitespace, parameter-type, whitespace, "]" ;
+type-argument    = "NULL" | parameter-type ;
+aggregate-type   = identifier, [ whitespace, "<", whitespace, type-argument,
+                   { whitespace, ",", whitespace, type-argument }, whitespace, ">" ]
+                   | "[", whitespace, parameter-type, whitespace, "]" ;
 
 statement        = statement-line | if-statement | while-statement ;
 statement-line   = whitespace, simple-statement, whitespace, line-boundary ;
@@ -251,10 +283,20 @@ postfix-expression = primary-expression,
                          whitespace, "]"
                        | ".", identifier ) } ;
 primary-expression = value-literal | array-literal | record-literal
+                     | variant-literal | match-expression
                      | function-call | identifier
                      | "(", whitespace, expression, whitespace, ")" ;
 function-call    = identifier, whitespace, "(", whitespace,
                    [ argument-list ], whitespace, ")" ;
+variant-literal  = identifier, whitespace, "::", whitespace, identifier,
+                   whitespace, "(", whitespace, [ argument-list ], whitespace, ")" ;
+match-expression = "match", whitespace, "(", whitespace, expression, whitespace,
+                   ")", whitespace, "{", whitespace, match-arm,
+                   { whitespace, ",", whitespace, match-arm },
+                   [ whitespace, "," ], whitespace, "}" ;
+match-arm        = identifier, [ whitespace, "(", whitespace,
+                   [ identifier, { whitespace, ",", whitespace, identifier } ],
+                   whitespace, ")" ], whitespace, "=>", whitespace, expression ;
 argument-list    = expression, { whitespace, ",", whitespace, expression } ;
 array-literal    = "[", whitespace,
                    [ expression, { whitespace, ",", whitespace, expression },
