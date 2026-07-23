@@ -143,7 +143,10 @@ vite.config.ts.timestamp-*
 .vite/
 
 # AUREON and Rust build artifacts
-*.jbc
+*.abc
 runtime/target/
 runtime/bin/
 release-artifacts/
+
+# Visual Studio local workspace files
+.vs/
