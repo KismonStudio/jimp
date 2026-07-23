@@ -18,7 +18,7 @@ function sectionOffset(bytecode, expectedKind) {
 test("decodes portable headers, imports, and instructions", () => {
   const module = decodeBytecode(compile('print "Hello!";'));
 
-  assert.equal(module.header.magic, "JIMP");
+  assert.equal(module.header.magic, "AURN");
   assert.equal(module.header.format, "2.9");
   assert.equal(module.header.sectionCount, 5);
   assert.equal(module.imports[0].symbol, "std.console.write");
@@ -88,14 +88,14 @@ test("displays reproducible build metadata", () => {
     build: {
       targetProfile: "portable",
       standardLibraryMajor: 1,
-      entryModuleId: "main.jimp",
+      entryModuleId: "main.aur",
       guaranteedCapabilities: [],
     },
   });
   const output = formatInspection(decodeBytecode(bytecode));
   assert.match(output, /Build target: portable/);
   assert.match(output, /Standard library: v1/);
-  assert.match(output, /Entry module: main\.jimp/);
+  assert.match(output, /Entry module: main\.aur/);
   assert.match(output, /Guaranteed capabilities: none/);
 });
 

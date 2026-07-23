@@ -10,13 +10,13 @@ pub(crate) enum ErrorLocation {
 }
 
 #[derive(Debug)]
-pub(crate) struct JimpError {
+pub(crate) struct AureonError {
     definition: ErrorDefinition,
     message: String,
     location: Option<ErrorLocation>,
 }
 
-impl JimpError {
+impl AureonError {
     pub(crate) fn new(definition: ErrorDefinition, message: impl Into<String>) -> Self {
         let message = message.into();
         let location = infer_location(&message, definition.phase);
@@ -58,7 +58,7 @@ impl JimpError {
             None => String::new(),
         };
         format!(
-            "JIMP error {} ({}){}: {}",
+            "AUREON error {} ({}){}: {}",
             self.definition.code,
             self.definition.phase,
             location,
@@ -153,8 +153,8 @@ mod tests {
 
     #[test]
     fn extracts_source_and_bytecode_locations() {
-        let source = JimpError::new(COMPILE, "Failure at line 7.");
-        let bytecode = JimpError::new(DECODE, "Failure at code offset 12.");
+        let source = AureonError::new(COMPILE, "Failure at line 7.");
+        let bytecode = AureonError::new(DECODE, "Failure at code offset 12.");
 
         assert_eq!(
             source.location,
@@ -168,20 +168,20 @@ mod tests {
 
     #[test]
     fn renders_valid_json_without_a_location() {
-        let error = JimpError::new(EXECUTE, "Invalid \"value\".\nStopped.");
+        let error = AureonError::new(EXECUTE, "Invalid \"value\".\nStopped.");
 
         assert_eq!(
             error.json(),
-            r#"{"schema":"jimp-error-v1","code":"JIMP-4001","phase":"execute","message":"Invalid \"value\".\nStopped."}"#
+            r#"{"schema":"aureon-error-v1","code":"AUREON-4001","phase":"execute","message":"Invalid \"value\".\nStopped."}"#
         );
     }
 
     #[test]
     fn renders_human_diagnostics_on_one_line() {
-        let error = JimpError::new(EXECUTE, "First\nSecond");
+        let error = AureonError::new(EXECUTE, "First\nSecond");
         assert_eq!(
             error.human(),
-            "JIMP error JIMP-4001 (execute): First\\nSecond"
+            "AUREON error AUREON-4001 (execute): First\\nSecond"
         );
     }
 }

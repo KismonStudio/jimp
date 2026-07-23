@@ -1,4 +1,4 @@
-# JIMP Recoverable Results v1
+# AUREON Recoverable Results v1
 
 [Portuguese version](../PT/RESULTS.md)
 
@@ -22,7 +22,7 @@ Constructors must initialize every field. A function returning a result must not
 
 STRING indexing and ranges count Unicode scalar values, not UTF-8 bytes or grapheme clusters:
 
-```jimp
+```aureon
 let value = "Olá"
 let scalar = value[2]
 let prefix = value[0:2]

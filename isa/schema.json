@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://jimp.dev/schemas/isa-v1.json",
-  "title": "JIMP portable VM ISA definition",
+  "$id": "https://aureon.dev/schemas/isa-v1.json",
+  "title": "AUREON portable VM ISA definition",
   "type": "object",
   "additionalProperties": false,
   "required": [

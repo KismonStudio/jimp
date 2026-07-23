@@ -6,11 +6,11 @@
 
 Este documento é o roadmap de implementação aprovado para o P10. Ele define trabalhos futuros de pacotes, dependências, cache, publicação e extensões do host; nenhuma dessas facilidades está implementada ou é confiável atualmente.
 
-O P10 torna projetos JIMP reutilizáveis e reproduzíveis sem introduzir carregamento de módulos em runtime, downloads ocultos, scripts de instalação ou hardcoding do compilador para APIs de terceiros. Dependências-fonte continuam resolvidas estaticamente e vinculadas em bytecode autocontido. Extensões do host permanecem explicitamente instaladas, versionadas, registradas e autorizadas fora do módulo.
+O P10 torna projetos AUREON reutilizáveis e reproduzíveis sem introduzir carregamento de módulos em runtime, downloads ocultos, scripts de instalação ou hardcoding do compilador para APIs de terceiros. Dependências-fonte continuam resolvidas estaticamente e vinculadas em bytecode autocontido. Extensões do host permanecem explicitamente instaladas, versionadas, registradas e autorizadas fora do módulo.
 
 ## P10.1 — Manifesto do projeto e identidade do pacote
 
-Especificar um manifesto canônico de projeto com nome e versão do pacote, módulo de entrada, faixa suportada de JIMP/toolchain, major da biblioteca padrão, requisitos de destino, dependências e metadados opcionais. O formato do arquivo, regras de normalização, política de campos desconhecidos, codificação de caminhos e serialização determinística devem ser documentados antes da escolha de nome de arquivo ou parser.
+Especificar um manifesto canônico de projeto com nome e versão do pacote, módulo de entrada, faixa suportada de AUREON/toolchain, major da biblioteca padrão, requisitos de destino, dependências e metadados opcionais. O formato do arquivo, regras de normalização, política de campos desconhecidos, codificação de caminhos e serialização determinística devem ser documentados antes da escolha de nome de arquivo ou parser.
 
 Nomes e versões de pacotes usam uma única sintaxe canônica. IDs de módulos locais, IDs de pacotes e símbolos de capacidades do host permanecem namespaces distintos. Um manifesto não pode conceder capacidade nem sobrescrever a política do runtime.
 
@@ -42,7 +42,7 @@ O projeto de registry deve especificar ownership de namespaces, imutabilidade de
 
 Publicar um SDK restrito para embedders registrarem capacidades tipadas pela interface orientada por dados do P9. O SDK deve versionar a ABI de registro, tipos de valores suportados, ciclo de vida assíncrono, cancelamento, mapeamento de erros, declarações de política de recursos, requisitos de thread safety e handshake de compatibilidade.
 
-Instalar um pacote-fonte nunca instala nem ativa uma extensão nativa do host. Extensões nativas são componentes controlados pelo operador fora do `.jbc`, exigem implantação explícita e autorização por política e devem suportar isolamento fora do processo quando viável. Ponteiros arbitrários, chamadas FFI irrestritas e bibliotecas dinâmicas selecionadas pelo módulo continuam proibidos.
+Instalar um pacote-fonte nunca instala nem ativa uma extensão nativa do host. Extensões nativas são componentes controlados pelo operador fora do `.abc`, exigem implantação explícita e autorização por política e devem suportar isolamento fora do processo quando viável. Ponteiros arbitrários, chamadas FFI irrestritas e bibliotecas dinâmicas selecionadas pelo módulo continuam proibidos.
 
 ## P10.7 — Fluxos da CLI e política de publicação
 

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const suiteRoot = join(packageRoot, "conformance", "v1");
 const manifest = JSON.parse(await readFile(join(suiteRoot, "manifest.json"), "utf8"));
-const temporaryDirectory = await mkdtemp(join(tmpdir(), "jimp-conformance-"));
+const temporaryDirectory = await mkdtemp(join(tmpdir(), "aureon-conformance-"));
 
 function option(name) {
   const prefix = `--${name}=`;
@@ -17,7 +17,7 @@ function option(name) {
   return match?.slice(prefix.length);
 }
 
-const cliPath = resolve(option("jimp") ?? join(packageRoot, "bin", "jimp.js"));
+const cliPath = resolve(option("aureon") ?? join(packageRoot, "bin", "aureon.js"));
 const explicitRuntime = option("runtime");
 
 function invoke(argumentsList, runtimeOverride = explicitRuntime) {
@@ -42,13 +42,13 @@ async function compileFixture(testCase, outputPath, argumentsList = []) {
 
 async function prepare(testCase) {
   if (testCase.base64) {
-    const bytecodePath = join(temporaryDirectory, `${testCase.id}.jbc`);
+    const bytecodePath = join(temporaryDirectory, `${testCase.id}.abc`);
     await writeFile(bytecodePath, Buffer.from(testCase.base64, "base64"));
     return { inputPath: bytecodePath };
   }
   const fixturePath = join(suiteRoot, testCase.fixture);
   if (!testCase.prepare) return { inputPath: fixturePath };
-  const bytecodePath = join(temporaryDirectory, `${testCase.id}.jbc`);
+  const bytecodePath = join(temporaryDirectory, `${testCase.id}.abc`);
   if (testCase.prepare === "native-profile-bytecode") {
     await compileFixture(testCase, bytecodePath, ["--target-profile=reference-native-i64"]);
     return { inputPath: bytecodePath };
@@ -109,7 +109,7 @@ function assertResult(testCase, result) {
 
 let failed = 0;
 try {
-  if (manifest.schema !== "jimp-conformance-v1" || manifest.suiteVersion !== 1) {
+  if (manifest.schema !== "aureon-conformance-v1" || manifest.suiteVersion !== 1) {
     throw new Error("Unsupported conformance manifest.");
   }
   for (const testCase of manifest.cases) {

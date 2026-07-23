@@ -1,4 +1,4 @@
-import { double } from "./math.jimp";
+import { double } from "./math.aur";
 import { writeLine } from "std:console";
 
 if double(21) == 42 {

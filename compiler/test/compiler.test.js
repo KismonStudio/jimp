@@ -4,9 +4,9 @@ import { compile } from "../src/compiler.js";
 import { decodePortableModule } from "../src/portable/module.js";
 
 test("compiles print statements into portable bytecode", () => {
-  const bytecode = compile('// greeting\nprint "Hello, JIMP!";\n');
+  const bytecode = compile('// greeting\nprint "Hello, AUREON!";\n');
   const module = decodePortableModule(bytecode);
-  assert.equal(bytecode.subarray(0, 4).toString(), "JIMP");
+  assert.equal(bytecode.subarray(0, 4).toString(), "AURN");
   assert.equal(bytecode.readUInt16LE(4), 2);
   assert.equal(bytecode.readUInt16LE(6), 9);
   assert.equal(module.imports[0].symbol, "std.console.write");

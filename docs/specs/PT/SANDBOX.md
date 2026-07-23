@@ -1,4 +1,4 @@
-# Sandbox de Referência JIMP v1
+# Sandbox de Referência AUREON v1
 
 [Versão em inglês](../EN/SANDBOX.md)
 
@@ -8,7 +8,7 @@ Estes limites definem o perfil obrigatório de recursos implementado pelas ferra
 
 | Fase | Limite | Valor | Unidade | Significado |
 | --- | --- | ---: | --- | --- |
-| Carregamento | `MAX_MODULE_BYTES` | 16,777,216 | bytes | Tamanho máximo do arquivo .jbc codificado. |
+| Carregamento | `MAX_MODULE_BYTES` | 16,777,216 | bytes | Tamanho máximo do arquivo .abc codificado. |
 | Carregamento | `MAX_SECTION_COUNT` | 16 | sections | Quantidade máxima de entradas no diretório do módulo. |
 | Carregamento | `MAX_CONSTANTS` | 65,536 | constants | Quantidade máxima de entradas no pool de constantes. |
 | Carregamento | `MAX_CONSTANT_STRING_BYTES` | 1,048,576 | bytes | Tamanho máximo em bytes UTF-8 de uma constante string. |

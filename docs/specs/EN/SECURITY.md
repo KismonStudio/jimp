@@ -1,16 +1,16 @@
-# JIMP Sandbox and Security Model v1
+# AUREON Sandbox and Security Model v1
 
 [Portuguese version](../PT/SECURITY.md)
 
 ## Status
 
-This document specifies the security contract for the official Rust runtime, portable `.jbc` format `2.9`, and `jimp-reference-sandbox` profile v1. It consolidates the guarantees defined by [VM.md](VM.md), [HEAP.md](HEAP.md), the generated limits in [SANDBOX.md](SANDBOX.md), the capability model used by [STDLIB.md](STDLIB.md), and the failure classes in [ERRORS.md](ERRORS.md).
+This document specifies the security contract for the official Rust runtime, portable `.abc` format `2.9`, and `aureon-reference-sandbox` profile v1. It consolidates the guarantees defined by [VM.md](VM.md), [HEAP.md](HEAP.md), the generated limits in [SANDBOX.md](SANDBOX.md), the capability model used by [STDLIB.md](STDLIB.md), and the failure classes in [ERRORS.md](ERRORS.md).
 
 The terms **must**, **must not**, **required**, and **invalid** are normative. This is a VM-level sandbox contract, not a claim of operating-system or process isolation.
 
 ## Scope and trust boundaries
 
-The official runtime treats the complete `.jbc` byte sequence as untrusted, including its header, section directory, constants, strings, imports, function metadata, instructions, control flow, and debug mappings. A module is not trusted because it was produced by the official compiler. Compiler-side checks improve diagnostics and reproducibility, but the Rust runtime independently decodes and verifies every module.
+The official runtime treats the complete `.abc` byte sequence as untrusted, including its header, section directory, constants, strings, imports, function metadata, instructions, control flow, and debug mappings. A module is not trusted because it was produced by the official compiler. Compiler-side checks improve diagnostics and reproducibility, but the Rust runtime independently decodes and verifies every module.
 
 The trusted computing base consists of:
 
@@ -19,7 +19,7 @@ The trusted computing base consists of:
 - the capability policy selected by the embedder;
 - the operating system and any outer process-isolation controls.
 
-JIMP bytecode, source projects, build metadata, and debug metadata are outside that trusted base. A compromised runtime, host implementation, policy configuration, operating system, or distribution channel is outside the protection provided by this contract.
+AUREON bytecode, source projects, build metadata, and debug metadata are outside that trusted base. A compromised runtime, host implementation, policy configuration, operating system, or distribution channel is outside the protection provided by this contract.
 
 ## Threat model
 
@@ -95,13 +95,13 @@ Every VM instruction incurs one base execution step. `HEAP_EQUAL` additionally c
 
 ## Failure and effect semantics
 
-Decode and verification failures reject the complete module. Resolution failures reject it before execution. Execution-limit, arithmetic, or host-invocation failures terminate the program through the standard `jimp-error-v1` contract.
+Decode and verification failures reject the complete module. Resolution failures reject it before execution. Execution-limit, arithmetic, or host-invocation failures terminate the program through the standard `aureon-error-v1` contract.
 
 Execution is not transactional. Effects completed by earlier authorized host calls are not rolled back when a later instruction, limit, or host call fails. A host must not rely on the VM to provide atomicity, compensation, or exactly-once delivery.
 
 ## Explicit non-guarantees
 
-The JIMP sandbox does not by itself provide:
+The AUREON sandbox does not by itself provide:
 
 - an operating-system process, container, user, tenant, or kernel security boundary;
 - a hard limit on process RSS, allocator overhead, CPU time, wall-clock time, threads, file descriptors, or host-side allocations;

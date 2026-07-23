@@ -1,10 +1,10 @@
-# VM Portátil JIMP v1
+# VM Portátil AUREON v1
 
 [Versão em inglês](../EN/VM.md)
 
 ## Status
 
-Este documento especifica a VM portátil JIMP v1 implementada até o P7.6. O formato `2.9` preserva a heap imutável, validada independentemente e limitada por recursos, e adiciona operações genéricas de comprimento, leitura indexada, recorte semiaberto e concatenação de STRING por valores escalares Unicode.
+Este documento especifica a VM portátil AUREON v1 implementada até o P7.6. O formato `2.9` preserva a heap imutável, validada independentemente e limitada por recursos, e adiciona operações genéricas de comprimento, leitura indexada, recorte semiaberto e concatenação de STRING por valores escalares Unicode.
 
 O formato histórico em [BYTECODE.md](BYTECODE.md) continha um opcode temporário `PRINT` e não é mais gerado nem aceito. O formato `2.9` permanece pré-estável enquanto a linguagem e a VM continuam evoluindo.
 
@@ -15,7 +15,7 @@ Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normati
 - O compilador compreende os conceitos da linguagem de alto nível.
 - A VM compreende apenas primitivas genéricas de execução.
 - Comportamentos externos são fornecidos por imports nomeados e tipados do host.
-- Um módulo `.jbc` não contém ponteiros nativos nem símbolos específicos de plataforma.
+- Um módulo `.abc` não contém ponteiros nativos nem símbolos específicos de plataforma.
 - O módulo completo é verificado antes da execução ou de efeitos no host.
 - O mesmo módulo válido possui o mesmo significado estrutural em todo runtime compatível.
 
@@ -34,7 +34,7 @@ A VM portátil v1 define os seguintes tipos de valores escalares:
 
 `void` não é um valor de runtime e não deve ser armazenado em um registrador nem em uma entrada do pool de constantes. Não existem conversões implícitas entre tipos de valores.
 
-A representação em memória do runtime é definida pela implementação. Os valores observáveis e suas codificações no bytecode são portáteis. Todos os números com múltiplos bytes no `.jbc` usam little-endian.
+A representação em memória do runtime é definida pela implementação. Os valores observáveis e suas codificações no bytecode são portáteis. Todos os números com múltiplos bytes no `.abc` usam little-endian.
 
 Strings são imutáveis. Uma string carregada do pool de constantes pode ser compartilhada por uma implementação, mas seu conteúdo observável não deve mudar. Valores de coleção, objeto, buffer binário e referência de função estão fora da fundação inicial da v1.
 
@@ -54,13 +54,13 @@ A alocação de registradores é responsabilidade do compilador. Um runtime pode
 
 ## Contêiner do módulo
 
-Um arquivo `.jbc` portátil consiste em um cabeçalho, um diretório de seções e os conteúdos das seções. O diretório permite validar e ignorar seções opcionais sem interpretar o código.
+Um arquivo `.abc` portátil consiste em um cabeçalho, um diretório de seções e os conteúdos das seções. O diretório permite validar e ignorar seções opcionais sem interpretar o código.
 
 ### Cabeçalho
 
 | Campo | Codificação | Valor obrigatório |
 | --- | --- | --- |
-| magic | 4 bytes | ASCII `JIMP` |
+| magic | 4 bytes | ASCII `AURN` |
 | versão principal do formato | `u16` | `2` |
 | versão secundária do formato | `u16` | `9` |
 | flags do módulo | `u32` | `0`; demais bits são reservados |
@@ -264,7 +264,7 @@ Os argumentos ocupam o intervalo consecutivo iniciado em `argument_start`. A qua
 
 A instrução no código-fonte:
 
-```jimp
+```aureon
 print "Olá";
 ```
 
@@ -289,7 +289,7 @@ entry function:
   HALT
 ```
 
-Um host de sistema operacional pode implementar o import com um terminal, enquanto um host bare metal pode implementá-lo com memória VGA ou framebuffer. O módulo `.jbc` permanece inalterado.
+Um host de sistema operacional pode implementar o import com um terminal, enquanto um host bare metal pode implementá-lo com memória VGA ou framebuffer. O módulo `.abc` permanece inalterado.
 
 ## Ordem de verificação e execução
 
@@ -309,15 +309,15 @@ A decodificação de instruções estabelece primeiro a estrutura de opcodes, op
 
 ## Limites de recursos e segurança
 
-Os limites oficiais são gerados a partir de [`sandbox/v1.json`](../../../sandbox/v1.json) e publicados no [Sandbox de Referência JIMP v1](SANDBOX.md). O encoder e o verificador JavaScript e o decoder e o verificador Rust aplicam os mesmos limites de carregamento e verificação. A CLI verifica o tamanho do arquivo codificado antes de lê-lo.
+Os limites oficiais são gerados a partir de [`sandbox/v1.json`](../../../sandbox/v1.json) e publicados no [Sandbox de Referência AUREON v1](SANDBOX.md). O encoder e o verificador JavaScript e o decoder e o verificador Rust aplicam os mesmos limites de carregamento e verificação. A CLI verifica o tamanho do arquivo codificado antes de lê-lo.
 
 A execução acompanha passos, frames de chamada, registradores ativos e memória lógica de valores do runtime. A memória lógica de valores equivale a `16` bytes por registrador ativo mais os bytes UTF-8 do conteúdo de cada string armazenada nesses registradores. O armazenamento do pool de constantes é limitado separadamente. Um frame é cobrado antes da alocação de seu array de registradores ou da cópia das strings dos argumentos. Substituir ou retornar um valor atualiza a cobrança, e argumentos do host são emprestados sem uma cópia feita pela VM.
 
 Ultrapassar um limite de carregamento ou verificação rejeita o módulo completo antes da execução e de efeitos no host. Ultrapassar um limite de execução encerra o programa com erro; efeitos concluídos por chamadas autorizadas anteriores ao host não são revertidos. Limites lógicos são portáteis e determinísticos, mas não descrevem o overhead do alocador da implementação nem o RSS total do processo.
 
-As falhas são expostas por meio do [Formato Padrão de Erros JIMP v1](ERRORS.md). Falhas de decodificação, verificação, resolução de imports do host e execução possuem códigos estáveis distintos. O texto do diagnóstico é um detalhe de implementação e pode melhorar sem alterar o código do erro.
+As falhas são expostas por meio do [Formato Padrão de Erros AUREON v1](ERRORS.md). Falhas de decodificação, verificação, resolução de imports do host e execução possuem códigos estáveis distintos. O texto do diagnóstico é um detalhe de implementação e pode melhorar sem alterar o código do erro.
 
-O módulo nunca deve conter endereços nativos considerados confiáveis. Metadados de debug e compilação não são autoritativos e não devem conceder capacidades nem alterar a autorização. Hosts expõem capacidades explicitamente e permanecem responsáveis pela autorização da plataforma e pela política de sandbox. O modelo completo de ameaça, a fronteira de confiança, as obrigações do host e as não garantias explícitas são especificados no [Modelo de Sandbox e Segurança JIMP v1](SECURITY.md).
+O módulo nunca deve conter endereços nativos considerados confiáveis. Metadados de debug e compilação não são autoritativos e não devem conceder capacidades nem alterar a autorização. Hosts expõem capacidades explicitamente e permanecem responsáveis pela autorização da plataforma e pela política de sandbox. O modelo completo de ameaça, a fronteira de confiança, as obrigações do host e as não garantias explícitas são especificados no [Modelo de Sandbox e Segurança AUREON v1](SECURITY.md).
 
 ## Decisões adiadas
 

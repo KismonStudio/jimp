@@ -121,7 +121,7 @@ export function validateModuleSpecifier(specifier, moduleId, line) {
     || specifier.includes("%")
     || specifier.includes("//")
     || specifier.endsWith("/")
-    || extname(specifier) !== ".jimp"
+    || extname(specifier) !== ".aur"
   ) {
     fail(`Source module specifier "${specifier}" is invalid`, moduleId, line);
   }
@@ -212,8 +212,8 @@ export async function resolveProject(entryPath, {
     if (moduleId === "" || moduleId.startsWith("../") || moduleId === "..") {
       fail(`Resolved source path escapes project root "${portablePath(lexicalRoot)}"`, importingModule?.id, importLine);
     }
-    if (extname(moduleId) !== ".jimp") {
-      fail(`Resolved source path "${moduleId}" must use the exact .jimp extension`, importingModule?.id, importLine);
+    if (extname(moduleId) !== ".aur") {
+      fail(`Resolved source path "${moduleId}" must use the exact .aur extension`, importingModule?.id, importLine);
     }
     const foldedId = moduleId.toLowerCase();
     const existingCase = caseAliases.get(foldedId);

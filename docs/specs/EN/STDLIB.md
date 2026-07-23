@@ -1,4 +1,4 @@
-# JIMP Standard Library v1
+# AUREON Standard Library v1
 
 [Portuguese version](../PT/STDLIB.md)
 
@@ -11,16 +11,16 @@ This document specifies the standard-library catalog and portable-source contrac
 ## Architecture
 
 - Standard modules are resolved by the compiler from a selected toolchain catalog; they are never searched in the project filesystem.
-- Portable exports are ordinary JIMP functions statically linked into the output module.
+- Portable exports are ordinary AUREON functions statically linked into the output module.
 - Host-backed exports lower through typed Host ABI imports and generic `HOST_CALL`; the VM contains no console, math, JSON, network, or standard-library opcode.
 - Importing a standard module includes only the transitively used exports and their dependencies.
-- A compiled `.jbc` does not require the standard-library source package at runtime.
+- A compiled `.abc` does not require the standard-library source package at runtime.
 - Portable implementations are the default; optional native replacements are a link-time optimization selected only for an explicitly compatible target.
 
 ## Current catalog
 
 - `std:console`: Explicit console output through a typed Host ABI bridge and portable wrappers.
-- `std:math/i64`: Deterministic helpers for signed 64-bit integers implemented in portable JIMP.
+- `std:math/i64`: Deterministic helpers for signed 64-bit integers implemented in portable AUREON.
 - `std:option`: Generic optional values with exhaustive pattern matching.
 - `std:result`: Explicit nominal result values for recoverable string-producing operations.
 - `std:text`: Portable Unicode-scalar text length, concatenation, indexed access, and slicing.
@@ -31,31 +31,31 @@ This document specifies the standard-library catalog and portable-source contrac
 | Module | Kind | Export signature | Default implementation | Optional native capability | Contract |
 | --- | --- | --- | --- | --- | --- |
 | `std:console` | Hybrid | `write(message: STRING): VOID` | Host ABI: `std.console.write` | — | Writes the message exactly and does not append a line feed. |
-| `std:console` | Hybrid | `writeLine(message: STRING): VOID` | Portable JIMP: [`src/console.jimp`](../../../stdlib/src/console.jimp) | — | Writes the message followed by one line-feed character through write. |
-| `std:math/i64` | Portable JIMP | `absolute(value: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.absolute` | Returns the non-negative magnitude; the minimum I64 value follows checked-negation overflow behavior. |
-| `std:math/i64` | Portable JIMP | `minimum(left: I64, right: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.minimum` | Returns left when left is less than or equal to right; otherwise returns right. |
-| `std:math/i64` | Portable JIMP | `maximum(left: I64, right: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.maximum` | Returns left when left is greater than or equal to right; otherwise returns right. |
-| `std:math/i64` | Portable JIMP | `sign(value: I64): I64` | Portable JIMP: [`src/math/i64.jimp`](../../../stdlib/src/math/i64.jimp) | `std.math.i64.sign` | Returns -1 for negative values, 0 for zero, and 1 for positive values. |
-| `std:option` | Portable JIMP | `variant Option<T> { None(), Some(value: T) }` | Nominal portable type | — | Represents either no value or one value of type T. |
-| `std:result` | Portable JIMP | `variant Result<T, E> { Ok(value: T), Error(error: E) }` | Nominal portable type | — | Represents either a successful value of type T or an error of type E. |
-| `std:result` | Portable JIMP | `record StringResult { ok: BOOL, value: STRING, error: STRING }` | Nominal portable type | — | Carries an explicit success flag, string value, and deterministic error message. |
-| `std:result` | Portable JIMP | `stringSuccess(value: STRING): StringResult` | Portable JIMP: [`src/result.jimp`](../../../stdlib/src/result.jimp) | — | Creates a successful StringResult. |
-| `std:result` | Portable JIMP | `stringFailure(error: STRING): StringResult` | Portable JIMP: [`src/result.jimp`](../../../stdlib/src/result.jimp) | — | Creates a failed StringResult with an empty fallback value. |
-| `std:text` | Portable JIMP | `length(value: STRING): I64` | Portable JIMP: [`src/text.jimp`](../../../stdlib/src/text.jimp) | — | Returns the Unicode scalar-value count. |
-| `std:text` | Portable JIMP | `concat(left: STRING, right: STRING): STRING` | Portable JIMP: [`src/text.jimp`](../../../stdlib/src/text.jimp) | — | Concatenates two strings. |
-| `std:text` | Portable JIMP | `at(value: STRING, index: I64): StringResult` | Portable JIMP: [`src/text.jimp`](../../../stdlib/src/text.jimp) | — | Returns one Unicode scalar value or an explicit bounds error. |
-| `std:text` | Portable JIMP | `slice(value: STRING, start: I64, end: I64): StringResult` | Portable JIMP: [`src/text.jimp`](../../../stdlib/src/text.jimp) | — | Returns a half-open Unicode scalar range or an explicit bounds error. |
-| `std:collections/i64` | Portable JIMP | `record I64ArrayResult { ok: BOOL, value: [I64], error: STRING }` | Nominal portable type | — | Carries an immutable I64 array or a recoverable error. |
-| `std:collections/i64` | Portable JIMP | `contains(values: [I64], expected: I64): BOOL` | Portable JIMP: [`src/collections/i64.jimp`](../../../stdlib/src/collections/i64.jimp) | — | Returns whether the array contains the expected value. |
-| `std:collections/i64` | Portable JIMP | `indexOf(values: [I64], expected: I64): I64` | Portable JIMP: [`src/collections/i64.jimp`](../../../stdlib/src/collections/i64.jimp) | — | Returns the first index or -1 when absent. |
-| `std:collections/i64` | Portable JIMP | `replace(values: [I64], index: I64, replacement: I64): I64ArrayResult` | Portable JIMP: [`src/collections/i64.jimp`](../../../stdlib/src/collections/i64.jimp) | — | Returns an updated array or an explicit bounds error while preserving the input. |
+| `std:console` | Hybrid | `writeLine(message: STRING): VOID` | Portable AUREON: [`src/console.aur`](../../../stdlib/src/console.aur) | — | Writes the message followed by one line-feed character through write. |
+| `std:math/i64` | Portable AUREON | `absolute(value: I64): I64` | Portable AUREON: [`src/math/i64.aur`](../../../stdlib/src/math/i64.aur) | `std.math.i64.absolute` | Returns the non-negative magnitude; the minimum I64 value follows checked-negation overflow behavior. |
+| `std:math/i64` | Portable AUREON | `minimum(left: I64, right: I64): I64` | Portable AUREON: [`src/math/i64.aur`](../../../stdlib/src/math/i64.aur) | `std.math.i64.minimum` | Returns left when left is less than or equal to right; otherwise returns right. |
+| `std:math/i64` | Portable AUREON | `maximum(left: I64, right: I64): I64` | Portable AUREON: [`src/math/i64.aur`](../../../stdlib/src/math/i64.aur) | `std.math.i64.maximum` | Returns left when left is greater than or equal to right; otherwise returns right. |
+| `std:math/i64` | Portable AUREON | `sign(value: I64): I64` | Portable AUREON: [`src/math/i64.aur`](../../../stdlib/src/math/i64.aur) | `std.math.i64.sign` | Returns -1 for negative values, 0 for zero, and 1 for positive values. |
+| `std:option` | Portable AUREON | `variant Option<T> { None(), Some(value: T) }` | Nominal portable type | — | Represents either no value or one value of type T. |
+| `std:result` | Portable AUREON | `variant Result<T, E> { Ok(value: T), Error(error: E) }` | Nominal portable type | — | Represents either a successful value of type T or an error of type E. |
+| `std:result` | Portable AUREON | `record StringResult { ok: BOOL, value: STRING, error: STRING }` | Nominal portable type | — | Carries an explicit success flag, string value, and deterministic error message. |
+| `std:result` | Portable AUREON | `stringSuccess(value: STRING): StringResult` | Portable AUREON: [`src/result.aur`](../../../stdlib/src/result.aur) | — | Creates a successful StringResult. |
+| `std:result` | Portable AUREON | `stringFailure(error: STRING): StringResult` | Portable AUREON: [`src/result.aur`](../../../stdlib/src/result.aur) | — | Creates a failed StringResult with an empty fallback value. |
+| `std:text` | Portable AUREON | `length(value: STRING): I64` | Portable AUREON: [`src/text.aur`](../../../stdlib/src/text.aur) | — | Returns the Unicode scalar-value count. |
+| `std:text` | Portable AUREON | `concat(left: STRING, right: STRING): STRING` | Portable AUREON: [`src/text.aur`](../../../stdlib/src/text.aur) | — | Concatenates two strings. |
+| `std:text` | Portable AUREON | `at(value: STRING, index: I64): StringResult` | Portable AUREON: [`src/text.aur`](../../../stdlib/src/text.aur) | — | Returns one Unicode scalar value or an explicit bounds error. |
+| `std:text` | Portable AUREON | `slice(value: STRING, start: I64, end: I64): StringResult` | Portable AUREON: [`src/text.aur`](../../../stdlib/src/text.aur) | — | Returns a half-open Unicode scalar range or an explicit bounds error. |
+| `std:collections/i64` | Portable AUREON | `record I64ArrayResult { ok: BOOL, value: [I64], error: STRING }` | Nominal portable type | — | Carries an immutable I64 array or a recoverable error. |
+| `std:collections/i64` | Portable AUREON | `contains(values: [I64], expected: I64): BOOL` | Portable AUREON: [`src/collections/i64.aur`](../../../stdlib/src/collections/i64.aur) | — | Returns whether the array contains the expected value. |
+| `std:collections/i64` | Portable AUREON | `indexOf(values: [I64], expected: I64): I64` | Portable AUREON: [`src/collections/i64.aur`](../../../stdlib/src/collections/i64.aur) | — | Returns the first index or -1 when absent. |
+| `std:collections/i64` | Portable AUREON | `replace(values: [I64], index: I64, replacement: I64): I64ArrayResult` | Portable AUREON: [`src/collections/i64.aur`](../../../stdlib/src/collections/i64.aur) | — | Returns an updated array or an explicit bounds error while preserving the input. |
 | `std:json/support` | Host ABI bridge | `validate(source: STRING): BOOL` | Host ABI: `std.json.validate` | — | Returns whether the input is valid and within the JSON resource limits. |
 | `std:json/support` | Host ABI bridge | `canonicalize(source: STRING): STRING` | Host ABI: `std.json.canonicalize` | — | Returns deterministic compact JSON, or an empty string for invalid input. |
 | `std:json/support` | Host ABI bridge | `diagnostic(source: STRING): STRING` | Host ABI: `std.json.diagnostic` | — | Returns a deterministic validation diagnostic, or an empty string when valid. |
-| `std:json` | Portable JIMP | `record JsonDocument { text: STRING }` | Nominal portable type | — | A JSON document represented by deterministic compact UTF-8 text. |
-| `std:json` | Portable JIMP | `record JsonResult { ok: BOOL, value: JsonDocument, error: STRING }` | Nominal portable type | — | Carries a validated document or a recoverable deterministic parse error. |
-| `std:json` | Portable JIMP | `parse(source: STRING): JsonResult` | Portable JIMP: [`src/json.jimp`](../../../stdlib/src/json.jimp) | — | Validates and canonicalizes JSON without throwing a language-level exception. |
-| `std:json` | Portable JIMP | `stringify(document: JsonDocument): StringResult` | Portable JIMP: [`src/json.jimp`](../../../stdlib/src/json.jimp) | — | Serializes a document or reports an explicit validation error. |
+| `std:json` | Portable AUREON | `record JsonDocument { text: STRING }` | Nominal portable type | — | A JSON document represented by deterministic compact UTF-8 text. |
+| `std:json` | Portable AUREON | `record JsonResult { ok: BOOL, value: JsonDocument, error: STRING }` | Nominal portable type | — | Carries a validated document or a recoverable deterministic parse error. |
+| `std:json` | Portable AUREON | `parse(source: STRING): JsonResult` | Portable AUREON: [`src/json.aur`](../../../stdlib/src/json.aur) | — | Validates and canonicalizes JSON without throwing a language-level exception. |
+| `std:json` | Portable AUREON | `stringify(document: JsonDocument): StringResult` | Portable AUREON: [`src/json.aur`](../../../stdlib/src/json.aur) | — | Serializes a document or reports an explicit validation error. |
 
 ## Resolution and versioning
 
@@ -67,11 +67,11 @@ Standard-library calls obey the same exact parameter and return typing as projec
 
 ## Portable fallback selection
 
-- The linker selects the portable source by default and emits ordinary JIMP functions and `CALL` instructions.
+- The linker selects the portable source by default and emits ordinary AUREON functions and `CALL` instructions.
 - A native replacement may be selected only when an explicit target profile guarantees the catalog capability with the exact declared signature and semantics.
-- Selection occurs before `.jbc` emission. Exactly one implementation of each export is linked; unused alternatives and host imports are omitted.
+- Selection occurs before `.abc` emission. Exactly one implementation of each export is linked; unused alternatives and host imports are omitted.
 - The runtime does not probe for an optional import, retry a failed host call, or switch implementations during execution.
-- If a native-targeted `.jbc` reaches a host without the promised capability, normal Host ABI resolution rejects the module before execution. It does not fall back dynamically.
+- If a native-targeted `.abc` reaches a host without the promised capability, normal Host ABI resolution rejects the module before execution. It does not fall back dynamically.
 - Build metadata must record the selected target profile. The default portable target remains independent of optional native capabilities.
 
 ## Native equivalence requirements
@@ -80,7 +80,7 @@ A native replacement must preserve the public signature, returned value, checked
 
 ## Security and capability policy
 
-Importing a host-backed export does not grant authority. The resulting Host ABI import must still be available, signature-compatible, and allowed by runtime policy before execution. Portable functions receive no ambient authority. Unused host bridges must not appear in the linked `.jbc`. The complete trust and effect boundary is defined by the [sandbox and security model](SECURITY.md).
+Importing a host-backed export does not grant authority. The resulting Host ABI import must still be available, signature-compatible, and allowed by runtime policy before execution. Portable functions receive no ambient authority. Unused host bridges must not appear in the linked `.abc`. The complete trust and effect boundary is defined by the [sandbox and security model](SECURITY.md).
 
 ## Deliberate exclusions
 

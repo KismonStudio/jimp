@@ -1,4 +1,4 @@
-# Valores Agregados JIMP v1
+# Valores Agregados AUREON v1
 
 [Versao em ingles](../EN/AGGREGATES.md)
 
@@ -10,7 +10,7 @@ Este documento e o contrato normativo dos valores agregados. O P7.2 introduziu a
 
 Arrays usam `[T]`, contem um unico tipo de elemento e preservam a ordem de insercao. Records sao declaracoes nominais no escopo do modulo, cuja identidade e formada pelo modulo declarante e pelo nome do record.
 
-```jimp
+```aureon
 record Point {
   x: I64,
   y: I64,
@@ -24,7 +24,7 @@ Uma anotacao opcional `: Type` e permitida em `let` e `var`. Um array vazio exig
 
 Atualizacoes de agregados sao expressoes e nunca alteram um valor existente:
 
-```jimp
+```aureon
 let changed = values with [0] = 11
 let moved = origin with { x: 4 }
 ```
@@ -69,7 +69,7 @@ Um acesso ou atualizacao fora dos limites do array e uma falha deterministica de
 
 Validos:
 
-```jimp
+```aureon
 let empty: [String] = []
 let matrix: [[I64]] = [[1, 2], [3, 4]]
 let next = matrix with [0] = [5, 6]
@@ -77,7 +77,7 @@ let next = matrix with [0] = [5, 6]
 
 Rejeitados:
 
-```jimp
+```aureon
 let unknown = []
 let mixed = [1, "two"]
 matrix[0] = [5, 6]

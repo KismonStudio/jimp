@@ -1,4 +1,4 @@
-# Projeto de Capacidades de Arquivos e Rede JIMP v1
+# Projeto de Capacidades de Arquivos e Rede AUREON v1
 
 [Versão em inglês](../EN/IO_CAPABILITIES.md)
 

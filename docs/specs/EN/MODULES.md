@@ -1,10 +1,10 @@
-# JIMP Source Module Contract v1
+# AUREON Source Module Contract v1
 
 [Portuguese version](../PT/MODULES.md)
 
 ## Status
 
-This document specifies the implemented source-module contract for named function, record, and variant imports and exports, including generic declarations, graph resolution, and static linking. The CLI securely loads an acyclic source graph, validates exact scalar and aggregate contracts, links module-qualified identities deterministically, and emits one self-contained `.jbc` 2.9 file with module-aware debug metadata.
+This document specifies the implemented source-module contract for named function, record, and variant imports and exports, including generic declarations, graph resolution, and static linking. The CLI securely loads an acyclic source graph, validates exact scalar and aggregate contracts, links module-qualified identities deterministically, and emits one self-contained `.abc` 2.9 file with module-aware debug metadata.
 
 The terms **must**, **must not**, **required**, and **invalid** are normative.
 
@@ -12,15 +12,15 @@ The terms **must**, **must not**, **required**, and **invalid** are normative.
 
 Modules are a compiler and linker concept. They are not VM instructions, runtime filesystem requests, or Host ABI capabilities.
 
-- One UTF-8 `.jimp` file defines one source module.
-- Compilation starts from one entry module and produces one self-contained `.jbc` file.
+- One UTF-8 `.aur` file defines one source module.
+- Compilation starts from one entry module and produces one self-contained `.abc` file.
 - All source imports are resolved, parsed, analyzed, and linked before bytecode is emitted.
 - Imported calls lower to the existing generic `CALL` instruction.
 - Source imports must never become `HOST_CALL` instructions merely because they use `import` syntax.
 - The runtime does not search source paths, read imported source files, download dependencies, or execute a dynamic module loader.
 - Host ABI imports remain the separate typed capability mechanism defined by [VM.md](VM.md).
 
-This boundary allows the same linked `.jbc` to run on hosts that have no source filesystem.
+This boundary allows the same linked `.abc` to run on hosts that have no source filesystem.
 
 ## Scope
 
@@ -46,7 +46,7 @@ Deferred:
 - re-exports and export lists;
 - cyclic module graphs;
 - packages, version constraints, registries, URLs, and network resolution;
-- runtime module loading and multiple `.jbc` linkage;
+- runtime module loading and multiple `.abc` linkage;
 - source-level Host ABI declarations.
 
 An imported non-entry module must contain only imports, record declarations, variant declarations, and function declarations. Executable statements are valid only in the entry module. This rule avoids hidden initialization order and observable import-time effects.
@@ -55,8 +55,8 @@ An imported non-entry module must contain only imports, record declarations, var
 
 Imports occupy one logical line and must appear before every record, variant, or function declaration and every executable statement, except for blank lines and comments.
 
-```jimp
-import { add, multiply as mul } from "./math.jimp";
+```aureon
+import { add, multiply as mul } from "./math.aur";
 
 let answer = add(20, 22);
 mul(answer, 2);
@@ -64,7 +64,7 @@ mul(answer, 2);
 
 Exports are written directly on function, record, or variant declarations:
 
-```jimp
+```aureon
 export function add(left: I64, right: I64): I64 {
   return left + right;
 }
@@ -88,10 +88,10 @@ Once module syntax is enabled, `import`, `export`, `from`, and `as` are reserved
 
 The following forms are invalid in module contract v1:
 
-```jimp
-import "./effects.jimp";
-import * as math from "./math.jimp";
-import math from "./math.jimp";
+```aureon
+import "./effects.aur";
+import * as math from "./math.aur";
+import math from "./math.aur";
 export { add };
 export let value = 1;
 ```
@@ -100,8 +100,8 @@ export let value = 1;
 
 An import item names an exported function, record, or variant and may declare a different local name with `as`.
 
-```jimp
-import { calculate as calculateTotal } from "./totals.jimp";
+```aureon
+import { calculate as calculateTotal } from "./totals.aur";
 ```
 
 - The name before `as` is looked up in the dependency's export table.
@@ -115,7 +115,7 @@ import { calculate as calculateTotal } from "./totals.jimp";
 - Importing the same exported declaration under distinct local aliases is valid.
 - An import item that names a missing or private declaration is invalid.
 
-Calls must match the exported function's exact parameter and return contract. JIMP performs no implicit conversion at a module boundary.
+Calls must match the exported function's exact parameter and return contract. AUREON performs no implicit conversion at a module boundary.
 
 ## Exported declarations
 
@@ -140,19 +140,19 @@ Export tables are compile-time metadata. They do not expose native pointers and 
 The initial source resolver accepts relative specifiers only:
 
 ```text
-./name.jimp
-../shared/name.jimp
+./name.aur
+../shared/name.aur
 ```
 
 A relative specifier:
 
 - must begin with `./` or `../`;
 - must use `/` as its separator on every operating system;
-- must end in the exact `.jimp` extension;
+- must end in the exact `.aur` extension;
 - must not contain a NUL character, a backslash, an empty path segment, or a trailing slash;
-- is interpreted after normal JIMP string-escape decoding;
+- is interpreted after normal AUREON string-escape decoding;
 - is not URL-decoded and does not use percent escapes;
-- does not receive implicit extensions or `index.jimp` lookup.
+- does not receive implicit extensions or `index.aur` lookup.
 
 Absolute paths, drive-qualified paths, UNC paths, `file:` URLs, network URLs, and bare names are invalid source specifiers.
 
@@ -165,7 +165,7 @@ Every compilation has one project root. The official CLI will use the entry modu
 Each file has two related identities:
 
 1. **Physical identity** is its canonical filesystem path after resolving symbolic links. It is used for caching, containment checks, and duplicate-file detection.
-2. **Portable module ID** is the normalized path relative to the project root, encoded with `/`, such as `lib/math.jimp`. It is used in deterministic diagnostics and linker symbols.
+2. **Portable module ID** is the normalized path relative to the project root, encoded with `/`, such as `lib/math.aur`. It is used in deterministic diagnostics and linker symbols.
 
 Resolution must reject:
 
@@ -185,7 +185,7 @@ For each import, the resolver performs these steps in order:
 2. Resolve it relative to the importing module's physical parent directory.
 3. Normalize `.` and `..` segments without permitting project-root escape.
 4. Resolve symbolic links and verify containment inside the real project root.
-5. Require an existing, regular `.jimp` file.
+5. Require an existing, regular `.aur` file.
 6. Derive its portable module ID relative to the project root.
 7. Reuse the parsed module when its physical identity is already cached.
 8. Parse imports in source order and recursively resolve uncached dependencies.
@@ -217,13 +217,13 @@ Name resolution occurs within a module namespace before global function indices 
 5. Lower calls to numeric `CALL` operands.
 6. Emit one entry function for the entry module's executable statements.
 
-Private functions with the same name in different modules do not conflict. Linker-visible names, diagnostics, and future debug file identities must remain module-qualified even if the current `.jbc` function table stores a compact implementation name.
+Private functions with the same name in different modules do not conflict. Linker-visible names, diagnostics, and future debug file identities must remain module-qualified even if the current `.abc` function table stores a compact implementation name.
 
-The linked bytecode must retain sufficient debug identity to distinguish equal line numbers from different source modules. Extending a `jimp-error-v1` source location with a portable module ID is compatible because consumers must ignore unknown fields.
+The linked bytecode must retain sufficient debug identity to distinguish equal line numbers from different source modules. Extending a `aureon-error-v1` source location with a portable module ID is compatible because consumers must ignore unknown fields.
 
 ## Failure behavior
 
-Module failures are compiler failures and use `JIMP-1001` with phase `compile`. Diagnostics must identify the importing portable module ID and source line when available.
+Module failures are compiler failures and use `AUREON-1001` with phase `compile`. Diagnostics must identify the importing portable module ID and source line when available.
 
 Required failure cases include:
 
@@ -239,7 +239,7 @@ Required failure cases include:
 - incompatible imported call contract;
 - ambiguous physical or case-insensitive file identity.
 
-The compiler must emit no `.jbc` when any module failure occurs.
+The compiler must emit no `.abc` when any module failure occurs.
 
 ## Grammar extension
 
@@ -279,7 +279,7 @@ The module implementation is complete through P7.6:
 
 - the parser and analyzer implement this syntax and visibility model;
 - the resolver enforces canonical identity and project-root containment;
-- acyclic multi-file programs link deterministically into one `.jbc`;
+- acyclic multi-file programs link deterministically into one `.abc`;
 - imported calls execute through generic `CALL` instructions and aggregate values use generic heap instructions in the Rust runtime;
 - source diagnostics distinguish module IDs and lines;
 - unit and cross-language integration tests cover valid graphs and every required failure class;

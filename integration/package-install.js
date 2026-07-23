@@ -29,7 +29,7 @@ function npmCommand(argumentsList, cwd) {
 }
 
 test("installs and runs the source-distributed toolchain outside the repository", () => {
-  const root = mkdtempSync(join(tmpdir(), "jimp-package-"));
+  const root = mkdtempSync(join(tmpdir(), "aureon-package-"));
   try {
     const packageDirectory = join(root, "package");
     const installationDirectory = join(root, "installation");
@@ -58,12 +58,12 @@ test("installs and runs the source-distributed toolchain outside the repository"
     const installedPackage = join(
       installationDirectory,
       "node_modules",
-      "jimp-language",
+      "aureon-language",
     );
-    const cli = join(installedPackage, "bin", "jimp.js");
+    const cli = join(installedPackage, "bin", "aureon.js");
     const version = command(process.execPath, [cli, "--version"], root);
     assert.equal(version.status, 0, version.stderr);
-    assert.equal(version.stdout.trim(), "jimp 0.1.0 runtime-protocol 1");
+    assert.equal(version.stdout.trim(), "aureon 0.1.0 runtime-protocol 1");
 
     const built = npmCommand([
       "run",
@@ -78,10 +78,10 @@ test("installs and runs the source-distributed toolchain outside the repository"
     const executed = command(process.execPath, [
       cli,
       "run",
-      join(installedPackage, "examples", "hello.jimp"),
+      join(installedPackage, "examples", "hello.aur"),
     ], root);
     assert.equal(executed.status, 0, executed.stderr);
-    assert.equal(executed.stdout.replaceAll("\r\n", "\n"), "Hello, JIMP!\n");
+    assert.equal(executed.stdout.replaceAll("\r\n", "\n"), "Hello, AUREON!\n");
 
     const packageDefinitionPath = join(installedPackage, "package.json");
     const packageDefinition = JSON.parse(readFileSync(packageDefinitionPath, "utf8"));
@@ -90,12 +90,12 @@ test("installs and runs the source-distributed toolchain outside the repository"
     const incompatible = command(process.execPath, [
       cli,
       "run",
-      join(installedPackage, "examples", "hello.jimp"),
+      join(installedPackage, "examples", "hello.aur"),
       "--error-format=json",
     ], root);
     assert.equal(incompatible.status, 2);
     const error = JSON.parse(incompatible.stderr);
-    assert.equal(error.code, "JIMP-0001");
+    assert.equal(error.code, "AUREON-0001");
     assert.match(error.message, /expected handshake.*0\.1\.1/i);
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -1,11 +1,11 @@
 {
-  "name": "jimp-language",
+  "name": "aureon-language",
   "version": "0.1.0",
-  "description": "JIMP language compiler, bytecode inspector, and unified toolchain CLI",
+  "description": "AUREON language compiler, bytecode inspector, and unified toolchain CLI",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "jimp": "bin/jimp.js"
+    "aureon": "bin/aureon.js"
   },
   "files": [
     "bin/",
@@ -48,8 +48,8 @@
     "build:runtime": "cargo build --release --manifest-path runtime/Cargo.toml",
     "package:release": "node tools/package-release.js",
     "check": "npm run check:isa && npm run check:sandbox && npm run check:errors && npm run check:stdlib && npm run check:targets && npm test && npm run test:integration && npm run test:conformance && npm run test:package && cargo fmt --manifest-path runtime/Cargo.toml -- --check && cargo clippy --manifest-path runtime/Cargo.toml -- -D warnings && cargo test --manifest-path runtime/Cargo.toml",
-    "compile": "node bin/jimp.js compile",
-    "jimp": "node bin/jimp.js"
+    "compile": "node bin/aureon.js compile",
+    "aureon": "node bin/aureon.js"
   },
   "engines": {
     "node": ">=20"

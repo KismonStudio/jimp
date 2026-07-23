@@ -1,8 +1,8 @@
 [package]
-name = "jimp-runtime"
+name = "aureon-runtime"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "jimp-runtime"
+name = "aureon-runtime"
 path = "src/main.rs"

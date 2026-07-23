@@ -1,6 +1,6 @@
 {
   "$schema": "./schema.json",
-  "name": "jimp-reference-sandbox",
+  "name": "aureon-reference-sandbox",
   "version": 1,
   "limits": [
     {
@@ -9,8 +9,8 @@
       "unit": "bytes",
       "phase": "load",
       "description": {
-        "en": "Maximum encoded .jbc file size.",
-        "pt": "Tamanho máximo do arquivo .jbc codificado."
+        "en": "Maximum encoded .abc file size.",
+        "pt": "Tamanho máximo do arquivo .abc codificado."
       }
     },
     {

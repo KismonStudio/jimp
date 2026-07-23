@@ -1,4 +1,4 @@
-# JIMP Language Syntax v1
+# AUREON Language Syntax v1
 
 [Portuguese version](../PT/LANGUAGE.md)
 
@@ -10,7 +10,7 @@ The keywords, grammar, type rules, and examples are normative. Explanatory prose
 
 ## Source encoding and lines
 
-- Source files use the `.jimp` extension and UTF-8 encoding.
+- Source files use the `.aur` extension and UTF-8 encoding.
 - LF and CRLF line endings are supported.
 - Each non-empty logical line contains one complete simple statement or block delimiter.
 - Leading and trailing whitespace is ignored.
@@ -44,7 +44,7 @@ Numeric separators, hexadecimal notation, a leading plus sign, `NaN`, infinity l
 
 Both declaration forms require an initializer:
 
-```jimp
+```aureon
 let immutableValue = 42;
 var mutableValue: I64 = immutableValue + 1;
 mutableValue = mutableValue * 2;
@@ -91,7 +91,7 @@ STRING length, indexing, and slicing count Unicode scalar values rather than UTF
 
 Records are declared at module scope, with one typed field per logical line:
 
-```jimp
+```aureon
 record Point {
   x: I64,
   y: I64,
@@ -103,7 +103,7 @@ let moved = origin with { x: 4 }
 
 Generic records, tagged variants, exhaustive matching, and bounded recursive values are defined normatively in [VARIANTS_AND_GENERICS.md](VARIANTS_AND_GENERICS.md). For example:
 
-```jimp
+```aureon
 variant Option<T> {
   None,
   Some(value: T),
@@ -117,7 +117,7 @@ let value = match(option) { Some(item) => item, None => 0 };
 
 Functions are named, declared at program scope, and require explicit parameter and return types. A function may declare inferred invariant type parameters after its name:
 
-```jimp
+```aureon
 function add(left: I64, right: I64): I64 {
   return left + right;
 }
@@ -145,7 +145,7 @@ Functions are not first-class values. Calls target a declared identifier directl
 
 `if` and `while` require `BOOL` conditions and braced blocks:
 
-```jimp
+```aureon
 var count = 0;
 while count < 10 {
   count = count + 1;
@@ -337,7 +337,7 @@ line-boundary    = line-ending | end-of-file ;
 
 ## Invalid examples
 
-```jimp
+```aureon
 break;
 return 1;
 function missing(value: I64): I64 {

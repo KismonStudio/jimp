@@ -39,7 +39,7 @@ function findSection(bytecode, expectedKind) {
 }
 
 test("exposes the generated reference sandbox profile", () => {
-  assert.deepEqual(SANDBOX_PROFILE, { name: "jimp-reference-sandbox", version: 1 });
+  assert.deepEqual(SANDBOX_PROFILE, { name: "aureon-reference-sandbox", version: 1 });
   assert.equal(SANDBOX_LIMITS.MAX_MODULE_BYTES, 16 * 1024 * 1024);
   assert.equal(SANDBOX_LIMITS.MAX_RUNTIME_VALUE_BYTES, 32 * 1024 * 1024);
   assert.equal(SANDBOX_LIMITS.MAX_HEAP_BYTES, 4 * 1024 * 1024);

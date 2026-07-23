@@ -1,11 +1,11 @@
 {
   "$schema": "./schema.json",
-  "name": "jimp-error",
+  "name": "aureon-error",
   "version": 1,
   "codes": [
     {
       "name": "USAGE",
-      "code": "JIMP-0001",
+      "code": "AUREON-0001",
       "phase": "usage",
       "exitCode": 2,
       "description": {
@@ -15,7 +15,7 @@
     },
     {
       "name": "IO",
-      "code": "JIMP-0002",
+      "code": "AUREON-0002",
       "phase": "io",
       "exitCode": 1,
       "description": {
@@ -25,7 +25,7 @@
     },
     {
       "name": "COMPILE",
-      "code": "JIMP-1001",
+      "code": "AUREON-1001",
       "phase": "compile",
       "exitCode": 1,
       "description": {
@@ -35,17 +35,17 @@
     },
     {
       "name": "DECODE",
-      "code": "JIMP-2001",
+      "code": "AUREON-2001",
       "phase": "decode",
       "exitCode": 1,
       "description": {
-        "en": "The encoded .jbc module is malformed or unsupported.",
-        "pt": "O módulo .jbc codificado está malformado ou não é compatível."
+        "en": "The encoded .abc module is malformed or unsupported.",
+        "pt": "O módulo .abc codificado está malformado ou não é compatível."
       }
     },
     {
       "name": "VERIFY",
-      "code": "JIMP-2002",
+      "code": "AUREON-2002",
       "phase": "verify",
       "exitCode": 1,
       "description": {
@@ -55,7 +55,7 @@
     },
     {
       "name": "RESOLVE",
-      "code": "JIMP-3001",
+      "code": "AUREON-3001",
       "phase": "resolve",
       "exitCode": 1,
       "description": {
@@ -65,7 +65,7 @@
     },
     {
       "name": "EXECUTE",
-      "code": "JIMP-4001",
+      "code": "AUREON-4001",
       "phase": "execute",
       "exitCode": 1,
       "description": {
@@ -75,7 +75,7 @@
     },
     {
       "name": "INTERNAL",
-      "code": "JIMP-9001",
+      "code": "AUREON-9001",
       "phase": "internal",
       "exitCode": 1,
       "description": {

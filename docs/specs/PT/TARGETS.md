@@ -1,4 +1,4 @@
-# Perfis de Destino JIMP v1
+# Perfis de Destino AUREON v1
 
 [Versão em inglês](../EN/TARGETS.md)
 

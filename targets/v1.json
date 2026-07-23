@@ -1,6 +1,6 @@
 {
   "$schema": "./schema.json",
-  "name": "jimp-target-profiles",
+  "name": "aureon-target-profiles",
   "version": 1,
   "profiles": [
     {

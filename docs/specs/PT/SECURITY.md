@@ -1,16 +1,16 @@
-# Modelo de Sandbox e Segurança JIMP v1
+# Modelo de Sandbox e Segurança AUREON v1
 
 [Versão em inglês](../EN/SECURITY.md)
 
 ## Status
 
-Este documento especifica o contrato de segurança do runtime Rust oficial, o formato portátil `.jbc` `2.9` e o perfil `jimp-reference-sandbox` v1. Ele consolida as garantias definidas em [VM.md](VM.md), [HEAP.md](HEAP.md), os limites gerados em [SANDBOX.md](SANDBOX.md), o modelo de capacidades usado por [STDLIB.md](STDLIB.md) e as classes de falha de [ERRORS.md](ERRORS.md).
+Este documento especifica o contrato de segurança do runtime Rust oficial, o formato portátil `.abc` `2.9` e o perfil `aureon-reference-sandbox` v1. Ele consolida as garantias definidas em [VM.md](VM.md), [HEAP.md](HEAP.md), os limites gerados em [SANDBOX.md](SANDBOX.md), o modelo de capacidades usado por [STDLIB.md](STDLIB.md) e as classes de falha de [ERRORS.md](ERRORS.md).
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos. Este é um contrato de sandbox no nível da VM, não uma declaração de isolamento do sistema operacional ou do processo.
 
 ## Escopo e fronteiras de confiança
 
-O runtime oficial trata a sequência completa de bytes `.jbc` como não confiável, incluindo cabeçalho, diretório de seções, constantes, strings, imports, metadados de funções, instruções, fluxo de controle e mapeamentos de debug. Um módulo não se torna confiável por ter sido produzido pelo compilador oficial. As verificações do compilador melhoram diagnósticos e reprodutibilidade, mas o runtime Rust decodifica e verifica cada módulo de forma independente.
+O runtime oficial trata a sequência completa de bytes `.abc` como não confiável, incluindo cabeçalho, diretório de seções, constantes, strings, imports, metadados de funções, instruções, fluxo de controle e mapeamentos de debug. Um módulo não se torna confiável por ter sido produzido pelo compilador oficial. As verificações do compilador melhoram diagnósticos e reprodutibilidade, mas o runtime Rust decodifica e verifica cada módulo de forma independente.
 
 A base computacional confiável é composta por:
 
@@ -19,7 +19,7 @@ A base computacional confiável é composta por:
 - a política de capacidades selecionada pelo integrador;
 - o sistema operacional e quaisquer controles externos de isolamento de processo.
 
-Bytecode JIMP, projetos-fonte, metadados de compilação e metadados de debug ficam fora dessa base confiável. Um runtime, host, configuração de política, sistema operacional ou canal de distribuição comprometido está fora da proteção fornecida por este contrato.
+Bytecode AUREON, projetos-fonte, metadados de compilação e metadados de debug ficam fora dessa base confiável. Um runtime, host, configuração de política, sistema operacional ou canal de distribuição comprometido está fora da proteção fornecida por este contrato.
 
 ## Modelo de ameaça
 
@@ -95,13 +95,13 @@ Cada instrução da VM consome um passo-base. `HEAP_EQUAL` cobra também um pass
 
 ## Semântica de falhas e efeitos
 
-Falhas de decodificação e verificação rejeitam o módulo completo. Falhas de resolução o rejeitam antes da execução. Falhas de limite de execução, aritmética ou invocação do host encerram o programa pelo contrato padrão `jimp-error-v1`.
+Falhas de decodificação e verificação rejeitam o módulo completo. Falhas de resolução o rejeitam antes da execução. Falhas de limite de execução, aritmética ou invocação do host encerram o programa pelo contrato padrão `aureon-error-v1`.
 
 A execução não é transacional. Efeitos concluídos por chamadas autorizadas anteriores ao host não são revertidos quando uma instrução, limite ou chamada posterior falha. Um host não deve depender da VM para oferecer atomicidade, compensação ou entrega exatamente uma vez.
 
 ## Não garantias explícitas
 
-O sandbox JIMP não fornece por si só:
+O sandbox AUREON não fornece por si só:
 
 - uma fronteira de segurança de processo, contêiner, usuário, locatário ou kernel do sistema operacional;
 - um limite rígido de RSS do processo, overhead do alocador, tempo de CPU, tempo de parede, threads, descritores de arquivo ou alocações do host;

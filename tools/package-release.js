@@ -30,9 +30,9 @@ if (!platform || !runtimeArgument) {
 } else {
   const runtimePath = resolve(repositoryRoot, runtimeArgument);
   const outputDirectory = resolve(repositoryRoot, outputArgument);
-  const runtimeName = process.platform === "win32" ? "jimp-runtime.exe" : "jimp-runtime";
+  const runtimeName = process.platform === "win32" ? "aureon-runtime.exe" : "aureon-runtime";
   const bundledRuntime = join(repositoryRoot, "runtime", "bin", runtimeName);
-  const expectedHandshake = `jimp-runtime ${packageDefinition.version} protocol ${protocolVersion}`;
+  const expectedHandshake = `aureon-runtime ${packageDefinition.version} protocol ${protocolVersion}`;
   const handshake = spawnSync(runtimePath, ["--version"], {
     encoding: "utf8",
     timeout: 5_000,
@@ -56,7 +56,7 @@ if (!platform || !runtimeArgument) {
       if (pack.status !== 0) throw new Error(pack.stderr.trim() || "npm pack failed");
       const packedName = pack.stdout.trim().split(/\r?\n/u).at(-1);
       const sourceArchive = join(outputDirectory, packedName);
-      const archiveName = `jimp-language-${packageDefinition.version}-${platform}.tgz`;
+      const archiveName = `aureon-language-${packageDefinition.version}-${platform}.tgz`;
       const archivePath = join(outputDirectory, archiveName);
       await rm(archivePath, { force: true });
       const archive = await readFile(sourceArchive);
@@ -65,7 +65,7 @@ if (!platform || !runtimeArgument) {
       const digest = createHash("sha256").update(archive).digest("hex");
       await writeFile(join(outputDirectory, `${archiveName}.sha256`), `${digest}  ${archiveName}\n`);
       await writeFile(join(outputDirectory, `${archiveName}.json`), `${JSON.stringify({
-        schema: "jimp-release-artifact-v1",
+        schema: "aureon-release-artifact-v1",
         package: packageDefinition.name,
         version: packageDefinition.version,
         platform,

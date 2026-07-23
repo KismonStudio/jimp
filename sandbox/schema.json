@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://jimp.dev/schemas/sandbox-v1.json",
-  "title": "JIMP reference sandbox limits",
+  "$id": "https://aureon.dev/schemas/sandbox-v1.json",
+  "title": "AUREON reference sandbox limits",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "version", "limits"],

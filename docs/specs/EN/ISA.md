@@ -1,4 +1,4 @@
-# JIMP Portable VM v1 — Generated ISA Reference
+# AUREON Portable VM v1 — Generated ISA Reference
 
 [Portuguese version](../PT/ISA.md)
 

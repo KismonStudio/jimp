@@ -1,4 +1,4 @@
-# JIMP Portable Heap v1
+# AUREON Portable Heap v1
 
 [Portuguese version](../PT/HEAP.md)
 
@@ -36,4 +36,4 @@ Register memory and heap memory are separate budgets. Copying a `HEAP_REF` does 
 
 ## Inspector
 
-The bytecode inspector prints heap instructions and all encoded operands. It never follows or displays runtime references because `.jbc` files cannot contain heap objects or handles.
+The bytecode inspector prints heap instructions and all encoded operands. It never follows or displays runtime references because `.abc` files cannot contain heap objects or handles.

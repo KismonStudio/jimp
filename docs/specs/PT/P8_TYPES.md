@@ -44,6 +44,6 @@ Concluir a cobertura multiplataforma de conformidade, bytecode malformado, limit
 
 ## Restrições de entrega
 
-P8.5, P8.6 e P8.7 permanecem indisponíveis até sua implementação. Nenhuma mudança de versão do bytecode foi necessária para P8.1–P8.4, pois a redução do compilador usa as instruções existentes e verificadas de heap imutável e fluxo de controle no `.jbc` 2.9.
+P8.5, P8.6 e P8.7 permanecem indisponíveis até sua implementação. Nenhuma mudança de versão do bytecode foi necessária para P8.1–P8.4, pois a redução do compilador usa as instruções existentes e verificadas de heap imutável e fluxo de controle no `.abc` 2.9.
 
 O P8 não adiciona execução assíncrona, autoridade de arquivos ou rede, pacotes, reflexão em runtime, exceções, nulabilidade implícita nem instruções de VM específicas de domínio.

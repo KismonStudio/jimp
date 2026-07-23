@@ -1,6 +1,6 @@
 {
   "$schema": "./schema.json",
-  "name": "jimp-standard-library",
+  "name": "aureon-standard-library",
   "version": 1,
   "fallbackPolicy": {
     "selection": "link-time",
@@ -42,7 +42,7 @@
           "returnType": "VOID",
           "implementation": {
             "kind": "portable",
-            "source": "src/console.jimp"
+            "source": "src/console.aur"
           },
           "description": {
             "en": "Writes the message followed by one line-feed character through write.",
@@ -55,8 +55,8 @@
       "specifier": "std:math/i64",
       "kind": "portable",
       "description": {
-        "en": "Deterministic helpers for signed 64-bit integers implemented in portable JIMP.",
-        "pt": "Funções determinísticas para inteiros de 64 bits com sinal implementadas em JIMP portátil."
+        "en": "Deterministic helpers for signed 64-bit integers implemented in portable AUREON.",
+        "pt": "Funções determinísticas para inteiros de 64 bits com sinal implementadas em AUREON portátil."
       },
       "exports": [
         {
@@ -68,7 +68,7 @@
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/math/i64.jimp",
+            "source": "src/math/i64.aur",
             "optionalNative": {
               "capability": "std.math.i64.absolute"
             }
@@ -88,7 +88,7 @@
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/math/i64.jimp",
+            "source": "src/math/i64.aur",
             "optionalNative": {
               "capability": "std.math.i64.minimum"
             }
@@ -108,7 +108,7 @@
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/math/i64.jimp",
+            "source": "src/math/i64.aur",
             "optionalNative": {
               "capability": "std.math.i64.maximum"
             }
@@ -127,7 +127,7 @@
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/math/i64.jimp",
+            "source": "src/math/i64.aur",
             "optionalNative": {
               "capability": "std.math.i64.sign"
             }
@@ -142,7 +142,7 @@
     {
       "specifier": "std:option",
       "kind": "portable",
-      "source": "src/option.jimp",
+      "source": "src/option.aur",
       "description": {
         "en": "Generic optional values with exhaustive pattern matching.",
         "pt": "Valores opcionais genéricos com correspondência de padrões exaustiva."
@@ -166,7 +166,7 @@
     {
       "specifier": "std:result",
       "kind": "portable",
-      "source": "src/result.jimp",
+      "source": "src/result.aur",
       "description": {
         "en": "Explicit nominal result values for recoverable string-producing operations.",
         "pt": "Valores nominais e explícitos de resultado para operações recuperáveis que produzem strings."
@@ -203,7 +203,7 @@
           "name": "stringSuccess",
           "parameters": [{ "name": "value", "type": "STRING" }],
           "returnType": "StringResult",
-          "implementation": { "kind": "portable", "source": "src/result.jimp" },
+          "implementation": { "kind": "portable", "source": "src/result.aur" },
           "description": {
             "en": "Creates a successful StringResult.",
             "pt": "Cria um StringResult bem-sucedido."
@@ -214,7 +214,7 @@
           "name": "stringFailure",
           "parameters": [{ "name": "error", "type": "STRING" }],
           "returnType": "StringResult",
-          "implementation": { "kind": "portable", "source": "src/result.jimp" },
+          "implementation": { "kind": "portable", "source": "src/result.aur" },
           "description": {
             "en": "Creates a failed StringResult with an empty fallback value.",
             "pt": "Cria um StringResult com falha e valor alternativo vazio."
@@ -225,7 +225,7 @@
     {
       "specifier": "std:text",
       "kind": "portable",
-      "source": "src/text.jimp",
+      "source": "src/text.aur",
       "description": {
         "en": "Portable Unicode-scalar text length, concatenation, indexed access, and slicing.",
         "pt": "Comprimento, concatenação, acesso indexado e recorte portáteis por valores escalares Unicode."
@@ -236,7 +236,7 @@
           "name": "length",
           "parameters": [{ "name": "value", "type": "STRING" }],
           "returnType": "I64",
-          "implementation": { "kind": "portable", "source": "src/text.jimp" },
+          "implementation": { "kind": "portable", "source": "src/text.aur" },
           "description": {
             "en": "Returns the Unicode scalar-value count.",
             "pt": "Retorna a quantidade de valores escalares Unicode."
@@ -250,7 +250,7 @@
             { "name": "right", "type": "STRING" }
           ],
           "returnType": "STRING",
-          "implementation": { "kind": "portable", "source": "src/text.jimp" },
+          "implementation": { "kind": "portable", "source": "src/text.aur" },
           "description": {
             "en": "Concatenates two strings.",
             "pt": "Concatena duas strings."
@@ -264,7 +264,7 @@
             { "name": "index", "type": "I64" }
           ],
           "returnType": "StringResult",
-          "implementation": { "kind": "portable", "source": "src/text.jimp" },
+          "implementation": { "kind": "portable", "source": "src/text.aur" },
           "description": {
             "en": "Returns one Unicode scalar value or an explicit bounds error.",
             "pt": "Retorna um valor escalar Unicode ou um erro explícito de limite."
@@ -279,7 +279,7 @@
             { "name": "end", "type": "I64" }
           ],
           "returnType": "StringResult",
-          "implementation": { "kind": "portable", "source": "src/text.jimp" },
+          "implementation": { "kind": "portable", "source": "src/text.aur" },
           "description": {
             "en": "Returns a half-open Unicode scalar range or an explicit bounds error.",
             "pt": "Retorna um intervalo semiaberto de valores Unicode ou um erro explícito de limite."
@@ -290,7 +290,7 @@
     {
       "specifier": "std:collections/i64",
       "kind": "portable",
-      "source": "src/collections/i64.jimp",
+      "source": "src/collections/i64.aur",
       "description": {
         "en": "Portable search and recoverable replacement helpers for immutable I64 arrays.",
         "pt": "Operações portáteis de busca e substituição recuperável para arrays imutáveis de I64."
@@ -317,7 +317,7 @@
             { "name": "expected", "type": "I64" }
           ],
           "returnType": "BOOL",
-          "implementation": { "kind": "portable", "source": "src/collections/i64.jimp" },
+          "implementation": { "kind": "portable", "source": "src/collections/i64.aur" },
           "description": {
             "en": "Returns whether the array contains the expected value.",
             "pt": "Informa se o array contém o valor esperado."
@@ -331,7 +331,7 @@
             { "name": "expected", "type": "I64" }
           ],
           "returnType": "I64",
-          "implementation": { "kind": "portable", "source": "src/collections/i64.jimp" },
+          "implementation": { "kind": "portable", "source": "src/collections/i64.aur" },
           "description": {
             "en": "Returns the first index or -1 when absent.",
             "pt": "Retorna o primeiro índice ou -1 quando ausente."
@@ -346,7 +346,7 @@
             { "name": "replacement", "type": "I64" }
           ],
           "returnType": "I64ArrayResult",
-          "implementation": { "kind": "portable", "source": "src/collections/i64.jimp" },
+          "implementation": { "kind": "portable", "source": "src/collections/i64.aur" },
           "description": {
             "en": "Returns an updated array or an explicit bounds error while preserving the input.",
             "pt": "Retorna um array atualizado ou um erro explícito de limite, preservando a entrada."
@@ -400,7 +400,7 @@
     {
       "specifier": "std:json",
       "kind": "portable",
-      "source": "src/json.jimp",
+      "source": "src/json.aur",
       "description": {
         "en": "Typed recoverable JSON parsing and deterministic serialization over validated documents.",
         "pt": "Análise recuperável tipada de JSON e serialização determinística de documentos validados."
@@ -433,7 +433,7 @@
           "name": "parse",
           "parameters": [{ "name": "source", "type": "STRING" }],
           "returnType": "JsonResult",
-          "implementation": { "kind": "portable", "source": "src/json.jimp" },
+          "implementation": { "kind": "portable", "source": "src/json.aur" },
           "description": {
             "en": "Validates and canonicalizes JSON without throwing a language-level exception.",
             "pt": "Valida e canonicaliza JSON sem lançar uma exceção no nível da linguagem."
@@ -444,7 +444,7 @@
           "name": "stringify",
           "parameters": [{ "name": "document", "type": "JsonDocument" }],
           "returnType": "StringResult",
-          "implementation": { "kind": "portable", "source": "src/json.jimp" },
+          "implementation": { "kind": "portable", "source": "src/json.aur" },
           "description": {
             "en": "Serializes a document or reports an explicit validation error.",
             "pt": "Serializa um documento ou informa um erro explícito de validação."

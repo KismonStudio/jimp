@@ -273,7 +273,7 @@ test("round-trips validated optional build metadata", () => {
     build: {
       targetProfile: "reference-native-i64",
       standardLibraryMajor: 1,
-      entryModuleId: "src/main.jimp",
+      entryModuleId: "src/main.aur",
       guaranteedCapabilities: [
         "std.math.i64.absolute",
         "std.math.i64.sign",
@@ -285,7 +285,7 @@ test("round-trips validated optional build metadata", () => {
   assert.deepEqual(module.build, {
     targetProfile: "reference-native-i64",
     standardLibraryMajor: 1,
-    entryModuleId: "src/main.jimp",
+    entryModuleId: "src/main.aur",
     guaranteedCapabilities: [
       "std.math.i64.absolute",
       "std.math.i64.sign",

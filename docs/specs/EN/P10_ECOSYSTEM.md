@@ -6,11 +6,11 @@
 
 This document is the approved implementation roadmap for P10. It defines future package, dependency, cache, publishing, and host-extension work; none of those facilities are currently implemented or trusted.
 
-P10 makes reusable JIMP projects reproducible without introducing runtime module loading, hidden downloads, install scripts, or compiler hardcoding for third-party APIs. Source dependencies remain statically resolved and linked into self-contained bytecode. Host extensions remain explicitly installed, versioned, registered, and authorized outside the module.
+P10 makes reusable AUREON projects reproducible without introducing runtime module loading, hidden downloads, install scripts, or compiler hardcoding for third-party APIs. Source dependencies remain statically resolved and linked into self-contained bytecode. Host extensions remain explicitly installed, versioned, registered, and authorized outside the module.
 
 ## P10.1 — Project manifest and package identity
 
-Specify a canonical project manifest with package name, version, entry module, supported JIMP/toolchain range, standard-library major, target requirements, dependencies, and optional metadata. The file format, normalization rules, unknown-field policy, path encoding, and deterministic serialization must be documented before choosing a filename or parser.
+Specify a canonical project manifest with package name, version, entry module, supported AUREON/toolchain range, standard-library major, target requirements, dependencies, and optional metadata. The file format, normalization rules, unknown-field policy, path encoding, and deterministic serialization must be documented before choosing a filename or parser.
 
 Package names and versions use one canonical syntax. Local module IDs, package IDs, and host capability symbols remain distinct namespaces. A manifest cannot grant a capability or override runtime policy.
 
@@ -42,7 +42,7 @@ A registry design must specify namespace ownership, version immutability, artifa
 
 Publish a narrow SDK for embedders to register typed capabilities through the P9 data-driven host interface. The SDK must version the registration ABI, supported value types, async lifecycle, cancellation, error mapping, resource-policy declarations, thread-safety requirements, and compatibility handshake.
 
-Installing a source package never installs or activates a native host extension. Native extensions are operator-controlled components outside `.jbc`, require explicit deployment and policy authorization, and should support out-of-process isolation where practical. Arbitrary pointers, unrestricted FFI calls, and module-selected dynamic libraries remain forbidden.
+Installing a source package never installs or activates a native host extension. Native extensions are operator-controlled components outside `.abc`, require explicit deployment and policy authorization, and should support out-of-process isolation where practical. Arbitrary pointers, unrestricted FFI calls, and module-selected dynamic libraries remain forbidden.
 
 ## P10.7 — CLI workflows and publishing policy
 

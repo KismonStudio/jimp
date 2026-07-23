@@ -11,7 +11,7 @@ function invariant(condition, message) {
 }
 
 function validateDefinition(definition) {
-  invariant(definition.name === "jimp-reference-sandbox", "unexpected profile name");
+  invariant(definition.name === "aureon-reference-sandbox", "unexpected profile name");
   invariant(Number.isInteger(definition.version) && definition.version > 0, "invalid version");
   invariant(Array.isArray(definition.limits) && definition.limits.length > 0, "limits must be a non-empty array");
   const names = new Set();
@@ -46,7 +46,7 @@ function generateRust(definition) {
 
 function generateDocumentation(definition, language) {
   const english = language === "en";
-  const title = english ? "# JIMP Reference Sandbox v1" : "# Sandbox de Referência JIMP v1";
+  const title = english ? "# AUREON Reference Sandbox v1" : "# Sandbox de Referência AUREON v1";
   const alternate = english ? "[Portuguese version](../PT/SANDBOX.md)" : "[Versão em inglês](../EN/SANDBOX.md)";
   const warning = english
     ? "This file is generated from [`sandbox/v1.json`](../../../sandbox/v1.json). Do not edit it manually."

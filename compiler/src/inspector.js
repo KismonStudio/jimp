@@ -5,7 +5,7 @@ export function decodeBytecode(bytecode) {
   return {
     ...module,
     header: {
-      magic: "JIMP",
+      magic: "AURN",
       format: `${module.header.major}.${module.header.minor}`,
       entryFunction: module.header.entryFunction,
       sectionCount: module.header.sectionCount,
@@ -23,7 +23,7 @@ function formatConstant(constant) {
 
 export function formatInspection(module) {
   const lines = [
-    "JIMP Portable Bytecode",
+    "AUREON Portable Bytecode",
     `File size: ${module.header.fileSize} bytes`,
     `Magic: ${module.header.magic}`,
     `Format: ${module.header.format}`,

@@ -1,4 +1,4 @@
-# Sintaxe da Linguagem JIMP v1
+# Sintaxe da Linguagem AUREON v1
 
 [Versão em inglês](../EN/LANGUAGE.md)
 
@@ -10,7 +10,7 @@ As palavras-chave, a gramática, as regras de tipo e os exemplos são normativos
 
 ## Codificação e linhas
 
-- Arquivos-fonte usam a extensão `.jimp` e codificação UTF-8.
+- Arquivos-fonte usam a extensão `.aur` e codificação UTF-8.
 - Finais de linha LF e CRLF são aceitos.
 - Cada linha lógica não vazia contém uma instrução simples completa ou um delimitador de bloco.
 - Espaços em branco no início e no fim são ignorados.
@@ -44,7 +44,7 @@ Separadores numéricos, notação hexadecimal, sinal positivo inicial, `NaN`, li
 
 As duas formas de declaração exigem um inicializador:
 
-```jimp
+```aureon
 let immutableValue = 42;
 var mutableValue: I64 = immutableValue + 1;
 mutableValue = mutableValue * 2;
@@ -91,7 +91,7 @@ Comprimento, indexação e recorte de STRING contam valores escalares Unicode, n
 
 Records são declarados no escopo do módulo, com um campo tipado por linha lógica:
 
-```jimp
+```aureon
 record Point {
   x: I64,
   y: I64,
@@ -103,7 +103,7 @@ let moved = origin with { x: 4 }
 
 Records genéricos, variants etiquetadas, correspondência exaustiva e valores recursivos limitados são definidos normativamente em [VARIANTS_AND_GENERICS.md](VARIANTS_AND_GENERICS.md). Por exemplo:
 
-```jimp
+```aureon
 variant Option<T> {
   None,
   Some(value: T),
@@ -117,7 +117,7 @@ let value = match(option) { Some(item) => item, None => 0 };
 
 Funções possuem nome, são declaradas no escopo do programa e exigem tipos explícitos nos parâmetros e no retorno. Uma função pode declarar parâmetros de tipo invariantes e inferidos após seu nome:
 
-```jimp
+```aureon
 function add(left: I64, right: I64): I64 {
   return left + right;
 }
@@ -145,7 +145,7 @@ Funções não são valores de primeira classe. Chamadas apontam diretamente par
 
 `if` e `while` exigem condições `BOOL` e blocos entre chaves:
 
-```jimp
+```aureon
 var count = 0;
 while count < 10 {
   count = count + 1;
@@ -337,7 +337,7 @@ line-boundary    = line-ending | end-of-file ;
 
 ## Exemplos inválidos
 
-```jimp
+```aureon
 break;
 return 1;
 function missing(value: I64): I64 {

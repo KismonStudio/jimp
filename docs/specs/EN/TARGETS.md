@@ -1,4 +1,4 @@
-# JIMP Target Profiles v1
+# AUREON Target Profiles v1
 
 [Portuguese version](../PT/TARGETS.md)
 

@@ -24,7 +24,7 @@ const {
   MAX_VERIFICATION_TYPE_CELLS,
 } = SANDBOX_LIMITS;
 
-const MAGIC = Buffer.from("JIMP");
+const MAGIC = Buffer.from("AURN");
 const HEADER_SIZE = 20;
 const DIRECTORY_ENTRY_SIZE = 12;
 const NO_NAME = 0xffffffff;
@@ -964,7 +964,7 @@ export function decodePortableModule(bytecode) {
   invariant(bytecode.length <= MAX_MODULE_BYTES,
     `Module size exceeds the sandbox limit of ${MAX_MODULE_BYTES} bytes.`);
   const cursor = new Cursor(bytecode);
-  invariant(cursor.read(4, "magic number").equals(MAGIC), "Invalid JIMP bytecode magic.");
+  invariant(cursor.read(4, "magic number").equals(MAGIC), "Invalid AUREON bytecode magic.");
   const major = cursor.u16("format major version");
   const minor = cursor.u16("format minor version");
   invariant(major === FORMAT_VERSION.major && minor === FORMAT_VERSION.minor,

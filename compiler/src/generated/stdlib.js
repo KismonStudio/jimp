@@ -2,7 +2,7 @@
 
 export const STANDARD_LIBRARY = Object.freeze({
   "$schema": "./schema.json",
-  "name": "jimp-standard-library",
+  "name": "aureon-standard-library",
   "version": 1,
   "fallbackPolicy": {
     "selection": "link-time",
@@ -50,7 +50,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "VOID",
           "implementation": {
             "kind": "portable",
-            "source": "src/console.jimp"
+            "source": "src/console.aur"
           },
           "description": {
             "en": "Writes the message followed by one line-feed character through write.",
@@ -63,8 +63,8 @@ export const STANDARD_LIBRARY = Object.freeze({
       "specifier": "std:math/i64",
       "kind": "portable",
       "description": {
-        "en": "Deterministic helpers for signed 64-bit integers implemented in portable JIMP.",
-        "pt": "Funções determinísticas para inteiros de 64 bits com sinal implementadas em JIMP portátil."
+        "en": "Deterministic helpers for signed 64-bit integers implemented in portable AUREON.",
+        "pt": "Funções determinísticas para inteiros de 64 bits com sinal implementadas em AUREON portátil."
       },
       "exports": [
         {
@@ -79,7 +79,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/math/i64.jimp",
+            "source": "src/math/i64.aur",
             "optionalNative": {
               "capability": "std.math.i64.absolute"
             }
@@ -105,7 +105,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/math/i64.jimp",
+            "source": "src/math/i64.aur",
             "optionalNative": {
               "capability": "std.math.i64.minimum"
             }
@@ -131,7 +131,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/math/i64.jimp",
+            "source": "src/math/i64.aur",
             "optionalNative": {
               "capability": "std.math.i64.maximum"
             }
@@ -153,7 +153,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/math/i64.jimp",
+            "source": "src/math/i64.aur",
             "optionalNative": {
               "capability": "std.math.i64.sign"
             }
@@ -168,7 +168,7 @@ export const STANDARD_LIBRARY = Object.freeze({
     {
       "specifier": "std:option",
       "kind": "portable",
-      "source": "src/option.jimp",
+      "source": "src/option.aur",
       "description": {
         "en": "Generic optional values with exhaustive pattern matching.",
         "pt": "Valores opcionais genéricos com correspondência de padrões exaustiva."
@@ -205,7 +205,7 @@ export const STANDARD_LIBRARY = Object.freeze({
     {
       "specifier": "std:result",
       "kind": "portable",
-      "source": "src/result.jimp",
+      "source": "src/result.aur",
       "description": {
         "en": "Explicit nominal result values for recoverable string-producing operations.",
         "pt": "Valores nominais e explícitos de resultado para operações recuperáveis que produzem strings."
@@ -277,7 +277,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "StringResult",
           "implementation": {
             "kind": "portable",
-            "source": "src/result.jimp"
+            "source": "src/result.aur"
           },
           "description": {
             "en": "Creates a successful StringResult.",
@@ -296,7 +296,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "StringResult",
           "implementation": {
             "kind": "portable",
-            "source": "src/result.jimp"
+            "source": "src/result.aur"
           },
           "description": {
             "en": "Creates a failed StringResult with an empty fallback value.",
@@ -308,7 +308,7 @@ export const STANDARD_LIBRARY = Object.freeze({
     {
       "specifier": "std:text",
       "kind": "portable",
-      "source": "src/text.jimp",
+      "source": "src/text.aur",
       "description": {
         "en": "Portable Unicode-scalar text length, concatenation, indexed access, and slicing.",
         "pt": "Comprimento, concatenação, acesso indexado e recorte portáteis por valores escalares Unicode."
@@ -326,7 +326,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/text.jimp"
+            "source": "src/text.aur"
           },
           "description": {
             "en": "Returns the Unicode scalar-value count.",
@@ -349,7 +349,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "STRING",
           "implementation": {
             "kind": "portable",
-            "source": "src/text.jimp"
+            "source": "src/text.aur"
           },
           "description": {
             "en": "Concatenates two strings.",
@@ -372,7 +372,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "StringResult",
           "implementation": {
             "kind": "portable",
-            "source": "src/text.jimp"
+            "source": "src/text.aur"
           },
           "description": {
             "en": "Returns one Unicode scalar value or an explicit bounds error.",
@@ -399,7 +399,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "StringResult",
           "implementation": {
             "kind": "portable",
-            "source": "src/text.jimp"
+            "source": "src/text.aur"
           },
           "description": {
             "en": "Returns a half-open Unicode scalar range or an explicit bounds error.",
@@ -411,7 +411,7 @@ export const STANDARD_LIBRARY = Object.freeze({
     {
       "specifier": "std:collections/i64",
       "kind": "portable",
-      "source": "src/collections/i64.jimp",
+      "source": "src/collections/i64.aur",
       "description": {
         "en": "Portable search and recoverable replacement helpers for immutable I64 arrays.",
         "pt": "Operações portáteis de busca e substituição recuperável para arrays imutáveis de I64."
@@ -455,7 +455,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "BOOL",
           "implementation": {
             "kind": "portable",
-            "source": "src/collections/i64.jimp"
+            "source": "src/collections/i64.aur"
           },
           "description": {
             "en": "Returns whether the array contains the expected value.",
@@ -478,7 +478,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "I64",
           "implementation": {
             "kind": "portable",
-            "source": "src/collections/i64.jimp"
+            "source": "src/collections/i64.aur"
           },
           "description": {
             "en": "Returns the first index or -1 when absent.",
@@ -505,7 +505,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "I64ArrayResult",
           "implementation": {
             "kind": "portable",
-            "source": "src/collections/i64.jimp"
+            "source": "src/collections/i64.aur"
           },
           "description": {
             "en": "Returns an updated array or an explicit bounds error while preserving the input.",
@@ -584,7 +584,7 @@ export const STANDARD_LIBRARY = Object.freeze({
     {
       "specifier": "std:json",
       "kind": "portable",
-      "source": "src/json.jimp",
+      "source": "src/json.aur",
       "description": {
         "en": "Typed recoverable JSON parsing and deterministic serialization over validated documents.",
         "pt": "Análise recuperável tipada de JSON e serialização determinística de documentos validados."
@@ -638,7 +638,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "JsonResult",
           "implementation": {
             "kind": "portable",
-            "source": "src/json.jimp"
+            "source": "src/json.aur"
           },
           "description": {
             "en": "Validates and canonicalizes JSON without throwing a language-level exception.",
@@ -657,7 +657,7 @@ export const STANDARD_LIBRARY = Object.freeze({
           "returnType": "StringResult",
           "implementation": {
             "kind": "portable",
-            "source": "src/json.jimp"
+            "source": "src/json.aur"
           },
           "description": {
             "en": "Serializes a document or reports an explicit validation error.",
@@ -670,11 +670,11 @@ export const STANDARD_LIBRARY = Object.freeze({
 });
 
 export const STANDARD_LIBRARY_SOURCES = Object.freeze({
-  "src/console.jimp": "export function writeLine(message: STRING): VOID {\n  print message;\n}\n",
-  "src/math/i64.jimp": "export function absolute(value: I64): I64 {\n  if value < 0 {\n    return -value;\n  } else {\n    return value;\n  }\n}\n\nexport function minimum(left: I64, right: I64): I64 {\n  if left <= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function maximum(left: I64, right: I64): I64 {\n  if left >= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function sign(value: I64): I64 {\n  if value < 0 {\n    return -1;\n  } else {\n    if value > 0 {\n      return 1;\n    } else {\n      return 0;\n    }\n  }\n}\n",
-  "src/option.jimp": "export variant Option<T> {\n  None,\n  Some(value: T),\n}\n",
-  "src/result.jimp": "export variant Result<T, E> {\n  Ok(value: T),\n  Error(error: E),\n}\n\nexport record StringResult {\n  ok: BOOL,\n  value: STRING,\n  error: STRING,\n}\n\nexport function stringSuccess(value: STRING): StringResult {\n  return StringResult { ok: true, value: value, error: \"\" };\n}\n\nexport function stringFailure(error: STRING): StringResult {\n  return StringResult { ok: false, value: \"\", error: error };\n}\n",
-  "src/text.jimp": "import { StringResult, stringSuccess, stringFailure } from \"std:result\";\n\nexport function length(value: STRING): I64 {\n  return value.length;\n}\n\nexport function concat(left: STRING, right: STRING): STRING {\n  return left + right;\n}\n\nexport function at(value: STRING, index: I64): StringResult {\n  if index < 0 || index >= value.length {\n    return stringFailure(\"String index is out of bounds.\");\n  }\n  return stringSuccess(value[index]);\n}\n\nexport function slice(value: STRING, start: I64, end: I64): StringResult {\n  if start < 0 || end < start || end > value.length {\n    return stringFailure(\"String slice is out of bounds.\");\n  }\n  return stringSuccess(value[start:end]);\n}\n",
-  "src/collections/i64.jimp": "export record I64ArrayResult {\n  ok: BOOL,\n  value: [I64],\n  error: STRING,\n}\n\nexport function contains(values: [I64], expected: I64): BOOL {\n  var index = 0;\n  while index < values.length {\n    if values[index] == expected {\n      return true;\n    }\n    index = index + 1;\n  }\n  return false;\n}\n\nexport function indexOf(values: [I64], expected: I64): I64 {\n  var index = 0;\n  while index < values.length {\n    if values[index] == expected {\n      return index;\n    }\n    index = index + 1;\n  }\n  return -1;\n}\n\nexport function replace(values: [I64], index: I64, replacement: I64): I64ArrayResult {\n  if index < 0 || index >= values.length {\n    return I64ArrayResult { ok: false, value: values, error: \"Array index is out of bounds.\" };\n  }\n  return I64ArrayResult { ok: true, value: values with [index] = replacement, error: \"\" };\n}\n",
-  "src/json.jimp": "import { StringResult, stringSuccess, stringFailure } from \"std:result\";\nimport { validate, canonicalize, diagnostic } from \"std:json/support\";\n\nexport record JsonDocument {\n  text: STRING,\n}\n\nexport record JsonResult {\n  ok: BOOL,\n  value: JsonDocument,\n  error: STRING,\n}\n\nexport function parse(source: STRING): JsonResult {\n  if validate(source) {\n    return JsonResult { ok: true, value: JsonDocument { text: canonicalize(source) }, error: \"\" };\n  }\n  return JsonResult { ok: false, value: JsonDocument { text: \"null\" }, error: diagnostic(source) };\n}\n\nexport function stringify(document: JsonDocument): StringResult {\n  if validate(document.text) {\n    return stringSuccess(canonicalize(document.text));\n  }\n  return stringFailure(diagnostic(document.text));\n}\n"
+  "src/console.aur": "export function writeLine(message: STRING): VOID {\n  print message;\n}\n",
+  "src/math/i64.aur": "export function absolute(value: I64): I64 {\n  if value < 0 {\n    return -value;\n  } else {\n    return value;\n  }\n}\n\nexport function minimum(left: I64, right: I64): I64 {\n  if left <= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function maximum(left: I64, right: I64): I64 {\n  if left >= right {\n    return left;\n  } else {\n    return right;\n  }\n}\n\nexport function sign(value: I64): I64 {\n  if value < 0 {\n    return -1;\n  } else {\n    if value > 0 {\n      return 1;\n    } else {\n      return 0;\n    }\n  }\n}\n",
+  "src/option.aur": "export variant Option<T> {\n  None,\n  Some(value: T),\n}\n",
+  "src/result.aur": "export variant Result<T, E> {\n  Ok(value: T),\n  Error(error: E),\n}\n\nexport record StringResult {\n  ok: BOOL,\n  value: STRING,\n  error: STRING,\n}\n\nexport function stringSuccess(value: STRING): StringResult {\n  return StringResult { ok: true, value: value, error: \"\" };\n}\n\nexport function stringFailure(error: STRING): StringResult {\n  return StringResult { ok: false, value: \"\", error: error };\n}\n",
+  "src/text.aur": "import { StringResult, stringSuccess, stringFailure } from \"std:result\";\n\nexport function length(value: STRING): I64 {\n  return value.length;\n}\n\nexport function concat(left: STRING, right: STRING): STRING {\n  return left + right;\n}\n\nexport function at(value: STRING, index: I64): StringResult {\n  if index < 0 || index >= value.length {\n    return stringFailure(\"String index is out of bounds.\");\n  }\n  return stringSuccess(value[index]);\n}\n\nexport function slice(value: STRING, start: I64, end: I64): StringResult {\n  if start < 0 || end < start || end > value.length {\n    return stringFailure(\"String slice is out of bounds.\");\n  }\n  return stringSuccess(value[start:end]);\n}\n",
+  "src/collections/i64.aur": "export record I64ArrayResult {\n  ok: BOOL,\n  value: [I64],\n  error: STRING,\n}\n\nexport function contains(values: [I64], expected: I64): BOOL {\n  var index = 0;\n  while index < values.length {\n    if values[index] == expected {\n      return true;\n    }\n    index = index + 1;\n  }\n  return false;\n}\n\nexport function indexOf(values: [I64], expected: I64): I64 {\n  var index = 0;\n  while index < values.length {\n    if values[index] == expected {\n      return index;\n    }\n    index = index + 1;\n  }\n  return -1;\n}\n\nexport function replace(values: [I64], index: I64, replacement: I64): I64ArrayResult {\n  if index < 0 || index >= values.length {\n    return I64ArrayResult { ok: false, value: values, error: \"Array index is out of bounds.\" };\n  }\n  return I64ArrayResult { ok: true, value: values with [index] = replacement, error: \"\" };\n}\n",
+  "src/json.aur": "import { StringResult, stringSuccess, stringFailure } from \"std:result\";\nimport { validate, canonicalize, diagnostic } from \"std:json/support\";\n\nexport record JsonDocument {\n  text: STRING,\n}\n\nexport record JsonResult {\n  ok: BOOL,\n  value: JsonDocument,\n  error: STRING,\n}\n\nexport function parse(source: STRING): JsonResult {\n  if validate(source) {\n    return JsonResult { ok: true, value: JsonDocument { text: canonicalize(source) }, error: \"\" };\n  }\n  return JsonResult { ok: false, value: JsonDocument { text: \"null\" }, error: diagnostic(source) };\n}\n\nexport function stringify(document: JsonDocument): StringResult {\n  if validate(document.text) {\n    return stringSuccess(canonicalize(document.text));\n  }\n  return stringFailure(diagnostic(document.text));\n}\n"
 });

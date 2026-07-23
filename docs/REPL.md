@@ -1,14 +1,14 @@
-# JIMP REPL
+# AUREON REPL
 
-The JIMP REPL is a source-buffer session. It deliberately does not preserve hidden runtime values, VM frames, or host handles between executions.
+The AUREON REPL is a source-buffer session. It deliberately does not preserve hidden runtime values, VM frames, or host handles between executions.
 
-Each entered source line remains in an ordered buffer. `:run` writes a temporary source module, then invokes the same project resolver, parser, analyzer, linker, bytecode encoder, runtime handshake, independent runtime validation, capability policy, diagnostics, and sandbox used by `jimp run`. The complete buffer is recompiled and executed from a fresh VM every time, so observable effects repeat only when the user explicitly enters `:run` again.
+Each entered source line remains in an ordered buffer. `:run` writes a temporary source module, then invokes the same project resolver, parser, analyzer, linker, bytecode encoder, runtime handshake, independent runtime validation, capability policy, diagnostics, and sandbox used by `aureon run`. The complete buffer is recompiled and executed from a fresh VM every time, so observable effects repeat only when the user explicitly enters `:run` again.
 
 ```powershell
-jimp repl
+aureon repl
 ```
 
-Project and runtime options accepted by `jimp run` are also accepted by the REPL. A project root controls relative module resolution and the containment boundary.
+Project and runtime options accepted by `aureon run` are also accepted by the REPL. A project root controls relative module resolution and the containment boundary.
 
 ## Commands
 

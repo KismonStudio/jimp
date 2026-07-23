@@ -1,31 +1,31 @@
-# JIMP Toolchain Guide
+# AUREON Toolchain Guide
 
 This document describes the implemented P6 command-line toolchain. Language, bytecode, sandbox, standard-library, and target-profile contracts remain under `docs/specs`.
 
 ## Installation from a source package
 
-JIMP source packages distribute the JavaScript compiler and Rust runtime source together. Platform release artifacts additionally bundle a compatible native runtime as documented in [RELEASING.md](RELEASING.md).
+AUREON source packages distribute the JavaScript compiler and Rust runtime source together. Platform release artifacts additionally bundle a compatible native runtime as documented in [RELEASING.md](RELEASING.md).
 
 ```powershell
 npm install
 npm run build:runtime
 npm link
-jimp --version
+aureon --version
 ```
 
-`npm run build:runtime` creates the optimized reference runtime in the package-controlled `runtime/target/release` directory. `npm link` exposes the `jimp` executable through npm's normal binary-link mechanism.
+`npm run build:runtime` creates the optimized reference runtime in the package-controlled `runtime/target/release` directory. `npm link` exposes the `aureon` executable through npm's normal binary-link mechanism.
 
 ## Commands
 
 ```text
-jimp run <input.jimp> [project options] [--runtime=<path>] [--error-format=json]
-jimp compile <input.jimp> [-o <output.jbc>] [project options] [--error-format=json]
-jimp check <input.jimp|input.jbc> [project options] [--runtime=<path>] [--error-format=json]
-jimp inspect <input.jbc> [--json] [--error-format=json]
-jimp init <directory> [--error-format=json]
-jimp repl [project options] [--runtime=<path>] [--error-format=json]
-jimp --version
-jimp --help
+aureon run <input.aur> [project options] [--runtime=<path>] [--error-format=json]
+aureon compile <input.aur> [-o <output.abc>] [project options] [--error-format=json]
+aureon check <input.aur|input.abc> [project options] [--runtime=<path>] [--error-format=json]
+aureon inspect <input.abc> [--json] [--error-format=json]
+aureon init <directory> [--error-format=json]
+aureon repl [project options] [--runtime=<path>] [--error-format=json]
+aureon --version
+aureon --help
 ```
 
 Project options are:
@@ -38,10 +38,10 @@ Project options are:
 
 ## Run lifecycle
 
-`jimp run` performs these steps in order:
+`aureon run` performs these steps in order:
 
 1. Resolve, analyze, and link the complete source project.
-2. Write the resulting `.jbc` into a uniquely created system temporary directory.
+2. Write the resulting `.abc` into a uniquely created system temporary directory.
 3. Discover a runtime from an explicit or package-controlled location.
 4. Verify the runtime version handshake.
 5. Execute with the selected target profile and error format.
@@ -51,29 +51,29 @@ A compilation failure occurs before runtime discovery or execution. The runtime 
 
 ## Check lifecycle
 
-For a `.jimp` input, `jimp check` compiles to temporary bytecode and invokes runtime validation without executing the entry function. For a `.jbc` input, it validates the existing bytecode directly. Project-root and standard-library compiler options are invalid for an existing `.jbc`; a target profile remains valid and may be required by native-targeted bytecode.
+For a `.aur` input, `aureon check` compiles to temporary bytecode and invokes runtime validation without executing the entry function. For a `.abc` input, it validates the existing bytecode directly. Project-root and standard-library compiler options are invalid for an existing `.abc`; a target profile remains valid and may be required by native-targeted bytecode.
 
 ## Runtime discovery and compatibility
 
 The CLI checks runtime locations in this order:
 
 1. `--runtime=<path>`.
-2. The explicit `JIMP_RUNTIME` environment variable.
+2. The explicit `AUREON_RUNTIME` environment variable.
 3. The package-controlled `runtime/bin` location reserved for future release artifacts.
 4. The package-controlled release build.
 5. The package-controlled development build.
 
 It does not search the working directory, execute an arbitrary `PATH` match, invoke Cargo automatically, or download a runtime. A missing runtime produces an actionable I/O diagnostic.
 
-Before `run` or `check`, the CLI invokes only the selected runtime's `--version` handshake. Compiler version `0.1.0` requires exactly `jimp-runtime 0.1.0 protocol 1`. A mismatch is rejected before bytecode execution.
+Before `run` or `check`, the CLI invokes only the selected runtime's `--version` handshake. Compiler version `0.1.0` requires exactly `aureon-runtime 0.1.0 protocol 1`. A mismatch is rejected before bytecode execution.
 
 ## Project initialization
 
-`jimp init <directory>` creates this minimal layout:
+`aureon init <directory>` creates this minimal layout:
 
 ```text
 <directory>/
-  main.jimp
+  main.aur
   README.md
 ```
 
@@ -81,7 +81,7 @@ The target directory must not exist. Initialization never merges with or overwri
 
 ## Interactive source buffer
 
-`jimp repl` retains entered source declarations and statements as text, not as hidden runtime values. `:run` recompiles and executes the complete buffer through the normal pipeline in a fresh VM. See [REPL.md](REPL.md) for commands and the explicit state model.
+`aureon repl` retains entered source declarations and statements as text, not as hidden runtime values. `:run` recompiles and executes the complete buffer through the normal pipeline in a fresh VM. See [REPL.md](REPL.md) for commands and the explicit state model.
 
 ## Conformance and releases
 

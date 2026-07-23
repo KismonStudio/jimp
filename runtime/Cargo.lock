@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "jimp-runtime"
+name = "aureon-runtime"
 version = "0.1.0"

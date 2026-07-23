@@ -1285,7 +1285,7 @@ mod tests {
                     Instruction::Halt,
                 ],
             }],
-            debug_sources: vec!["lib/math.jimp".into()],
+            debug_sources: vec!["lib/math.aur".into()],
             source_locations: vec![vec![
                 Some(SourceLocation {
                     source_index: Some(0),
@@ -1311,7 +1311,7 @@ mod tests {
 
         assert_eq!(error.message(), "I64 division by zero.");
         assert_eq!(error.source_line, Some(9));
-        assert_eq!(error.source_module_id.as_deref(), Some("lib/math.jimp"));
+        assert_eq!(error.source_module_id.as_deref(), Some("lib/math.aur"));
     }
 
     #[test]

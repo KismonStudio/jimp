@@ -1,4 +1,4 @@
-# Resultados Recuperáveis JIMP v1
+# Resultados Recuperáveis AUREON v1
 
 [Versão em inglês](../EN/RESULTS.md)
 
@@ -22,7 +22,7 @@ Construtores devem inicializar todos os campos. Uma função que retorna resulta
 
 Indexação e intervalos de STRING contam valores escalares Unicode, não bytes UTF-8 nem grafemas:
 
-```jimp
+```aureon
 let value = "Olá"
 let scalar = value[2]
 let prefix = value[0:2]
@@ -34,7 +34,7 @@ let count = value.length
 
 ## Primitivas de coleções
 
-Arrays mantêm comprimento, indexação e atualização imutável do P7.3. `std:collections/i64` adiciona `contains`, `indexOf` e `replace` recuperável em JIMP portátil. Uma substituição inválida retorna `I64ArrayResult { ok: false, value: original, error: ... }`; nenhuma atualização parcial ocorre.
+Arrays mantêm comprimento, indexação e atualização imutável do P7.3. `std:collections/i64` adiciona `contains`, `indexOf` e `replace` recuperável em AUREON portátil. Uma substituição inválida retorna `I64ArrayResult { ok: false, value: original, error: ... }`; nenhuma atualização parcial ocorre.
 
 ## Representação portátil e limites
 

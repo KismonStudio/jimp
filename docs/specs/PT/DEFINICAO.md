@@ -1,8 +1,8 @@
-# JIMP — Definição Oficial do Projeto (v1)
+# AUREON — Definição Oficial do Projeto (v1)
 
 ## Visão Geral
 
-**JIMP** é uma linguagem de programação compilada para um **bytecode portátil**, projetada para separar completamente o processo de **compilação** do processo de **execução**.
+**AUREON** é uma linguagem de programação compilada para um **bytecode portátil**, projetada para separar completamente o processo de **compilação** do processo de **execução**.
 
 Sua arquitetura é baseada em dois componentes independentes:
 
@@ -15,13 +15,13 @@ O runtime não possui conhecimento da linguagem de alto nível nem de conceitos 
 
 # Filosofia
 
-O princípio fundamental do JIMP é:
+O princípio fundamental do AUREON é:
 
 > **O compilador é inteligente. O runtime é simples.**
 
 Toda a complexidade da linguagem existe apenas durante a compilação.
 
-Após compilado, resta apenas um programa em bytecode executável por qualquer implementação compatível da Máquina Virtual JIMP.
+Após compilado, resta apenas um programa em bytecode executável por qualquer implementação compatível da Máquina Virtual AUREON.
 
 ***
 
@@ -44,7 +44,7 @@ O projeto possui os seguintes objetivos:
 
 # Não é objetivo
 
-O JIMP **não pretende**:
+O AUREON **não pretende**:
 
 - Substituir JavaScript.
 - Substituir C.
@@ -59,7 +59,7 @@ O JIMP **não pretende**:
 # Arquitetura
 
 ```text
-Código JIMP
+Código AUREON
       │
       ▼
 Compilador Oficial (JavaScript)
@@ -83,10 +83,10 @@ IR
 Otimizações
       │
       ▼
-Bytecode (.jbc)
+Bytecode (.abc)
       │
       ▼
-Runtime JIMP
+Runtime AUREON
       │
       ▼
 Host Environment
@@ -115,7 +115,7 @@ A linguagem não define como um programa é executado.
 
 ## 2. Bytecode
 
-O Bytecode JIMP é um formato binário portátil.
+O Bytecode AUREON é um formato binário portátil.
 
 Ele define:
 
@@ -168,7 +168,7 @@ Cada ambiente implementa apenas os recursos que desejar oferecer.
 # Organização do Projeto
 
 ```text
-JIMP
+AUREON
 ├── Linguagem
 ├── Compilador
 ├── Bytecode
@@ -238,7 +238,7 @@ Código Fonte
 Compilador
       │
       ▼
-programa.jbc
+programa.abc
       │
       ▼
 Runtime
@@ -341,7 +341,7 @@ O objetivo é impedir a execução de bytecode inválido ou incompatível.
 
 # Independência
 
-O JIMP pode ser utilizado para:
+O AUREON pode ser utilizado para:
 
 - Aplicações CLI
 - Automação
@@ -359,7 +359,7 @@ Sem depender de qualquer framework específico.
 
 # Integrações
 
-Projetos externos podem integrar o JIMP implementando um Host.
+Projetos externos podem integrar o AUREON implementando um Host.
 
 Exemplos:
 
@@ -380,19 +380,19 @@ Cada Host fornece suas próprias APIs.
 
 # Relação com a Kismon Engine
 
-A **Kismon Engine não faz parte do núcleo do JIMP**.
+A **Kismon Engine não faz parte do núcleo do AUREON**.
 
 Ela poderá oferecer um Host próprio contendo bibliotecas específicas.
 
 Exemplo:
 
-```jimp
+```aureon
 use kismon.entity
 use kismon.physics
 use kismon.audio
 ```
 
-Esses módulos pertencem à integração da Kismon, e não ao JIMP.
+Esses módulos pertencem à integração da Kismon, e não ao AUREON.
 
 ***
 
@@ -400,7 +400,7 @@ Esses módulos pertencem à integração da Kismon, e não ao JIMP.
 
 O projeto é distribuído em dois componentes principais.
 
-## JIMP CLI
+## AUREON CLI
 
 Responsável por:
 
@@ -409,7 +409,7 @@ Responsável por:
 - Gerar bytecode
 - Executar ferramentas auxiliares
 
-## JIMP Runtime
+## AUREON Runtime
 
 Responsável por:
 
@@ -438,20 +438,20 @@ O núcleo do projeto prioriza:
 
 # Missão
 
-> Criar uma linguagem de programação moderna baseada em bytecode portátil, com uma máquina virtual simples, especificação aberta e arquitetura desacoplada, permitindo que um mesmo programa seja executado em qualquer ambiente que implemente o Runtime JIMP e sua Host ABI, independentemente da linguagem utilizada para implementar esse runtime.
+> Criar uma linguagem de programação moderna baseada em bytecode portátil, com uma máquina virtual simples, especificação aberta e arquitetura desacoplada, permitindo que um mesmo programa seja executado em qualquer ambiente que implemente o Runtime AUREON e sua Host ABI, independentemente da linguagem utilizada para implementar esse runtime.
 
 ***
 
 # Resumo da Arquitetura
 
 ```text
-              Código JIMP
+              Código AUREON
                     │
                     ▼
       Compilador Oficial (JavaScript)
                     │
                     ▼
-            Bytecode Portátil (.jbc)
+            Bytecode Portátil (.abc)
                     │
      ┌──────────────┼──────────────┐
      ▼              ▼              ▼

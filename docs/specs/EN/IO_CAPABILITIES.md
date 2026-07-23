@@ -1,4 +1,4 @@
-# JIMP File and Network Capability Design v1
+# AUREON File and Network Capability Design v1
 
 [Portuguese version](../PT/IO_CAPABILITIES.md)
 

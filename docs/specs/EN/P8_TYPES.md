@@ -44,6 +44,6 @@ Complete cross-platform conformance, malformed-bytecode, resource-limit, package
 
 ## Delivery constraints
 
-P8.5, P8.6, and P8.7 remain unavailable until implemented. No bytecode version change was required for P8.1–P8.4 because their compiler lowering uses the existing verified immutable-heap and control-flow instructions in `.jbc` 2.9.
+P8.5, P8.6, and P8.7 remain unavailable until implemented. No bytecode version change was required for P8.1–P8.4 because their compiler lowering uses the existing verified immutable-heap and control-flow instructions in `.abc` 2.9.
 
 P8 does not add asynchronous execution, filesystem or network authority, packages, runtime reflection, exceptions, implicit nullability, or domain-specific VM instructions.

@@ -17,9 +17,9 @@ import {
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const runtimeManifest = join(repositoryRoot, "runtime", "Cargo.toml");
 const compilerCli = join(repositoryRoot, "compiler", "src", "cli.js");
-const publicCli = join(repositoryRoot, "bin", "jimp.js");
+const publicCli = join(repositoryRoot, "bin", "aureon.js");
 const portableMathSource = readFileSync(
-  join(repositoryRoot, "stdlib", "src", "math", "i64.jimp"),
+  join(repositoryRoot, "stdlib", "src", "math", "i64.aur"),
   "utf8",
 ).replace(/^(\s*)export\s+(?=function\b)/gm, "$1");
 const runtimeBinary = join(
@@ -27,14 +27,14 @@ const runtimeBinary = join(
   "runtime",
   "target",
   "debug",
-  process.platform === "win32" ? "jimp-runtime.exe" : "jimp-runtime",
+  process.platform === "win32" ? "aureon-runtime.exe" : "aureon-runtime",
 );
 
 let temporaryDirectory;
 let programCounter = 0;
 
 before(() => {
-  temporaryDirectory = mkdtempSync(join(tmpdir(), "jimp-integration-"));
+  temporaryDirectory = mkdtempSync(join(tmpdir(), "aureon-integration-"));
   const build = spawnSync(
     "cargo",
     ["build", "--quiet", "--manifest-path", runtimeManifest],
@@ -51,7 +51,7 @@ after(() => {
 
 function runBytecode(bytecode, runtimeArguments = []) {
   programCounter += 1;
-  const bytecodePath = join(temporaryDirectory, `program-${programCounter}.jbc`);
+  const bytecodePath = join(temporaryDirectory, `program-${programCounter}.abc`);
   writeFileSync(bytecodePath, bytecode);
   return spawnSync(runtimeBinary, [...runtimeArguments, bytecodePath], {
     cwd: repositoryRoot,
@@ -78,7 +78,7 @@ function assertStandardError(result, code, phase, status = 1) {
   const error = parseStandardError(result);
   assert.equal(result.status, status);
   assert.equal(result.stdout, "");
-  assert.equal(error.schema, "jimp-error-v1");
+  assert.equal(error.schema, "aureon-error-v1");
   assert.equal(error.code, code);
   assert.equal(error.phase, phase);
   return error;
@@ -260,18 +260,18 @@ test("executes independently verified generic heap bytecode in Rust", () => {
 
 test("reports compiler failures through the standard JSON error contract", () => {
   programCounter += 1;
-  const sourcePath = join(temporaryDirectory, `invalid-${programCounter}.jimp`);
+  const sourcePath = join(temporaryDirectory, `invalid-${programCounter}.aur`);
   writeFileSync(sourcePath, "var value = ;");
   const result = spawnSync(
     process.execPath,
     [compilerCli, "compile", sourcePath, "--error-format=json"],
     { cwd: repositoryRoot, encoding: "utf8", windowsHide: true },
   );
-  const error = assertStandardError(result, "JIMP-1001", "compile");
+  const error = assertStandardError(result, "AUREON-1001", "compile");
   assert.deepEqual(error.location, {
     kind: "source",
     line: 1,
-    moduleId: "invalid-" + programCounter + ".jimp",
+    moduleId: "invalid-" + programCounter + ".aur",
   });
 
   const usageResult = spawnSync(
@@ -279,18 +279,18 @@ test("reports compiler failures through the standard JSON error contract", () =>
     [compilerCli, "--error-format=json"],
     { cwd: repositoryRoot, encoding: "utf8", windowsHide: true },
   );
-  assertStandardError(usageResult, "JIMP-0001", "usage", 2);
+  assertStandardError(usageResult, "AUREON-0001", "usage", 2);
 });
 
 test("exposes the unified public command surface", () => {
   const version = runPublicCli(["--version"], temporaryDirectory);
   assert.equal(version.status, 0, version.stderr);
-  assert.equal(version.stdout.trim(), "jimp 0.1.0 runtime-protocol 1");
+  assert.equal(version.stdout.trim(), "aureon 0.1.0 runtime-protocol 1");
 
   const help = runPublicCli(["--help"], temporaryDirectory);
   assert.equal(help.status, 0, help.stderr);
   for (const command of ["run", "compile", "check", "inspect", "init"]) {
-    assert.match(help.stdout, new RegExp(`jimp ${command}`));
+    assert.match(help.stdout, new RegExp(`aureon ${command}`));
   }
 
   const runtimeVersion = spawnSync(runtimeBinary, ["--version"], {
@@ -299,26 +299,26 @@ test("exposes the unified public command surface", () => {
     windowsHide: true,
   });
   assert.equal(runtimeVersion.status, 0, runtimeVersion.stderr);
-  assert.equal(runtimeVersion.stdout.trim(), "jimp-runtime 0.1.0 protocol 1");
+  assert.equal(runtimeVersion.stdout.trim(), "aureon-runtime 0.1.0 protocol 1");
 });
 
 test("runs, checks, compiles, and inspects through public commands", () => {
-  const helloPath = join(repositoryRoot, "examples", "hello.jimp");
+  const helloPath = join(repositoryRoot, "examples", "hello.aur");
   const runResult = runPublicCli(["run", helloPath], temporaryDirectory);
   assert.equal(runResult.status, 0, runResult.stderr);
-  assert.equal(runResult.stdout.replaceAll("\r\n", "\n"), "Hello, JIMP!\n");
+  assert.equal(runResult.stdout.replaceAll("\r\n", "\n"), "Hello, AUREON!\n");
 
   const checkResult = runPublicCli(["check", helloPath, `--runtime=${runtimeBinary}`], temporaryDirectory);
   assert.equal(checkResult.status, 0, checkResult.stderr);
   assert.match(checkResult.stdout, /Portable module valid and execution-ready/);
-  assert.doesNotMatch(checkResult.stdout, /Hello, JIMP!/);
+  assert.doesNotMatch(checkResult.stdout, /Hello, AUREON!/);
 
-  const bytecodePath = join(temporaryDirectory, "public-command.jbc");
+  const bytecodePath = join(temporaryDirectory, "public-command.abc");
   const compileResult = runPublicCli(["compile", helloPath, "-o", bytecodePath], temporaryDirectory);
   assert.equal(compileResult.status, 0, compileResult.stderr);
   const inspectResult = runPublicCli(["inspect", bytecodePath], temporaryDirectory);
   assert.equal(inspectResult.status, 0, inspectResult.stderr);
-  assert.match(inspectResult.stdout, /JIMP Portable Bytecode/);
+  assert.match(inspectResult.stdout, /AUREON Portable Bytecode/);
   assert.match(inspectResult.stdout, /Build target: portable/);
 
   const bytecodeCheck = runPublicCli([
@@ -331,7 +331,7 @@ test("runs, checks, compiles, and inspects through public commands", () => {
 });
 
 test("does not start runtime discovery when source compilation fails", () => {
-  const invalidPath = join(temporaryDirectory, "invalid-before-runtime.jimp");
+  const invalidPath = join(temporaryDirectory, "invalid-before-runtime.aur");
   writeFileSync(invalidPath, "var value = ;");
   const result = runPublicCli([
     "run",
@@ -339,44 +339,44 @@ test("does not start runtime discovery when source compilation fails", () => {
     `--runtime=${join(temporaryDirectory, "missing-runtime")}`,
     "--error-format=json",
   ], temporaryDirectory);
-  const error = assertStandardError(result, "JIMP-1001", "compile");
-  assert.match(error.message, /invalid-before-runtime\.jimp/);
+  const error = assertStandardError(result, "AUREON-1001", "compile");
+  assert.match(error.message, /invalid-before-runtime\.aur/);
 });
 
 test("initializes a project without overwriting an existing directory", () => {
   const projectPath = join(temporaryDirectory, "initialized-project");
   const initialized = runPublicCli(["init", projectPath], temporaryDirectory);
   assert.equal(initialized.status, 0, initialized.stderr);
-  assert.match(initialized.stdout, /Initialized JIMP project/);
-  const originalSource = readFileSync(join(projectPath, "main.jimp"), "utf8");
+  assert.match(initialized.stdout, /Initialized AUREON project/);
+  const originalSource = readFileSync(join(projectPath, "main.aur"), "utf8");
 
   const executed = runPublicCli([
     "run",
-    "main.jimp",
+    "main.aur",
     `--runtime=${runtimeBinary}`,
   ], projectPath);
   assert.equal(executed.status, 0, executed.stderr);
-  assert.equal(executed.stdout.replaceAll("\r\n", "\n"), "Hello from JIMP!\n");
+  assert.equal(executed.stdout.replaceAll("\r\n", "\n"), "Hello from AUREON!\n");
 
   const repeated = runPublicCli(["init", projectPath, "--error-format=json"], temporaryDirectory);
-  assertStandardError(repeated, "JIMP-0002", "io");
-  assert.equal(readFileSync(join(projectPath, "main.jimp"), "utf8"), originalSource);
+  assertStandardError(repeated, "AUREON-0002", "io");
+  assert.equal(readFileSync(join(projectPath, "main.aur"), "utf8"), originalSource);
 });
 
 test("executes every reviewed public example", () => {
   const positiveExamples = [
-    "aggregates.jimp",
-    "conditionals.jimp",
-    "data.jimp",
-    "expressions.jimp",
-    "functions.jimp",
-    "hello.jimp",
-    "loops.jimp",
-    "p8-types.jimp",
-    "scalar-values.jimp",
-    "variables.jimp",
-    "modules/main.jimp",
-    "standard-library.jimp",
+    "aggregates.aur",
+    "conditionals.aur",
+    "data.aur",
+    "expressions.aur",
+    "functions.aur",
+    "hello.aur",
+    "loops.aur",
+    "p8-types.aur",
+    "scalar-values.aur",
+    "variables.aur",
+    "modules/main.aur",
+    "standard-library.aur",
   ];
   for (const example of positiveExamples) {
     const argumentsList = [
@@ -384,7 +384,7 @@ test("executes every reviewed public example", () => {
       join(repositoryRoot, "examples", ...example.split("/")),
       `--runtime=${runtimeBinary}`,
     ];
-    if (example === "modules/main.jimp") {
+    if (example === "modules/main.aur") {
       argumentsList.push(`--project-root=${join(repositoryRoot, "examples", "modules")}`);
     }
     const result = runPublicCli(argumentsList, temporaryDirectory);
@@ -393,7 +393,7 @@ test("executes every reviewed public example", () => {
 
   const nativeResult = runPublicCli([
     "run",
-    join(repositoryRoot, "examples", "standard-library.jimp"),
+    join(repositoryRoot, "examples", "standard-library.aur"),
     "--target-profile=reference-native-i64",
     `--runtime=${runtimeBinary}`,
   ], temporaryDirectory);
@@ -402,11 +402,11 @@ test("executes every reviewed public example", () => {
 
   const errorResult = runPublicCli([
     "run",
-    join(repositoryRoot, "examples", "errors", "division-by-zero.jimp"),
+    join(repositoryRoot, "examples", "errors", "division-by-zero.aur"),
     `--runtime=${runtimeBinary}`,
     "--error-format=json",
   ], temporaryDirectory);
-  const error = assertStandardError(errorResult, "JIMP-4001", "execute");
+  const error = assertStandardError(errorResult, "AUREON-4001", "execute");
   assert.match(error.message, /division by zero/i);
 });
 
@@ -432,7 +432,7 @@ test("runs a source-buffer REPL through the public compiler and runtime pipeline
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
   assert.equal(result.stdout.replaceAll("\r\n", "\n"), [
-    "JIMP REPL 0.1 - source-buffer session. Type :help for commands.",
+    "AUREON REPL 0.1 - source-buffer session. Type :help for commands.",
     '1: import { writeLine } from "std:console";',
     '2: writeLine("REPL ready");',
     "REPL ready",
@@ -450,10 +450,10 @@ test("classifies runtime decode, verify, resolve, and execute failures", () => {
   );
   const executeResult = runBytecode(compile("1 / 0;"), ["--error-format=json"]);
 
-  assertStandardError(decodeResult, "JIMP-2001", "decode");
-  assertStandardError(verifyResult, "JIMP-2002", "verify");
-  assertStandardError(resolveResult, "JIMP-3001", "resolve");
-  const executionError = assertStandardError(executeResult, "JIMP-4001", "execute");
+  assertStandardError(decodeResult, "AUREON-2001", "decode");
+  assertStandardError(verifyResult, "AUREON-2002", "verify");
+  assertStandardError(resolveResult, "AUREON-3001", "resolve");
+  const executionError = assertStandardError(executeResult, "AUREON-4001", "execute");
   assert.deepEqual(executionError.location, { kind: "source", line: 1 });
 
   const usageResult = spawnSync(runtimeBinary, ["--error-format=json"], {
@@ -461,7 +461,7 @@ test("classifies runtime decode, verify, resolve, and execute failures", () => {
     encoding: "utf8",
     windowsHide: true,
   });
-  assertStandardError(usageResult, "JIMP-0001", "usage", 2);
+  assertStandardError(usageResult, "AUREON-0001", "usage", 2);
 });
 
 test("executes portable scalar literal statements without host output", () => {
@@ -554,7 +554,7 @@ test("reports deterministic aggregate bounds failures", () => {
     compile("let values = [1];\nvalues[1];"),
     ["--error-format=json"],
   );
-  const error = assertStandardError(result, "JIMP-4001", "execute");
+  const error = assertStandardError(result, "AUREON-4001", "execute");
 
   assert.match(error.message, /HEAP_LOAD index 1 is out of bounds/);
   assert.deepEqual(error.location, { kind: "source", line: 2 });
@@ -573,7 +573,7 @@ test("executes Unicode scalar string primitives", () => {
 });
 
 test("executes typed recoverable standard text, collection, and JSON APIs", async () => {
-  const sourcePath = join(temporaryDirectory, "recoverable-data.jimp");
+  const sourcePath = join(temporaryDirectory, "recoverable-data.aur");
   writeFileSync(sourcePath, `
     import { at } from "std:text";
     import { replace } from "std:collections/i64";
@@ -703,10 +703,10 @@ test("executes statically linked source modules with module-qualified failures",
   const projectDirectory = join(temporaryDirectory, "linked-project");
   const libraryDirectory = join(projectDirectory, "lib");
   mkdirSync(libraryDirectory, { recursive: true });
-  const entryPath = join(projectDirectory, "main.jimp");
-  const libraryPath = join(libraryDirectory, "math.jimp");
+  const entryPath = join(projectDirectory, "main.aur");
+  const libraryPath = join(libraryDirectory, "math.aur");
   writeFileSync(entryPath, [
-    'import { divide, double } from "./lib/math.jimp";',
+    'import { divide, double } from "./lib/math.aur";',
     "if double(21) == 42 {",
     '  print "Modules executed";',
     "}",
@@ -725,7 +725,7 @@ test("executes statically linked source modules with module-qualified failures",
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.replaceAll("\r\n", "\n"), "Modules executed\n");
 
-  const cliOutputPath = join(projectDirectory, "linked.jbc");
+  const cliOutputPath = join(projectDirectory, "linked.abc");
   const compileResult = spawnSync(
     process.execPath,
     [compilerCli, "compile", entryPath, "-o", cliOutputPath],
@@ -737,16 +737,16 @@ test("executes statically linked source modules with module-qualified failures",
   assert.equal(cliResult.stdout.replaceAll("\r\n", "\n"), "Modules executed\n");
 
   writeFileSync(entryPath, [
-    'import { divide } from "./lib/math.jimp";',
+    'import { divide } from "./lib/math.aur";',
     "divide(1, 0);",
   ].join("\n"));
   const failingBytecode = await compileProject(entryPath);
   const failingResult = runBytecode(failingBytecode, ["--error-format=json"]);
-  const error = assertStandardError(failingResult, "JIMP-4001", "execute");
+  const error = assertStandardError(failingResult, "AUREON-4001", "execute");
   assert.deepEqual(error.location, {
     kind: "source",
     line: 5,
-    moduleId: "lib/math.jimp",
+    moduleId: "lib/math.aur",
   });
 });
 
@@ -793,7 +793,7 @@ test("executes the canonical portable i64 standard-library fallbacks", () => {
 test("executes standard-library imports with portable and native target parity", async () => {
   const projectDirectory = join(temporaryDirectory, "stdlib-target-project");
   mkdirSync(projectDirectory, { recursive: true });
-  const entryPath = join(projectDirectory, "main.jimp");
+  const entryPath = join(projectDirectory, "main.aur");
   writeFileSync(entryPath, [
     'import { absolute, maximum, minimum, sign } from "std:math/i64";',
     'import { writeLine } from "std:console";',
@@ -811,7 +811,7 @@ test("executes standard-library imports with portable and native target parity",
   assert.equal(portableResult.stdout.replaceAll("\r\n", "\n"), "Standard library executed\n");
   assert.equal(nativeResult.stdout.replaceAll("\r\n", "\n"), portableResult.stdout.replaceAll("\r\n", "\n"));
 
-  const cliOutputPath = join(projectDirectory, "native.jbc");
+  const cliOutputPath = join(projectDirectory, "native.abc");
   const compileResult = spawnSync(process.execPath, [
     compilerCli,
     "compile",
@@ -828,13 +828,13 @@ test("executes standard-library imports with portable and native target parity",
   assert.equal(cliResult.stdout.replaceAll("\r\n", "\n"), portableResult.stdout.replaceAll("\r\n", "\n"));
 
   const mismatched = runBytecode(native, ["--error-format=json"]);
-  assertStandardError(mismatched, "JIMP-3001", "resolve");
+  assertStandardError(mismatched, "AUREON-3001", "resolve");
 });
 
 test("preserves native and portable checked-i64 error parity", async () => {
   const projectDirectory = join(temporaryDirectory, "stdlib-overflow-project");
   mkdirSync(projectDirectory, { recursive: true });
-  const entryPath = join(projectDirectory, "main.jimp");
+  const entryPath = join(projectDirectory, "main.aur");
   writeFileSync(entryPath, [
     'import { absolute } from "std:math/i64";',
     "absolute(-9223372036854775808);",
@@ -844,8 +844,8 @@ test("preserves native and portable checked-i64 error parity", async () => {
     await compileProject(entryPath, { targetProfile: "reference-native-i64" }),
     ["--target-profile=reference-native-i64", "--error-format=json"],
   );
-  const portableError = assertStandardError(portable, "JIMP-4001", "execute");
-  const nativeError = assertStandardError(native, "JIMP-4001", "execute");
+  const portableError = assertStandardError(portable, "AUREON-4001", "execute");
+  const nativeError = assertStandardError(native, "AUREON-4001", "execute");
   assert.equal(nativeError.message, portableError.message);
 });
 
@@ -854,7 +854,7 @@ test("preserves checked i64 overflow in the portable absolute fallback", () => {
     absolute(-9223372036854775808);
   `);
   const result = runBytecode(bytecode, ["--error-format=json"]);
-  const error = assertStandardError(result, "JIMP-4001", "execute");
+  const error = assertStandardError(result, "AUREON-4001", "execute");
 
   assert.match(error.message, /overflow/i);
 });
@@ -958,31 +958,31 @@ test("rejects malformed debug metadata before execution", () => {
   const zeroLineDebug = findSection(zeroLine, 5);
   zeroLine.writeUInt32LE(0, zeroLineDebug.offset + 20);
   const decodeResult = runBytecode(zeroLine, ["--error-format=json"]);
-  assertStandardError(decodeResult, "JIMP-2001", "decode");
+  assertStandardError(decodeResult, "AUREON-2001", "decode");
 
   const unalignedOffset = compile("1;");
   const unalignedDebug = findSection(unalignedOffset, 5);
   unalignedOffset.writeUInt32LE(1, unalignedDebug.offset + 12);
   const verifyResult = runBytecode(unalignedOffset, ["--error-format=json"]);
-  assertStandardError(verifyResult, "JIMP-2002", "verify");
+  assertStandardError(verifyResult, "AUREON-2002", "verify");
 
   const invalidSource = compile("1;");
   const invalidSourceDebug = findSection(invalidSource, 5);
   invalidSource.writeUInt32LE(0, invalidSourceDebug.offset + 16);
   const sourceResult = runBytecode(invalidSource, ["--error-format=json"]);
-  assertStandardError(sourceResult, "JIMP-2001", "decode");
+  assertStandardError(sourceResult, "AUREON-2001", "decode");
 });
 
 test("rejects malformed build metadata before capability resolution", async () => {
   const projectDirectory = join(temporaryDirectory, "malformed-build-project");
   mkdirSync(projectDirectory, { recursive: true });
-  const entryPath = join(projectDirectory, "main.jimp");
+  const entryPath = join(projectDirectory, "main.aur");
   writeFileSync(entryPath, "1;");
   const bytecode = await compileProject(entryPath);
   const build = findSection(bytecode, 6);
   bytecode.writeUInt16LE(0, build.offset + 4);
   const result = runBytecode(bytecode, ["--error-format=json"]);
-  assertStandardError(result, "JIMP-2001", "decode");
+  assertStandardError(result, "AUREON-2001", "decode");
 });
 
 test("resolves portable host imports across JavaScript and Rust", () => {

@@ -11,14 +11,14 @@ function invariant(condition, message) {
 }
 
 function validateDefinition(definition) {
-  invariant(definition.name === "jimp-error", "unexpected error contract name");
+  invariant(definition.name === "aureon-error", "unexpected error contract name");
   invariant(definition.version === 1, "unsupported error contract version");
   invariant(Array.isArray(definition.codes) && definition.codes.length > 0, "codes must be a non-empty array");
   const names = new Set();
   const codes = new Set();
   for (const error of definition.codes) {
     invariant(/^[A-Z][A-Z0-9_]*$/.test(error.name), `invalid name ${error.name}`);
-    invariant(/^JIMP-[0-9]{4}$/.test(error.code), `invalid code ${error.code}`);
+    invariant(/^AUREON-[0-9]{4}$/.test(error.code), `invalid code ${error.code}`);
     invariant(!names.has(error.name), `duplicate name ${error.name}`);
     invariant(!codes.has(error.code), `duplicate code ${error.code}`);
     names.add(error.name);
@@ -57,7 +57,7 @@ function generateRust(definition) {
 
 function generateDocumentation(definition, language) {
   const english = language === "en";
-  const title = english ? "# JIMP Standard Error Format v1" : "# Formato Padrão de Erros JIMP v1";
+  const title = english ? "# AUREON Standard Error Format v1" : "# Formato Padrão de Erros AUREON v1";
   const alternate = english ? "[Portuguese version](../PT/ERRORS.md)" : "[Versão em inglês](../EN/ERRORS.md)";
   const warning = english
     ? "This file is generated from [`errors/v1.json`](../../../errors/v1.json). Do not edit it manually."
@@ -66,11 +66,11 @@ function generateDocumentation(definition, language) {
     ? "Compiler tools and runtimes report failures using a stable code, phase, message, and optional location. Human-readable output is the default. Passing `--error-format=json` emits one JSON object to standard error. Diagnostic text is not a compatibility boundary; `schema`, `code`, and `phase` are."
     : "As ferramentas do compilador e os runtimes relatam falhas usando código, fase, mensagem e localização opcional. A saída legível é o padrão. A opção `--error-format=json` emite um objeto JSON em uma linha na saída de erro. O texto do diagnóstico não é uma fronteira de compatibilidade; `schema`, `code` e `phase` são.";
   const human = english
-    ? "`JIMP error JIMP-1001 (compile) at source line 3: Undefined identifier value.`"
-    : "`JIMP error JIMP-1001 (compile) at source line 3: Identificador value não definido.`";
+    ? "`AUREON error AUREON-1001 (compile) at source line 3: Undefined identifier value.`"
+    : "`AUREON error AUREON-1001 (compile) at source line 3: Identificador value não definido.`";
   const locationText = english
-    ? "`location` is omitted when unavailable. Source locations use `{\"kind\":\"source\",\"line\":N}` and may include a portable `moduleId` when the frontend knows it. Bytecode locations use `{\"kind\":\"bytecode\",\"offset\":N}`. Line numbers are one-based; byte offsets are zero-based. Runtime source locations are populated from the optional `.jbc` debug section."
-    : "`location` é omitido quando indisponível. Localizações de fonte usam `{\"kind\":\"source\",\"line\":N}` e podem incluir um `moduleId` portátil quando ele é conhecido pelo frontend. Localizações de bytecode usam `{\"kind\":\"bytecode\",\"offset\":N}`. Linhas começam em um; offsets de bytecode começam em zero. Localizações de fonte do runtime são preenchidas pela seção opcional de debug do `.jbc`.";
+    ? "`location` is omitted when unavailable. Source locations use `{\"kind\":\"source\",\"line\":N}` and may include a portable `moduleId` when the frontend knows it. Bytecode locations use `{\"kind\":\"bytecode\",\"offset\":N}`. Line numbers are one-based; byte offsets are zero-based. Runtime source locations are populated from the optional `.abc` debug section."
+    : "`location` é omitido quando indisponível. Localizações de fonte usam `{\"kind\":\"source\",\"line\":N}` e podem incluir um `moduleId` portátil quando ele é conhecido pelo frontend. Localizações de bytecode usam `{\"kind\":\"bytecode\",\"offset\":N}`. Linhas começam em um; offsets de bytecode começam em zero. Localizações de fonte do runtime são preenchidas pela seção opcional de debug do `.abc`.";
   const tableHeader = english
     ? "| Code | Phase | CLI exit | Meaning |\n| --- | --- | ---: | --- |"
     : "| Código | Fase | Saída CLI | Significado |\n| --- | --- | ---: | --- |";
@@ -83,8 +83,8 @@ function generateDocumentation(definition, language) {
     ? "`schema`, `code`, `phase`, and `message` are required. `location` is optional. Consumers must ignore unknown fields so compatible metadata can be added later."
     : "`schema`, `code`, `phase` e `message` são obrigatórios. `location` é opcional. Consumidores devem ignorar campos desconhecidos para permitir a adição posterior de metadados compatíveis.";
   const contract = english
-    ? `{"schema":"jimp-error-v1","code":"JIMP-1001","phase":"compile","message":"Undefined identifier value.","location":{"kind":"source","line":3}}`
-    : `{"schema":"jimp-error-v1","code":"JIMP-1001","phase":"compile","message":"Identificador value não definido.","location":{"kind":"source","line":3}}`;
+    ? `{"schema":"aureon-error-v1","code":"AUREON-1001","phase":"compile","message":"Undefined identifier value.","location":{"kind":"source","line":3}}`
+    : `{"schema":"aureon-error-v1","code":"AUREON-1001","phase":"compile","message":"Identificador value não definido.","location":{"kind":"source","line":3}}`;
   return `${title}\n\n${alternate}\n\n> ${warning}\n\n${intro}\n\n${headings.contract}\n\n${contractText}\n\n${headings.human}\n\n${human}\n\n${headings.json}\n\n\`\`\`json\n${contract}\n\`\`\`\n\n${headings.locations}\n\n${locationText}\n\n${headings.codes}\n\n${tableHeader}\n${rows}\n`;
 }
 

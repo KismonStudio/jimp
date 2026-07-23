@@ -1,12 +1,12 @@
-# Releasing JIMP
+# Releasing AUREON
 
-JIMP release candidates are validated on 64-bit Windows and Linux by the same complete quality gate. A release tag must match the package version as `v<version>`.
+AUREON release candidates are validated on 64-bit Windows and Linux by the same complete quality gate. A release tag must match the package version as `v<version>`.
 
 ## Artifact model
 
-Each platform archive contains the JavaScript compiler, public CLI, documentation, conformance suite, and the matching Rust runtime under `runtime/bin`. Node.js 20 or later is required to compile source, inspect bytecode, run the REPL, and coordinate execution. The bundled Rust runtime can validate or execute an existing compatible `.jbc` without Node.js.
+Each platform archive contains the JavaScript compiler, public CLI, documentation, conformance suite, and the matching Rust runtime under `runtime/bin`. Node.js 20 or later is required to compile source, inspect bytecode, run the REPL, and coordinate execution. The bundled Rust runtime can validate or execute an existing compatible `.abc` without Node.js.
 
-Every archive is accompanied by a SHA-256 checksum file and a machine-readable `jimp-release-artifact-v1` manifest. Artifacts are platform-specific because they contain a native runtime. CI and release builds explicitly install Rust 1.94.1 and use the committed Cargo lockfile; reproducibility here means identical declared inputs and locked dependencies, not a claim of bit-for-bit identical native binaries across different operating-system images.
+Every archive is accompanied by a SHA-256 checksum file and a machine-readable `aureon-release-artifact-v1` manifest. Artifacts are platform-specific because they contain a native runtime. CI and release builds explicitly install Rust 1.94.1 and use the committed Cargo lockfile; reproducibility here means identical declared inputs and locked dependencies, not a claim of bit-for-bit identical native binaries across different operating-system images.
 
 ## Local candidate
 
@@ -14,7 +14,7 @@ Every archive is accompanied by a SHA-256 checksum file and a machine-readable `
 npm ci
 npm run check
 cargo build --locked --release --manifest-path runtime/Cargo.toml
-node tools/package-release.js --platform=windows-x64 --runtime=runtime/target/release/jimp-runtime.exe
+node tools/package-release.js --platform=windows-x64 --runtime=runtime/target/release/aureon-runtime.exe
 ```
 
 On Linux, use `--platform=linux-x64` and the runtime path without `.exe`.

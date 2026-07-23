@@ -1,18 +1,18 @@
-# JIMP Implementation Status
+# AUREON Implementation Status
 
 **Last updated:** July 22, 2026
 **Development version:** 0.1.0
 
-This document tracks the JIMP implementation. The conceptual project definition lives under `docs/specs`; this file records only executable work and the subsequent delivery plan.
+This document tracks the AUREON implementation. The conceptual project definition lives under `docs/specs`; this file records only executable work and the subsequent delivery plan.
 
 ## Current milestone: P8.1–P8.4 complete; P8.5–P10 planned
 
 The project has a complete, tested path from source code to execution:
 
 ```text
-.jimp source file
+.aur source file
   -> JavaScript compiler
-  -> portable .jbc 2.9 module with optional debug and build metadata
+  -> portable .abc 2.9 module with optional debug and build metadata
   -> complete verification, explicit target matching, and host-import resolution
   -> Rust runtime
   -> authorized host console and pure JSON support
@@ -20,13 +20,13 @@ The project has a complete, tested path from source code to execution:
 
 Supported example:
 
-```jimp
+```aureon
 let base = 2 + 3 * 4;
 var valid = base == 14;
 valid = valid && !false;
 var message = null;
 if valid {
-  message = "Hello, JIMP!";
+  message = "Hello, AUREON!";
 } else {
   message = "Unexpected";
 }
@@ -54,9 +54,9 @@ factorial(count);
 - [x] Repository split into a JavaScript compiler and Rust runtime.
 - [x] `npm test` script for compiler tests.
 - [x] Independent Cargo manifest for the runtime.
-- [x] Minimal example at `examples/hello.jimp`.
-- [x] Generated artifacts (`*.jbc` and `runtime/target/`) ignored by Git.
-- [x] Installable `jimp` binary entry with unified run, compile, check, inspect, init, help, and version commands.
+- [x] Minimal example at `examples/hello.aur`.
+- [x] Generated artifacts (`*.abc` and `runtime/target/`) ignored by Git.
+- [x] Installable `aureon` binary entry with unified run, compile, check, inspect, init, help, and version commands.
 - [x] Source-distributed reference runtime with an optimized build command and controlled discovery.
 - [x] Reviewed, publicly executable examples and a non-overwriting project template.
 - [x] Windows and Linux quality/release workflows with a pinned Rust toolchain and locked dependencies.
@@ -66,7 +66,7 @@ factorial(count);
 
 ### Compiler
 
-- [x] CLI: `node compiler/src/cli.js compile <input.jimp> -o <output.jbc>`.
+- [x] CLI: `node compiler/src/cli.js compile <input.aur> -o <output.abc>`.
 - [x] UTF-8 source-file reading.
 - [x] `//` line comments.
 - [x] `print` statement with a string literal.
@@ -92,13 +92,13 @@ factorial(count);
 - [x] Rejection of unreachable statements and incomplete non-`VOID` returns.
 - [x] Loop-safe type analysis that preserves outer-variable types.
 - [x] Early compiler diagnostics for function, parameter, variable-register, and symbol limits.
-- [x] Portable `.jbc` 2.6 emission with optional module-and-line debug mappings.
-- [x] `.jbc` inspection in readable and JSON formats.
+- [x] Portable `.abc` 2.6 emission with optional module-and-line debug mappings.
+- [x] `.abc` inspection in readable and JSON formats.
 - [x] Standard compiler and inspector diagnostics with stable phase codes, optional locations, and human or JSON output.
 
 ### Portable bytecode 2.6
 
-- [x] Header with `JIMP` magic number, format version, entry function, and section directory.
+- [x] Header with `AURN` magic number, format version, entry function, and section directory.
 - [x] Little-endian multibyte integer encoding.
 - [x] Scalar constant pool, typed host imports, function metadata, and code sections.
 - [x] Generic data movement, arithmetic, comparison, boolean, bidirectional-control-flow, function-call, host-call, return, and termination instructions.
@@ -111,7 +111,7 @@ factorial(count);
 - [x] Contract published in English and Portuguese under `docs/specs/EN` and `docs/specs/PT`.
 - [x] Formal v1 source syntax published in English and Portuguese.
 - [x] Machine-readable ISA source with generated JavaScript, Rust, and bilingual references.
-- [x] Legacy `.jbc` format 1 documented as historical and no longer accepted.
+- [x] Legacy `.abc` format 1 documented as historical and no longer accepted.
 
 ### Runtime
 
@@ -138,14 +138,14 @@ factorial(count);
 - [x] Logical runtime value-memory accounting across register writes, arguments, frames, and returns.
 - [x] File-size rejection before the runtime CLI reads an oversized module.
 - [x] Standard runtime diagnostics classified by I/O, decoding, verification, host resolution, and execution phase.
-- [x] Machine-readable `jimp-error-v1` output through `--error-format=json` with consistent CLI exit codes.
+- [x] Machine-readable `aureon-error-v1` output through `--error-format=json` with consistent CLI exit codes.
 - [x] Runtime execution errors enriched with the current mapped source line when available.
 
 ### Quality
 
 - [x] Compiler unit tests for bytecode emission and syntax errors.
 - [x] Runtime unit tests for valid bytecode and invalid magic numbers.
-- [x] Manual end-to-end test compiling and executing `examples/hello.jimp`.
+- [x] Manual end-to-end test compiling and executing `examples/hello.aur`.
 - [x] Bytecode inspector tests for decoding, formatting, count mismatches, and trailing data.
 - [x] Automated compiler-to-runtime integration tests for valid and corrupted bytecode.
 - [x] Cross-platform local validation command: `npm run check`.
@@ -174,11 +174,11 @@ factorial(count);
 
 1. [x] Specify the v1 value, virtual-register, module-section, and generic instruction models.
 2. [x] Create a machine-readable ISA definition as the source of truth for tooling.
-3. [x] Implement the constant pool and host import table in `.jbc`.
+3. [x] Implement the constant pool and host import table in `.abc`.
 4. [x] Implement typed host-import resolution and capability validation.
 5. [x] Replace the temporary `PRINT` opcode with generic `LOAD_CONST` and `HOST_CALL` instructions.
 
-Acceptance criterion: the same `.jbc` invokes a named console capability without the VM or instruction set containing a `PRINT` concept.
+Acceptance criterion: the same `.abc` invokes a named console capability without the VM or instruction set containing a `PRINT` concept.
 
 ### P2 — core language
 
@@ -201,11 +201,11 @@ Acceptance criterion: a program can declare values, calculate an expression, and
 ### P4 — modules and standard library
 
 1. [x] Specify imports, exports, and module resolution.
-   - The approved target is static, function-only source modules linked into one `.jbc`; compiler implementation remains subsequent work.
+   - The approved target is static, function-only source modules linked into one `.abc`; compiler implementation remains subsequent work.
 2. [x] Design the first standard library independent from the VM.
    - The generated v1 catalog starts with portable `std:math/i64` helpers and a data-defined `std:console` Host ABI bridge; shipping implementations remain subsequent work.
 3. [x] Define portable fallback implementations for optional native host capabilities.
-   - Link-time selection defaults to compiler-validated portable JIMP sources; native Host ABI replacements require an explicit compatible target profile and never trigger runtime probing.
+   - Link-time selection defaults to compiler-validated portable AUREON sources; native Host ABI replacements require an explicit compatible target profile and never trigger runtime probing.
 4. [x] Document the sandbox model and security guarantees.
    - The P4.4 contract defines the untrusted-bytecode threat model, pre-effect validation boundary, capability confinement, deterministic VM budgets, host obligations, deployment guidance, and explicit non-guarantees.
 
@@ -214,10 +214,10 @@ Acceptance criterion: a program can declare values, calculate an expression, and
 1. [x] Implement source-module syntax and semantic symbols.
    - Parse the P4.1 `import`, `export`, `from`, and `as` grammar, enforce import placement and function-only exports, and represent imported and exported bindings without changing existing single-file behavior.
    - Acceptance criterion: parser and analyzer tests cover valid declarations, aliases, visibility, name conflicts, exact call signatures, reserved words, and module-qualified source diagnostics.
-   - Implemented with resolver-supplied typed import descriptors and module-qualified `jimp-error-v1` source locations; direct single-source lowering remains available for embedders.
+   - Implemented with resolver-supplied typed import descriptors and module-qualified `aureon-error-v1` source locations; direct single-source lowering remains available for embedders.
 2. [x] Implement the secure project resolver and dependency graph loader.
-   - Resolve relative `.jimp` specifiers from a canonical project root, snapshot UTF-8 sources, enforce real-path containment, detect physical and case aliases, and reject dependency cycles before semantic lowering.
-   - Acceptance criterion: traversal, symlink escape, missing or non-regular files, invalid UTF-8, ambiguous identity, source mutation, and cycle tests emit no `.jbc`.
+   - Resolve relative `.aur` specifiers from a canonical project root, snapshot UTF-8 sources, enforce real-path containment, detect physical and case aliases, and reject dependency cycles before semantic lowering.
+   - Acceptance criterion: traversal, symlink escape, missing or non-regular files, invalid UTF-8, ambiguous identity, source mutation, and cycle tests emit no `.abc`.
    - Implemented with strict no-fallback specifier validation, canonical real paths, source digests and file identities, deterministic source-order traversal, and pre-link mutation verification.
 3. [x] Implement deterministic static linking and module-aware debug identity.
    - Bind imported functions to module-qualified export identities, assign functions in deterministic topological order, and lower cross-module calls to the existing generic `CALL` instruction.
@@ -233,27 +233,27 @@ Acceptance criterion: a program can declare values, calculate an expression, and
    - Acceptance criterion: portable and native-selected implementations pass semantic parity tests; denied, unavailable, or incompatible capabilities fail before execution; graph, linker, sandbox, inspector, and Rust runtime integration cases run in the complete quality gate.
    - Implemented with generated `portable` and `reference-native-i64` profiles, reproducible CLI options and build metadata, independent runtime profile/signature validation, explicit capability policy, native/portable parity tests, and checked-I64 error parity.
 
-P5 acceptance criterion: a multi-file entry program can import project functions and standard-library exports, compile reproducibly into one self-contained portable `.jbc`, execute in the Rust runtime, and report module-qualified failures. The VM gains no source resolver, dynamic module loader, hardcoded standard-library API, or native pointer mechanism.
+P5 acceptance criterion: a multi-file entry program can import project functions and standard-library exports, compile reproducibly into one self-contained portable `.abc`, execute in the Rust runtime, and report module-qualified failures. The VM gains no source resolver, dynamic module loader, hardcoded standard-library API, or native pointer mechanism.
 
 ### P6 — developer toolchain and distribution
 
 P6 turns the validated compiler/runtime foundation into a toolchain that can be installed and used through one consistent command surface. It does not expand the language semantics or weaken the existing compiler/runtime trust boundary.
 
-1. [x] Add a unified `jimp` command surface.
-   - Provide `jimp run`, `jimp compile`, `jimp inspect`, and `jimp check` with consistent option parsing, exit codes, human diagnostics, and `--error-format=json` behavior.
-   - `jimp run` must compile through the existing project resolver, execute the selected Rust runtime, forward standard-library and target-profile options explicitly, and clean up temporary output deterministically.
+1. [x] Add a unified `aureon` command surface.
+   - Provide `aureon run`, `aureon compile`, `aureon inspect`, and `aureon check` with consistent option parsing, exit codes, human diagnostics, and `--error-format=json` behavior.
+   - `aureon run` must compile through the existing project resolver, execute the selected Rust runtime, forward standard-library and target-profile options explicitly, and clean up temporary output deterministically.
    - Acceptance criterion: a source project can be compiled, inspected, validated, or executed without invoking Node.js and Cargo commands separately; compilation failures never start the runtime.
    - Implemented with public `run`, `compile`, `check`, `inspect`, `init`, `--help`, and `--version` commands; deterministic temporary cleanup; runtime option forwarding; and end-to-end structured-error tests.
 2. [x] Package the CLI and define runtime discovery.
    - Expose an installable CLI entry point, define the supported compiler/runtime version handshake, support an explicit runtime-path override, and reject missing or incompatible runtimes with an actionable diagnostic.
    - Installation must not perform an undeclared network download or silently select an arbitrary executable from the working directory.
-   - Acceptance criterion: a clean supported environment can install the toolchain and run `jimp --version` and `jimp run examples/hello.jimp` from outside the repository.
+   - Acceptance criterion: a clean supported environment can install the toolchain and run `aureon --version` and `aureon run examples/hello.aur` from outside the repository.
    - Implemented with an npm `bin` entry, source-package allowlist, explicit runtime override, controlled discovery order, exact version/protocol handshake, release-runtime build script, and an isolated package/install/build/run integration test.
 3. [x] Build a practical examples and project-start workflow.
    - Add reviewed examples for functions, loops, project modules, `std:console`, portable `std:math/i64`, native target selection, structured errors, and bytecode inspection.
-   - Add a minimal project template or `jimp init` only after its generated layout and overwrite policy are specified.
+   - Add a minimal project template or `aureon init` only after its generated layout and overwrite policy are specified.
    - Acceptance criterion: every documented example is executed by automated tests and uses only public commands and supported source syntax.
-   - Implemented with reviewed scalar, control-flow, module, standard-library, native-target, inspection, validation, and structured-error examples plus a non-overwriting `jimp init` template whose partial output is rolled back on failure.
+   - Implemented with reviewed scalar, control-flow, module, standard-library, native-target, inspection, validation, and structured-error examples plus a non-overwriting `aureon init` template whose partial output is rolled back on failure.
 4. [x] Add cross-platform CI and release artifacts.
    - Run the complete quality gate on supported Windows and Linux versions, build runtime artifacts reproducibly, and publish versioned checksums and release notes.
    - Define which components require Node.js at development time and which artifacts are sufficient for execution.
@@ -262,14 +262,14 @@ P6 turns the validated compiler/runtime foundation into a toolchain that can be 
 5. [x] Establish a versioned conformance suite and compatibility matrix.
    - Separate language, bytecode, Host ABI, standard-library, target-profile, and diagnostic fixtures so alternate implementations can validate one contract at a time.
    - Include positive programs, required rejection cases, deterministic output, sandbox limits, malformed metadata, capability denial, and compiler/runtime version mismatches.
-   - Acceptance criterion: a release artifact can run the conformance suite without repository-internal APIs, and the supported `.jbc`, standard-library, and target-profile versions are published explicitly.
-   - Implemented with a public-CLI-only `jimp-conformance-v1` runner, contract-separated fixtures, deterministic repetitions, negative pre-effect checks, published exact compatibility versions, and packaged execution support.
+   - Acceptance criterion: a release artifact can run the conformance suite without repository-internal APIs, and the supported `.abc`, standard-library, and target-profile versions are published explicitly.
+   - Implemented with a public-CLI-only `aureon-conformance-v1` runner, contract-separated fixtures, deterministic repetitions, negative pre-effect checks, published exact compatibility versions, and packaged execution support.
 6. [x] Evaluate an interactive REPL after the unified runner is stable.
    - Specify whether state persists as source declarations, linked modules, or runtime values before implementing the REPL.
    - Acceptance criterion: if approved, the REPL must use the same parser, analyzer, linker, runtime validation, capability policy, and error contracts as file execution.
    - Implemented as an explicit source-buffer session with `:run`, `:show`, `:undo`, `:clear`, `:help`, and exit commands; every run recompiles and executes through the existing project and runtime pipeline in a fresh VM, with no hidden runtime-value persistence.
 
-P6 acceptance criterion: a user can install a versioned JIMP toolchain, execute a documented project with one command, inspect or validate its `.jbc`, receive consistent diagnostics, and reproduce the same behavior on every supported platform.
+P6 acceptance criterion: a user can install a versioned AUREON toolchain, execute a documented project with one command, inspect or validate its `.abc`, receive consistent diagnostics, and reproduce the same behavior on every supported platform.
 
 ### P7 — aggregate data and expanded language capabilities
 
@@ -309,7 +309,7 @@ P7 expands the language only after P6 makes the current semantics easy to exerci
    - Design acceptance criterion: the contract covers denied, unavailable, incompatible, timed-out, oversized, and cancelled operations without escaping policy or resource limits, and permits hosts to omit the capabilities entirely.
    - Completed as a bilingual design contract for immutable `BYTES`, typed results, task/future scheduling, structured cancellation, timeout units, path and destination policy, deterministic fake hosts, and a required failure matrix. No file or network capability is enabled yet.
 
-P7 acceptance criterion: JIMP can safely represent and manipulate typed aggregate data, process JSON through the standard library, and express recoverable failures while retaining portable verification, deterministic resource bounds, static module linking, data-defined host capabilities, and a VM free of domain-specific APIs.
+P7 acceptance criterion: AUREON can safely represent and manipulate typed aggregate data, process JSON through the standard library, and express recoverable failures while retaining portable verification, deterministic resource bounds, static module linking, data-defined host capabilities, and a VM free of domain-specific APIs.
 
 ### P8 — expressive types and binary data
 
@@ -337,7 +337,7 @@ P8 provides the value-model prerequisites for structured JSON and safe external 
    - Publish final bilingual normative specifications, format consequences, malformed-bytecode fixtures, resource-limit cases, and package/install coverage.
    - Acceptance criterion: the complete P8 surface passes the full cross-platform quality gate and independent JavaScript/Rust verification.
 
-P8.1–P8.4 are implemented on `.jbc` 2.9 by lowering to the existing verified heap, call, equality, and control-flow instructions. P8 delivery continues with P8.5 through P8.7; a new pre-stable bytecode minor is introduced only when portable representation or generic instruction changes require it.
+P8.1–P8.4 are implemented on `.abc` 2.9 by lowering to the existing verified heap, call, equality, and control-flow instructions. P8 delivery continues with P8.5 through P8.7; a new pre-stable bytecode minor is introduced only when portable representation or generic instruction changes require it.
 
 ### P9 — asynchronous capability integrations
 
@@ -403,12 +403,12 @@ P10 manifest and local-workspace design may be researched during late P8/P9, but
 | ------------------------- | ------------------------------------------------------------------------------- |
 | Official compiler         | JavaScript (Node.js 20 or later for development)                                |
 | Official runtime          | Rust, with no Node.js dependency during execution                               |
-| Active format             | Portable binary `.jbc` 2.9, little-endian                                       |
+| Active format             | Portable binary `.abc` 2.9, little-endian                                       |
 | External interface        | Named, typed Host ABI imports authorized by capability policy                   |
 | Execution architecture    | Generic register ISA generated from `isa/v1.json`                               |
 | Portable VM specification | P3 functions, loops, sandbox, standard errors, and debug metadata implemented    |
-| Sandbox profile           | Generated `jimp-reference-sandbox` v1 with deterministic logical budgets        |
-| Error contract            | Generated `jimp-error-v1` codes with human and one-line JSON CLI output          |
+| Sandbox profile           | Generated `aureon-reference-sandbox` v1 with deterministic logical budgets        |
+| Error contract            | Generated `aureon-error-v1` codes with human and one-line JSON CLI output          |
 | Source modules            | Acyclic relative imports and named function/record exports, statically linked    |
 | Standard library          | Versioned `std:` catalog with validated portable fallbacks and target-only native replacements |
 | Distribution              | Platform archives with unified CLI, bundled runtime, checksums, and conformance suite |
@@ -428,11 +428,11 @@ P10 manifest and local-workspace design may be researched during late P8/P9, but
 ```powershell
 npm run check
 npm run build:runtime
-npm run jimp -- run examples/aggregates.jimp
-npm run jimp -- run examples/data.jimp
-npm run jimp -- compile examples/functions.jimp -o functions.jbc
-npm run jimp -- inspect functions.jbc
-npm run jimp -- check functions.jbc
+npm run aureon -- run examples/aggregates.aur
+npm run aureon -- run examples/data.aur
+npm run aureon -- compile examples/functions.aur -o functions.abc
+npm run aureon -- inspect functions.abc
+npm run aureon -- check functions.abc
 ```
 
 The aggregate run must print both value-semantics confirmations; the check command must validate without executing it.

@@ -128,7 +128,7 @@ function validatePortableSources(sourceRecords) {
 }
 
 function validateDefinition(definition) {
-  invariant(definition.name === "jimp-standard-library", "unexpected catalog name");
+  invariant(definition.name === "aureon-standard-library", "unexpected catalog name");
   invariant(definition.version === 1, "unsupported catalog version");
   invariant(definition.fallbackPolicy?.selection === "link-time",
     "fallback selection must be link-time");
@@ -151,7 +151,7 @@ function validateDefinition(definition) {
     invariant(["portable", "host-bridge", "hybrid"].includes(module.kind),
       `invalid kind for ${module.specifier}`);
     if (module.source !== undefined) {
-      invariant(/^src\/[a-z][a-z0-9]*(?:\/[a-z][a-z0-9]*)*\.jimp$/.test(module.source),
+      invariant(/^src\/[a-z][a-z0-9]*(?:\/[a-z][a-z0-9]*)*\.aur$/.test(module.source),
         `invalid module source for ${module.specifier}`);
     }
     invariant(module.description?.en && module.description?.pt,
@@ -249,7 +249,7 @@ function validateDefinition(definition) {
         invariant(implementation.capability === undefined,
           `portable export ${module.specifier}.${exported.name} cannot declare a host capability`);
         if (implementation.source !== undefined) {
-          invariant(/^src\/[a-z][a-z0-9]*(?:\/[a-z][a-z0-9]*)*\.jimp$/.test(implementation.source),
+          invariant(/^src\/[a-z][a-z0-9]*(?:\/[a-z][a-z0-9]*)*\.aur$/.test(implementation.source),
             `invalid portable source for ${module.specifier}.${exported.name}`);
         }
         if (implementation.optionalNative !== undefined) {
@@ -330,7 +330,7 @@ function signature(exported) {
 
 function generateDocumentation(definition, language) {
   const english = language === "en";
-  const title = english ? "# JIMP Standard Library v1" : "# Biblioteca Padrão JIMP v1";
+  const title = english ? "# AUREON Standard Library v1" : "# Biblioteca Padrão AUREON v1";
   const alternate = english
     ? "[Portuguese version](../PT/STDLIB.md)"
     : "[Versão em inglês](../EN/STDLIB.md)";
@@ -343,23 +343,23 @@ function generateDocumentation(definition, language) {
   const principles = english
     ? [
       "Standard modules are resolved by the compiler from a selected toolchain catalog; they are never searched in the project filesystem.",
-      "Portable exports are ordinary JIMP functions statically linked into the output module.",
+      "Portable exports are ordinary AUREON functions statically linked into the output module.",
       "Host-backed exports lower through typed Host ABI imports and generic `HOST_CALL`; the VM contains no console, math, JSON, network, or standard-library opcode.",
       "Importing a standard module includes only the transitively used exports and their dependencies.",
-      "A compiled `.jbc` does not require the standard-library source package at runtime.",
+      "A compiled `.abc` does not require the standard-library source package at runtime.",
       "Portable implementations are the default; optional native replacements are a link-time optimization selected only for an explicitly compatible target.",
     ]
     : [
       "Módulos padrão são resolvidos pelo compilador a partir de um catálogo selecionado do conjunto de ferramentas; eles nunca são pesquisados no sistema de arquivos do projeto.",
-      "Exports portáteis são funções JIMP comuns vinculadas estaticamente ao módulo de saída.",
+      "Exports portáteis são funções AUREON comuns vinculadas estaticamente ao módulo de saída.",
       "Exports apoiados pelo host são reduzidos a imports tipados da Host ABI e `HOST_CALL` genérico; a VM não contém opcode de console, matemática, JSON, rede ou biblioteca padrão.",
       "Importar um módulo padrão inclui somente os exports usados transitivamente e suas dependências.",
-      "Um `.jbc` compilado não exige o pacote de fontes da biblioteca padrão em runtime.",
+      "Um `.abc` compilado não exige o pacote de fontes da biblioteca padrão em runtime.",
       "Implementações portáteis são o padrão; substituições nativas opcionais são uma otimização de vinculação selecionada somente para um destino explicitamente compatível.",
     ];
   const moduleKinds = english
-    ? { portable: "Portable JIMP", "host-bridge": "Host ABI bridge", hybrid: "Hybrid" }
-    : { portable: "JIMP portátil", "host-bridge": "Ponte da Host ABI", hybrid: "Híbrido" };
+    ? { portable: "Portable AUREON", "host-bridge": "Host ABI bridge", hybrid: "Hybrid" }
+    : { portable: "AUREON portátil", "host-bridge": "Ponte da Host ABI", hybrid: "Híbrido" };
   const implementation = (exported) => {
     if ((exported.kind ?? "function") === "record"
       || (exported.kind ?? "function") === "variant") {
@@ -369,10 +369,10 @@ function generateDocumentation(definition, language) {
       return `Host ABI: \`${exported.implementation.capability}\``;
     }
     if (exported.implementation.source === undefined) {
-      return english ? "Portable JIMP" : "JIMP portátil";
+      return english ? "Portable AUREON" : "AUREON portátil";
     }
     const source = `[\`${exported.implementation.source}\`](../../../stdlib/${exported.implementation.source})`;
-    return `${english ? "Portable JIMP" : "JIMP portátil"}: ${source}`;
+    return `${english ? "Portable AUREON" : "AUREON portátil"}: ${source}`;
   };
   const optionalNative = (exported) => exported.implementation?.optionalNative
     ? `\`${exported.implementation.optionalNative.capability}\``
@@ -406,27 +406,27 @@ function generateDocumentation(definition, language) {
     : "Chamadas da biblioteca padrão seguem a mesma tipagem exata de parâmetros e retorno das chamadas entre módulos do projeto. Implementações portáteis usam a semântica existente da linguagem e os limites do sandbox. Pontes do host declaram sua capacidade e assinatura como dados do catálogo, portanto a redução do compilador não identifica APIs por nomes de funções codificados diretamente. O vinculador elimina duplicações por identidade de export selecionado e emite funções, constantes, imports tipados do host e instruções genéricas comuns.";
   const fallbacks = english
     ? [
-      "The linker selects the portable source by default and emits ordinary JIMP functions and `CALL` instructions.",
+      "The linker selects the portable source by default and emits ordinary AUREON functions and `CALL` instructions.",
       "A native replacement may be selected only when an explicit target profile guarantees the catalog capability with the exact declared signature and semantics.",
-      "Selection occurs before `.jbc` emission. Exactly one implementation of each export is linked; unused alternatives and host imports are omitted.",
+      "Selection occurs before `.abc` emission. Exactly one implementation of each export is linked; unused alternatives and host imports are omitted.",
       "The runtime does not probe for an optional import, retry a failed host call, or switch implementations during execution.",
-      "If a native-targeted `.jbc` reaches a host without the promised capability, normal Host ABI resolution rejects the module before execution. It does not fall back dynamically.",
+      "If a native-targeted `.abc` reaches a host without the promised capability, normal Host ABI resolution rejects the module before execution. It does not fall back dynamically.",
       "Build metadata must record the selected target profile. The default portable target remains independent of optional native capabilities.",
     ]
     : [
-      "O vinculador seleciona o código-fonte portátil por padrão e emite funções JIMP comuns e instruções `CALL`.",
+      "O vinculador seleciona o código-fonte portátil por padrão e emite funções AUREON comuns e instruções `CALL`.",
       "Uma substituição nativa pode ser selecionada somente quando um perfil de destino explícito garante a capacidade do catálogo com a assinatura e a semântica exatas declaradas.",
-      "A seleção ocorre antes da emissão do `.jbc`. Exatamente uma implementação de cada export é vinculada; alternativas e imports do host não utilizados são omitidos.",
+      "A seleção ocorre antes da emissão do `.abc`. Exatamente uma implementação de cada export é vinculada; alternativas e imports do host não utilizados são omitidos.",
       "O runtime não procura um import opcional, não repete uma chamada ao host que falhou e não troca implementações durante a execução.",
-      "Se um `.jbc` direcionado a uma implementação nativa chegar a um host sem a capacidade prometida, a resolução normal da Host ABI rejeita o módulo antes da execução. Não ocorre substituição dinâmica.",
+      "Se um `.abc` direcionado a uma implementação nativa chegar a um host sem a capacidade prometida, a resolução normal da Host ABI rejeita o módulo antes da execução. Não ocorre substituição dinâmica.",
       "Os metadados de compilação devem registrar o perfil de destino selecionado. O destino portátil padrão permanece independente de capacidades nativas opcionais.",
     ];
   const equivalence = english
     ? "A native replacement must preserve the public signature, returned value, checked-I64 overflow behavior, deterministic error boundary, and absence of observable side effects of its portable source. It may use fewer execution steps, but it remains subject to Host ABI authorization and runtime policy. Native replacement is forbidden for an export whose behavior cannot be made observably equivalent, including inherently external effects such as console output. The standard-library major catalog pins this semantic contract."
     : "Uma substituição nativa deve preservar a assinatura pública, o valor retornado, o comportamento de overflow verificado de I64, o limite determinístico de erros e a ausência de efeitos colaterais observáveis do seu código-fonte portátil. Ela pode usar menos passos de execução, mas continua sujeita à autorização da Host ABI e à política do runtime. A substituição nativa é proibida para um export cujo comportamento não possa ser observavelmente equivalente, incluindo efeitos inerentemente externos, como saída no console. O catálogo principal da biblioteca padrão fixa esse contrato semântico.";
   const security = english
-    ? "Importing a host-backed export does not grant authority. The resulting Host ABI import must still be available, signature-compatible, and allowed by runtime policy before execution. Portable functions receive no ambient authority. Unused host bridges must not appear in the linked `.jbc`. The complete trust and effect boundary is defined by the [sandbox and security model](SECURITY.md)."
-    : "Importar um export apoiado pelo host não concede autoridade. O import resultante da Host ABI ainda deve estar disponível, possuir assinatura compatível e ser permitido pela política do runtime antes da execução. Funções portáteis não recebem autoridade implícita. Pontes do host não utilizadas não devem aparecer no `.jbc` vinculado. A fronteira completa de confiança e efeitos é definida pelo [modelo de sandbox e segurança](SECURITY.md).";
+    ? "Importing a host-backed export does not grant authority. The resulting Host ABI import must still be available, signature-compatible, and allowed by runtime policy before execution. Portable functions receive no ambient authority. Unused host bridges must not appear in the linked `.abc`. The complete trust and effect boundary is defined by the [sandbox and security model](SECURITY.md)."
+    : "Importar um export apoiado pelo host não concede autoridade. O import resultante da Host ABI ainda deve estar disponível, possuir assinatura compatível e ser permitido pela política do runtime antes da execução. Funções portáteis não recebem autoridade implícita. Pontes do host não utilizadas não devem aparecer no `.abc` vinculado. A fronteira completa de confiança e efeitos é definida pelo [modelo de sandbox e segurança](SECURITY.md).";
   const exclusions = english
     ? "Files, networking, time, randomness, and asynchronous I/O are not exposed by the current catalog. Their future contracts require explicit capability, binary-value, cancellation, and deterministic-limit semantics described in [IO_CAPABILITIES.md](IO_CAPABILITIES.md). They must not be simulated through new VM opcodes."
     : "Arquivos, rede, tempo, aleatoriedade e I/O assíncrono não são expostos pelo catálogo atual. Seus contratos futuros exigem semânticas explícitas de capacidades, valores binários, cancelamento e limites determinísticos descritas em [IO_CAPABILITIES.md](IO_CAPABILITIES.md). Eles não devem ser simulados por novos opcodes da VM.";

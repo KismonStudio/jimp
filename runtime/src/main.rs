@@ -1,7 +1,7 @@
 use std::{env, fs, process};
 
 use crate::{
-    error::JimpError,
+    error::AureonError,
     generated::errors,
     generated::sandbox::MAX_MODULE_BYTES,
     generated::targets::{TARGET_PROFILES, TargetProfile},
@@ -25,34 +25,34 @@ enum ErrorFormat {
     Json,
 }
 
-fn usage() -> JimpError {
-    JimpError::new(
+fn usage() -> AureonError {
+    AureonError::new(
         errors::USAGE,
-        "Usage: jimp-runtime <program.jbc> [--target-profile=<profile>] [--error-format=json] | jimp-runtime --validate-portable <program.jbc> [--target-profile=<profile>] [--error-format=json]",
+        "Usage: aureon-runtime <program.abc> [--target-profile=<profile>] [--error-format=json] | aureon-runtime --validate-portable <program.abc> [--target-profile=<profile>] [--error-format=json]",
     )
 }
 
-fn read_module(path: &str) -> Result<Vec<u8>, JimpError> {
+fn read_module(path: &str) -> Result<Vec<u8>, AureonError> {
     let metadata =
-        fs::metadata(path).map_err(|error| JimpError::new(errors::IO, error.to_string()))?;
+        fs::metadata(path).map_err(|error| AureonError::new(errors::IO, error.to_string()))?;
     if metadata.len() > MAX_MODULE_BYTES as u64 {
-        return Err(JimpError::new(
+        return Err(AureonError::new(
             errors::DECODE,
             format!("Module size exceeds the sandbox limit of {MAX_MODULE_BYTES} bytes."),
         ));
     }
-    fs::read(path).map_err(|error| JimpError::new(errors::IO, error.to_string()))
+    fs::read(path).map_err(|error| AureonError::new(errors::IO, error.to_string()))
 }
 
 fn prepare_module<H: Host>(
     bytes: &[u8],
     host: &H,
     target: &TargetProfile,
-) -> Result<(VerifiedPortableModule, Vec<ResolvedHostImport>), JimpError> {
+) -> Result<(VerifiedPortableModule, Vec<ResolvedHostImport>), AureonError> {
     let decoded =
-        decode_portable_module(bytes).map_err(|error| JimpError::new(errors::DECODE, error))?;
+        decode_portable_module(bytes).map_err(|error| AureonError::new(errors::DECODE, error))?;
     let module =
-        verify_portable_module(decoded).map_err(|error| JimpError::new(errors::VERIFY, error))?;
+        verify_portable_module(decoded).map_err(|error| AureonError::new(errors::VERIFY, error))?;
     match &module.build {
         Some(build)
             if build.target_profile != target.name
@@ -64,7 +64,7 @@ fn prepare_module<H: Host>(
                         .map(|capability| capability.symbol.to_owned())
                         .collect::<Vec<_>>() =>
         {
-            return Err(JimpError::new(
+            return Err(AureonError::new(
                 errors::RESOLVE,
                 format!(
                     "Build metadata is incompatible with runtime target profile {}.",
@@ -73,7 +73,7 @@ fn prepare_module<H: Host>(
             ));
         }
         None if target.name != "portable" => {
-            return Err(JimpError::new(
+            return Err(AureonError::new(
                 errors::RESOLVE,
                 "Bytecode without build metadata is valid only for the portable target.",
             ));
@@ -86,7 +86,7 @@ fn prepare_module<H: Host>(
             .iter()
             .find(|capability| capability.symbol == guaranteed.symbol)
             .ok_or_else(|| {
-                JimpError::new(
+                AureonError::new(
                     errors::RESOLVE,
                     format!("Target capability {} is not available.", guaranteed.symbol),
                 )
@@ -94,7 +94,7 @@ fn prepare_module<H: Host>(
         if available.parameter_types != guaranteed.parameter_types
             || available.return_type != guaranteed.return_type
         {
-            return Err(JimpError::new(
+            return Err(AureonError::new(
                 errors::RESOLVE,
                 format!(
                     "Target capability {} has an incompatible signature.",
@@ -120,15 +120,16 @@ fn prepare_module<H: Host>(
         host.capabilities(),
         &CapabilityPolicy::new(&allowed_symbols),
     )
-    .map_err(|error| JimpError::new(errors::RESOLVE, error))?;
+    .map_err(|error| AureonError::new(errors::RESOLVE, error))?;
     Ok((module, resolved))
 }
 
-fn run<H: Host>(bytes: &[u8], host: &mut H, target: &TargetProfile) -> Result<(), JimpError> {
+fn run<H: Host>(bytes: &[u8], host: &mut H, target: &TargetProfile) -> Result<(), AureonError> {
     let (module, resolved) = prepare_module(bytes, host, target)?;
     execute(&module, &resolved, host).map_err(|error| {
         let (message, source_line, source_module_id) = error.into_parts();
-        JimpError::new(errors::EXECUTE, message).with_source_location(source_line, source_module_id)
+        AureonError::new(errors::EXECUTE, message)
+            .with_source_location(source_line, source_module_id)
     })
 }
 
@@ -136,14 +137,14 @@ fn validate_portable<H: Host>(
     bytes: &[u8],
     host: &H,
     target: &TargetProfile,
-) -> Result<usize, JimpError> {
+) -> Result<usize, AureonError> {
     let (_, resolved) = prepare_module(bytes, host, target)?;
     Ok(resolved.len())
 }
 
 fn parse_arguments(
     arguments: &[String],
-) -> Result<(bool, String, &'static TargetProfile), JimpError> {
+) -> Result<(bool, String, &'static TargetProfile), AureonError> {
     let mut validate_only = false;
     let mut path = None;
     let mut target_name = "portable";
@@ -168,7 +169,7 @@ fn parse_arguments(
         .iter()
         .find(|profile| profile.name == target_name)
         .ok_or_else(|| {
-            JimpError::new(
+            AureonError::new(
                 errors::USAGE,
                 format!("Unknown target profile {target_name}."),
             )
@@ -176,7 +177,7 @@ fn parse_arguments(
     Ok((validate_only, path, target))
 }
 
-fn report_and_exit(error: JimpError, format: ErrorFormat) -> ! {
+fn report_and_exit(error: AureonError, format: ErrorFormat) -> ! {
     match format {
         ErrorFormat::Human => eprintln!("{}", error.human()),
         ErrorFormat::Json => eprintln!("{}", error.json()),
@@ -188,7 +189,7 @@ fn main() {
     let raw_arguments: Vec<String> = env::args().skip(1).collect();
     if raw_arguments.as_slice() == ["--version"] {
         println!(
-            "jimp-runtime {} protocol {RUNTIME_PROTOCOL_VERSION}",
+            "aureon-runtime {} protocol {RUNTIME_PROTOCOL_VERSION}",
             env!("CARGO_PKG_VERSION")
         );
         return;

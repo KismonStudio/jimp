@@ -17,7 +17,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { compileProject } from "./linker.js";
-import { ERROR_CODES, JimpError, formatError, normalizeError } from "./errors.js";
+import { ERROR_CODES, AureonError, formatError, normalizeError } from "./errors.js";
 import { decodeBytecode, formatInspection } from "./inspector.js";
 import { SANDBOX_LIMITS } from "./generated/sandbox.js";
 
@@ -25,25 +25,25 @@ const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const packageDefinition = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 const TOOLCHAIN_VERSION = packageDefinition.version;
 const RUNTIME_PROTOCOL_VERSION = 1;
-const runtimeExecutable = process.platform === "win32" ? "jimp-runtime.exe" : "jimp-runtime";
+const runtimeExecutable = process.platform === "win32" ? "aureon-runtime.exe" : "aureon-runtime";
 
 function usage() {
   return [
     "Usage:",
-    "  jimp run <input.jimp> [project options] [--runtime=<path>] [--error-format=json]",
-    "  jimp compile <input.jimp> [-o <output.jbc>] [project options] [--error-format=json]",
-    "  jimp check <input.jimp|input.jbc> [project options] [--runtime=<path>] [--error-format=json]",
-    "  jimp inspect <input.jbc> [--json] [--error-format=json]",
-    "  jimp init <directory> [--error-format=json]",
-    "  jimp repl [project options] [--runtime=<path>] [--error-format=json]",
-    "  jimp --version",
-    "  jimp --help",
+    "  aureon run <input.aur> [project options] [--runtime=<path>] [--error-format=json]",
+    "  aureon compile <input.aur> [-o <output.abc>] [project options] [--error-format=json]",
+    "  aureon check <input.aur|input.abc> [project options] [--runtime=<path>] [--error-format=json]",
+    "  aureon inspect <input.abc> [--json] [--error-format=json]",
+    "  aureon init <directory> [--error-format=json]",
+    "  aureon repl [project options] [--runtime=<path>] [--error-format=json]",
+    "  aureon --version",
+    "  aureon --help",
     "Project options: --project-root=<path> --stdlib-major=<number> --target-profile=<profile>",
   ].join("\n");
 }
 
 function usageError(message = usage()) {
-  return new JimpError(ERROR_CODES.USAGE, message);
+  return new AureonError(ERROR_CODES.USAGE, message);
 }
 
 async function withError(definition, operation) {
@@ -120,18 +120,18 @@ async function isExecutableFile(path) {
 async function discoverRuntime(explicitPath) {
   if (explicitPath !== undefined) {
     if (await isExecutableFile(explicitPath)) return explicitPath;
-    throw new JimpError(
+    throw new AureonError(
       ERROR_CODES.IO,
       `Configured runtime "${explicitPath}" is not an executable file.`,
     );
   }
-  const environmentPath = process.env.JIMP_RUNTIME;
+  const environmentPath = process.env.AUREON_RUNTIME;
   if (environmentPath !== undefined && environmentPath.length > 0) {
     const resolvedPath = resolve(environmentPath);
     if (await isExecutableFile(resolvedPath)) return resolvedPath;
-    throw new JimpError(
+    throw new AureonError(
       ERROR_CODES.IO,
-      `JIMP_RUNTIME points to "${resolvedPath}", which is not an executable file.`,
+      `AUREON_RUNTIME points to "${resolvedPath}", which is not an executable file.`,
     );
   }
   const candidates = [
@@ -142,9 +142,9 @@ async function discoverRuntime(explicitPath) {
   for (const candidate of candidates) {
     if (await isExecutableFile(candidate)) return candidate;
   }
-  throw new JimpError(
+  throw new AureonError(
     ERROR_CODES.IO,
-    "No compatible JIMP runtime was found in the installed package. "
+    "No compatible AUREON runtime was found in the installed package. "
       + "Build it with `npm run build:runtime` or pass `--runtime=<path>`.",
   );
 }
@@ -157,9 +157,9 @@ function verifyRuntime(runtimePath) {
     windowsHide: true,
   });
   if (result.error) {
-    throw new JimpError(ERROR_CODES.IO, `Cannot start runtime "${runtimePath}": ${result.error.message}.`);
+    throw new AureonError(ERROR_CODES.IO, `Cannot start runtime "${runtimePath}": ${result.error.message}.`);
   }
-  const expected = `jimp-runtime ${TOOLCHAIN_VERSION} protocol ${RUNTIME_PROTOCOL_VERSION}`;
+  const expected = `aureon-runtime ${TOOLCHAIN_VERSION} protocol ${RUNTIME_PROTOCOL_VERSION}`;
   if (result.status !== 0 || result.stdout.trim() !== expected) {
     throw usageError(
       `Runtime "${runtimePath}" is incompatible; expected handshake "${expected}".`,
@@ -173,13 +173,13 @@ function executeRuntime(runtimePath, argumentsList) {
       stdio: "inherit",
       windowsHide: true,
     });
-    child.once("error", (error) => rejectPromise(new JimpError(
+    child.once("error", (error) => rejectPromise(new AureonError(
       ERROR_CODES.IO,
       `Cannot start runtime "${runtimePath}": ${error.message}.`,
     )));
     child.once("exit", (code, signal) => {
       if (signal !== null) {
-        rejectPromise(new JimpError(
+        rejectPromise(new AureonError(
           ERROR_CODES.IO,
           `Runtime "${runtimePath}" terminated by signal ${signal}.`,
         ));
@@ -194,7 +194,7 @@ async function inspectBytecode(input, json) {
   const inputPath = resolve(input);
   const inputSize = (await withError(ERROR_CODES.IO, () => stat(inputPath))).size;
   if (inputSize > SANDBOX_LIMITS.MAX_MODULE_BYTES) {
-    throw new JimpError(
+    throw new AureonError(
       ERROR_CODES.DECODE,
       `Module size exceeds the sandbox limit of ${SANDBOX_LIMITS.MAX_MODULE_BYTES} bytes.`,
     );
@@ -212,7 +212,7 @@ async function initializeProject(directory) {
     await mkdir(target);
   } catch (error) {
     if (error?.code === "EEXIST") {
-      throw new JimpError(
+      throw new AureonError(
         ERROR_CODES.IO,
         `Project directory "${target}" already exists; no files were changed.`,
       );
@@ -220,19 +220,19 @@ async function initializeProject(directory) {
     throw error;
   }
   try {
-    await writeFile(join(target, "main.jimp"), [
+    await writeFile(join(target, "main.aur"), [
       'import { writeLine } from "std:console";',
       "",
-      'writeLine("Hello from JIMP!");',
+      'writeLine("Hello from AUREON!");',
       "",
     ].join("\n"), { flag: "wx" });
     await writeFile(join(target, "README.md"), [
-      "# JIMP Project",
+      "# AUREON Project",
       "",
       "Run this project with:",
       "",
       "```powershell",
-      "jimp run main.jimp",
+      "aureon run main.aur",
       "```",
       "",
     ].join("\n"), { flag: "wx" });
@@ -240,7 +240,7 @@ async function initializeProject(directory) {
     await rm(target, { recursive: true, force: true });
     throw error;
   }
-  process.stdout.write(`Initialized JIMP project at ${target}\n`);
+  process.stdout.write(`Initialized AUREON project at ${target}\n`);
 }
 
 async function runSource(command, input, optionArguments, errorFormat) {
@@ -251,7 +251,7 @@ async function runSource(command, input, optionArguments, errorFormat) {
   });
   if (command === "compile") {
     const outputPath = options.outputPath
-      ?? resolve(`${basename(inputPath, extname(inputPath))}.jbc`);
+      ?? resolve(`${basename(inputPath, extname(inputPath))}.abc`);
     await compileTo(inputPath, outputPath, options.compilerOptions);
     process.stdout.write(`Compiled ${inputPath} to ${outputPath}\n`);
     return 0;
@@ -260,15 +260,15 @@ async function runSource(command, input, optionArguments, errorFormat) {
   let temporaryDirectory;
   let bytecodePath = inputPath;
   try {
-    if (extname(inputPath) !== ".jbc") {
+    if (extname(inputPath) !== ".abc") {
       temporaryDirectory = await withError(
         ERROR_CODES.IO,
-        () => mkdtemp(join(tmpdir(), "jimp-run-")),
+        () => mkdtemp(join(tmpdir(), "aureon-run-")),
       );
-      bytecodePath = join(temporaryDirectory, "program.jbc");
+      bytecodePath = join(temporaryDirectory, "program.abc");
       await compileTo(inputPath, bytecodePath, options.compilerOptions);
     } else if (options.bytecodeIncompatibleOptions) {
-      throw usageError("Project compilation options cannot be used when checking a .jbc file.");
+      throw usageError("Project compilation options cannot be used when checking a .abc file.");
     }
     const runtimePath = await discoverRuntime(options.runtimePath);
     verifyRuntime(runtimePath);
@@ -301,13 +301,13 @@ function replHelp() {
 async function runRepl(optionArguments, errorFormat) {
   const options = parseProjectOptions(optionArguments, { allowRuntime: true });
   const sessionRoot = options.projectRootPath ?? process.cwd();
-  const sourcePath = join(sessionRoot, `.jimp-repl-${process.pid}-${randomUUID()}.jimp`);
+  const sourcePath = join(sessionRoot, `.aur-repl-${process.pid}-${randomUUID()}.aur`);
   const sourceLines = [];
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const input = createInterface({ input: process.stdin, output: process.stdout, terminal: interactive });
-  process.stdout.write("JIMP REPL 0.1 - source-buffer session. Type :help for commands.\n");
+  process.stdout.write("AUREON REPL 0.1 - source-buffer session. Type :help for commands.\n");
   if (interactive) {
-    input.setPrompt("jimp> ");
+    input.setPrompt("aureon> ");
     input.prompt();
   }
   try {
@@ -351,7 +351,7 @@ async function runRepl(optionArguments, errorFormat) {
 
 export async function main(args, errorFormat = "human") {
   if (args.length === 1 && args[0] === "--version") {
-    process.stdout.write(`jimp ${TOOLCHAIN_VERSION} runtime-protocol ${RUNTIME_PROTOCOL_VERSION}\n`);
+    process.stdout.write(`aureon ${TOOLCHAIN_VERSION} runtime-protocol ${RUNTIME_PROTOCOL_VERSION}\n`);
     return 0;
   }
   if (args.length === 1 && args[0] === "--help") {

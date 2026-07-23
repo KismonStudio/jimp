@@ -16,10 +16,10 @@ function singleLine(message) {
   return message.replaceAll("\r", "\\r").replaceAll("\n", "\\n").replaceAll("\t", "\\t");
 }
 
-export class JimpError extends Error {
+export class AureonError extends Error {
   constructor(definition, message, { location, cause } = {}) {
     super(String(message), cause === undefined ? undefined : { cause });
-    this.name = "JimpError";
+    this.name = "AureonError";
     this.code = definition.code;
     this.phase = definition.phase;
     this.exitCode = definition.exitCode;
@@ -38,14 +38,14 @@ export class JimpError extends Error {
 }
 
 export function normalizeError(error, definition) {
-  if (error instanceof JimpError) return error;
+  if (error instanceof AureonError) return error;
   const message = error instanceof Error ? error.message : String(error);
   const inferredLocation = inferLocation(message, definition.phase);
   const location = inferredLocation?.kind === "source"
     && typeof error?.moduleId === "string"
     ? { ...inferredLocation, moduleId: error.moduleId }
     : inferredLocation;
-  return new JimpError(definition, message, {
+  return new AureonError(definition, message, {
     location,
     cause: error,
   });
@@ -60,7 +60,7 @@ export function formatError(error, format = "human") {
     : error.location?.kind === "bytecode"
       ? ` at bytecode offset ${error.location.offset}`
       : "";
-  return `JIMP error ${error.code} (${error.phase})${location}: ${singleLine(error.message)}\n`;
+  return `AUREON error ${error.code} (${error.phase})${location}: ${singleLine(error.message)}\n`;
 }
 
 export { ERROR_CODES, ERROR_SCHEMA };

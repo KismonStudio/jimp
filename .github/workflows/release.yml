@@ -17,10 +17,10 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux-x64
-            runtime: runtime/target/release/jimp-runtime
+            runtime: runtime/target/release/aureon-runtime
           - os: windows-latest
             platform: windows-x64
-            runtime: runtime/target/release/jimp-runtime.exe
+            runtime: runtime/target/release/aureon-runtime.exe
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,7 +37,7 @@ jobs:
       - run: node tools/package-release.js --platform=${{ matrix.platform }} --runtime=${{ matrix.runtime }} --output=release-artifacts
       - uses: actions/upload-artifact@v4
         with:
-          name: jimp-${{ matrix.platform }}
+          name: aureon-${{ matrix.platform }}
           path: release-artifacts/*
           if-no-files-found: error
 
@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: jimp-*
+          pattern: aureon-*
           path: release-artifacts
           merge-multiple: true
       - name: Publish GitHub release

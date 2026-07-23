@@ -14,10 +14,10 @@ if contains(values, 20) && changed.ok && changed.value[1] == 25 && values[1] == 
   print "recoverable collection operations";
 }
 
-let parsed = parse(" {\"name\": \"JIMP\", \"values\": [1, 2]} ");
+let parsed = parse(" {\"name\": \"AUREON\", \"values\": [1, 2]} ");
 if parsed.ok {
   let encoded = stringify(parsed.value);
-  if encoded.ok && encoded.value == "{\"name\":\"JIMP\",\"values\":[1,2]}" {
+  if encoded.ok && encoded.value == "{\"name\":\"AUREON\",\"values\":[1,2]}" {
     print "recoverable JSON round trip";
   }
 }

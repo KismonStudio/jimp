@@ -12,7 +12,7 @@ function invariant(condition, message) {
 }
 
 function validateDefinition() {
-  invariant(definition.name === "jimp-target-profiles" && definition.version === 1,
+  invariant(definition.name === "aureon-target-profiles" && definition.version === 1,
     "unsupported catalog identity");
   const optionalCapabilities = new Map();
   for (const module of standardLibrary.modules) {
@@ -93,7 +93,7 @@ function generateRust() {
 
 function generateDocumentation(language) {
   const english = language === "en";
-  const title = english ? "# JIMP Target Profiles v1" : "# Perfis de Destino JIMP v1";
+  const title = english ? "# AUREON Target Profiles v1" : "# Perfis de Destino AUREON v1";
   const alternate = english ? "[Portuguese version](../PT/TARGETS.md)" : "[Versão em inglês](../EN/TARGETS.md)";
   const intro = english
     ? "Target profiles are explicit compiler/runtime contracts. Native standard-library replacement occurs only at link time; the runtime never probes or falls back dynamically."

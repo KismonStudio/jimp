@@ -1,10 +1,10 @@
-# JIMP Portable VM v1
+# AUREON Portable VM v1
 
 [Portuguese version](../PT/VM.md)
 
 ## Status
 
-This document specifies the implemented portable JIMP VM v1 through P7.6. Format `2.9` preserves the independently verified, resource-bounded immutable heap and adds generic Unicode-scalar STRING length, indexed load, half-open slice, and concatenation operations.
+This document specifies the implemented portable AUREON VM v1 through P7.6. Format `2.9` preserves the independently verified, resource-bounded immutable heap and adds generic Unicode-scalar STRING length, indexed load, half-open slice, and concatenation operations.
 
 The historical format in [BYTECODE.md](BYTECODE.md) contained a temporary `PRINT` opcode and is no longer emitted or accepted. Format `2.9` remains pre-stable while the language and VM continue to evolve.
 
@@ -15,7 +15,7 @@ The terms **must**, **must not**, **required**, and **invalid** are normative.
 - The compiler understands high-level language concepts.
 - The VM understands only generic execution primitives.
 - External behavior is provided through named, typed host imports.
-- A `.jbc` module contains no native pointers or platform-specific symbols.
+- A `.abc` module contains no native pointers or platform-specific symbols.
 - The complete module is verified before execution or host effects.
 - The same valid module has the same structural meaning on every compatible runtime.
 
@@ -35,7 +35,7 @@ Portable VM v1 defines the following scalar value types:
 
 `void` is not a runtime value and must not be stored in a register or constant-pool entry. There are no implicit conversions between value types.
 
-The runtime's in-memory representation is implementation-defined. The observable values and their bytecode encodings are portable. All multibyte numbers in `.jbc` are little-endian.
+The runtime's in-memory representation is implementation-defined. The observable values and their bytecode encodings are portable. All multibyte numbers in `.abc` are little-endian.
 
 Strings are immutable. A string loaded from the constant pool may be shared by an implementation, but its observable content must not change. `heap_ref` follows the separate [portable heap contract](HEAP.md); collection and record meanings remain compiler-level contracts. Binary-buffer and function-reference values remain deferred.
 
@@ -55,13 +55,13 @@ Register allocation is a compiler responsibility. A runtime may use any internal
 
 ## Module container
 
-A portable `.jbc` file consists of a header, a section directory, and section payloads. The directory permits validation and skipping optional sections without interpreting code.
+A portable `.abc` file consists of a header, a section directory, and section payloads. The directory permits validation and skipping optional sections without interpreting code.
 
 ### Header
 
 | Field | Encoding | Required value |
 | --- | --- | --- |
-| magic | 4 bytes | ASCII `JIMP` |
+| magic | 4 bytes | ASCII `AURN` |
 | format major | `u16` | `2` |
 | format minor | `u16` | `9` |
 | module flags | `u32` | `0`; other bits are reserved |
@@ -265,7 +265,7 @@ Arguments occupy the consecutive range beginning at `argument_start`. The count 
 
 The source statement:
 
-```jimp
+```aureon
 print "Hello";
 ```
 
@@ -290,7 +290,7 @@ entry function:
   HALT
 ```
 
-An operating-system host may implement the import with a terminal, while a bare-metal host may implement it with VGA memory or a framebuffer. The `.jbc` module remains unchanged.
+An operating-system host may implement the import with a terminal, while a bare-metal host may implement it with VGA memory or a framebuffer. The `.abc` module remains unchanged.
 
 ## Verification and execution order
 
@@ -310,15 +310,15 @@ Instruction decoding first establishes opcode, operand, register, index, and jum
 
 ## Resource limits and security
 
-The official limits are generated from [`sandbox/v1.json`](../../../sandbox/v1.json) and published in the [JIMP Reference Sandbox v1](SANDBOX.md). The JavaScript encoder and verifier and the Rust decoder and verifier enforce the same load and verification limits. The CLI checks the encoded file size before reading it.
+The official limits are generated from [`sandbox/v1.json`](../../../sandbox/v1.json) and published in the [AUREON Reference Sandbox v1](SANDBOX.md). The JavaScript encoder and verifier and the Rust decoder and verifier enforce the same load and verification limits. The CLI checks the encoded file size before reading it.
 
 Execution tracks steps, call frames, active registers, logical runtime value memory, and cumulative logical heap memory. Logical register value memory equals `16` bytes for every active register plus the UTF-8 payload bytes of every string stored in those registers. Heap objects, slots, direct string payloads, and depth follow [HEAP.md](HEAP.md) and are bounded separately. A frame is charged before its register array or argument strings are copied. Replacing or returning a value updates the register charge, and host arguments are borrowed without a VM-side copy.
 
 Exceeding a load or verification limit rejects the complete module before execution and host effects. Exceeding an execution limit terminates the program with an error; completed effects from earlier authorized host calls are not rolled back. Logical limits are portable and deterministic but do not describe implementation allocator overhead or total process RSS.
 
-Failures are exposed through the [JIMP Standard Error Format v1](ERRORS.md). Decode, verification, host-import resolution, and execution failures have separate stable codes. Diagnostic wording is implementation detail and may improve without changing the error code.
+Failures are exposed through the [AUREON Standard Error Format v1](ERRORS.md). Decode, verification, host-import resolution, and execution failures have separate stable codes. Diagnostic wording is implementation detail and may improve without changing the error code.
 
-The module must never contain trusted native addresses. Debug and build metadata are non-authoritative and must not grant capabilities or otherwise alter authorization. Hosts expose capabilities explicitly and remain responsible for platform authorization and sandbox policy. The complete threat model, trust boundary, host obligations, and explicit non-guarantees are specified in the [JIMP Sandbox and Security Model v1](SECURITY.md).
+The module must never contain trusted native addresses. Debug and build metadata are non-authoritative and must not grant capabilities or otherwise alter authorization. Hosts expose capabilities explicitly and remain responsible for platform authorization and sandbox policy. The complete threat model, trust boundary, host obligations, and explicit non-guarantees are specified in the [AUREON Sandbox and Security Model v1](SECURITY.md).
 
 ## Deferred decisions
 

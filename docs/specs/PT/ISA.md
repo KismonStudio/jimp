@@ -1,4 +1,4 @@
-# VM Portátil JIMP v1 — Referência Gerada da ISA
+# VM Portátil AUREON v1 — Referência Gerada da ISA
 
 [Versão em inglês](../EN/ISA.md)
 

@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://jimp.dev/schemas/targets-v1.json",
-  "title": "JIMP target profiles",
+  "$id": "https://aureon.dev/schemas/targets-v1.json",
+  "title": "AUREON target profiles",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "version", "profiles"],
   "properties": {
     "$schema": { "type": "string" },
-    "name": { "const": "jimp-target-profiles" },
+    "name": { "const": "aureon-target-profiles" },
     "version": { "const": 1 },
     "profiles": {
       "type": "array",

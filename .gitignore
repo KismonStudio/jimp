@@ -142,7 +142,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# JIMP and Rust build artifacts
+# AUREON and Rust build artifacts
 *.jbc
 runtime/target/
 runtime/bin/

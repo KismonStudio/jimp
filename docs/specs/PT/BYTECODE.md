@@ -1,16 +1,16 @@
-# Formato Legado 1 do Bytecode JIMP
+# Formato Legado 1 do Bytecode AUREON
 
 [Versão em inglês](../EN/BYTECODE.md)
 
-Este documento preserva o contrato histórico do bytecode protótipo implementado no JIMP 0.1.0.
+Este documento preserva o contrato histórico do bytecode protótipo implementado no AUREON 0.1.0.
 
-O formato 1 não é mais gerado nem aceito. O contrato interoperável ativo é a [VM Portátil JIMP v1](VM.md), codificada como formato `.jbc` `2.9`.
+O formato 1 não é mais gerado nem aceito. O contrato interoperável ativo é a [VM Portátil AUREON v1](VM.md), codificada como formato `.abc` `2.9`.
 
 Todos os inteiros com mais de um byte são representados como **unsigned little-endian**. Um programa começa com um cabeçalho de dez bytes:
 
 | Campo             | Tamanho | Valor                            |
 | ----------------- | ------: | -------------------------------- |
-| magic             | 4 bytes | ASCII `JIMP`                     |
+| magic             | 4 bytes | ASCII `AURN`                       |
 | version           | 2 bytes | `1`                              |
 | instruction count | 4 bytes | número de instruções codificadas |
 

@@ -1,16 +1,16 @@
-# JIMP Variants, Matching, Generics, and Recursive Values
+# AUREON Variants, Matching, Generics, and Recursive Values
 
 [Portuguese version](../PT/VARIANTS_AND_GENERICS.md)
 
 ## Status and scope
 
-This document specifies the P8.1–P8.4 language contract implemented by the compiler, linker, standard catalog, and `.jbc` 2.9 runtime. The terms **must**, **must not**, **required**, and **invalid** are normative.
+This document specifies the P8.1–P8.4 language contract implemented by the compiler, linker, standard catalog, and `.abc` 2.9 runtime. The terms **must**, **must not**, **required**, and **invalid** are normative.
 
 ## Declarations and types
 
 Records, variants, and functions may declare up to `MAX_TYPE_PARAMETERS` unique type parameters:
 
-```jimp
+```aureon
 record Box<T> {
   value: T,
 }
@@ -33,7 +33,7 @@ Nominal identity includes declaration kind, portable module identity, declared n
 
 A value is constructed with `Type::Alternative(arguments)`. Arguments are positional and must exactly match the alternative payload fields.
 
-```jimp
+```aureon
 let success: Result<I64, STRING> = Result::Ok(42);
 let failure: Result<I64, STRING> = Result::Error("failed");
 ```
@@ -46,7 +46,7 @@ Alternative names must be unique inside a variant. A variant must have at least 
 
 A match expression evaluates its subject once, selects one alternative, binds its payload from left to right, and evaluates exactly one result expression:
 
-```jimp
+```aureon
 let value = match(result) { Ok(item) => item, Error(_) => 0 };
 ```
 
@@ -68,7 +68,7 @@ Indexed access and functional indexed update are invalid when an array's element
 
 A variant payload may recursively contain an instantiation of its declaring type:
 
-```jimp
+```aureon
 variant List<T> {
   Nil,
   Cons(head: T, tail: List<T>),
@@ -85,4 +85,4 @@ Construction, transport, matching, and structural equality are bounded by the ge
 
 ## Module contract
 
-Generic functions, records, and variants may be exported and imported by name. Export metadata carries type parameters, nominal identity, payload schemas, and transitive type dependencies. Linking preserves one generic function body and module-qualified nominal identities. A compiled `.jbc` remains self-contained and requires no source-level type metadata at runtime.
+Generic functions, records, and variants may be exported and imported by name. Export metadata carries type parameters, nominal identity, payload schemas, and transitive type dependencies. Linking preserves one generic function body and module-qualified nominal identities. A compiled `.abc` remains self-contained and requires no source-level type metadata at runtime.

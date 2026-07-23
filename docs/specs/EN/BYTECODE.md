@@ -1,16 +1,16 @@
-# Legacy JIMP Bytecode Format 1
+# Legacy AUREON Bytecode Format 1
 
 [Portuguese version](../PT/BYTECODE.md)
 
-This document preserves the historical prototype bytecode contract implemented in JIMP 0.1.0.
+This document preserves the historical prototype bytecode contract implemented in AUREON 0.1.0.
 
-Format 1 is no longer emitted or accepted. The active interoperable contract is [JIMP Portable VM v1](VM.md), encoded as `.jbc` format `2.9`.
+Format 1 is no longer emitted or accepted. The active interoperable contract is [AUREON Portable VM v1](VM.md), encoded as `.abc` format `2.9`.
 
 All multi-byte integers are unsigned little-endian. A program starts with a ten-byte header:
 
 | Field | Size | Value |
 | --- | ---: | --- |
-| magic | 4 bytes | ASCII `JIMP` |
+| magic | 4 bytes | ASCII `AURN` |
 | version | 2 bytes | `1` |
 | instruction count | 4 bytes | number of encoded instructions |
 

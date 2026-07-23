@@ -1,16 +1,16 @@
-# Variantes, Correspondência, Genéricos e Valores Recursivos do JIMP
+# Variantes, Correspondência, Genéricos e Valores Recursivos do AUREON
 
 [Versão em inglês](../EN/VARIANTS_AND_GENERICS.md)
 
 ## Status e escopo
 
-Este documento especifica o contrato de linguagem de P8.1–P8.4 implementado pelo compilador, vinculador, catálogo padrão e runtime `.jbc` 2.9. Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
+Este documento especifica o contrato de linguagem de P8.1–P8.4 implementado pelo compilador, vinculador, catálogo padrão e runtime `.abc` 2.9. Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
 ## Declarações e tipos
 
 Records, variants e funções podem declarar até `MAX_TYPE_PARAMETERS` parâmetros de tipo únicos:
 
-```jimp
+```aureon
 record Box<T> {
   value: T,
 }
@@ -33,7 +33,7 @@ A identidade nominal inclui o tipo da declaração, a identidade portátil do m�
 
 Um valor é construído com `Type::Alternative(arguments)`. Os argumentos são posicionais e devem corresponder exatamente aos campos do payload da alternativa.
 
-```jimp
+```aureon
 let success: Result<I64, STRING> = Result::Ok(42);
 let failure: Result<I64, STRING> = Result::Error("failed");
 ```
@@ -46,7 +46,7 @@ Os nomes de alternativas devem ser únicos dentro de uma variant. Uma variant de
 
 Uma expressão match avalia seu objeto uma vez, seleciona uma alternativa, associa seu payload da esquerda para a direita e avalia exatamente uma expressão de resultado:
 
-```jimp
+```aureon
 let value = match(result) { Ok(item) => item, Error(_) => 0 };
 ```
 
@@ -68,7 +68,7 @@ Acesso indexado e atualização funcional indexada são inválidos quando o tipo
 
 O payload de uma variant pode conter recursivamente uma instância de seu próprio tipo:
 
-```jimp
+```aureon
 variant List<T> {
   Nil,
   Cons(head: T, tail: List<T>),
@@ -85,4 +85,4 @@ Construção, transporte, correspondência e igualdade estrutural são limitados
 
 ## Contrato de módulos
 
-Funções, records e variants genéricos podem ser exportados e importados por nome. Os metadados de export contêm parâmetros de tipo, identidade nominal, schemas de payload e dependências transitivas de tipos. A vinculação preserva um único corpo de função genérica e identidades nominais qualificadas pelo módulo. Um `.jbc` compilado permanece autocontido e não exige metadados de tipos do código-fonte em runtime.
+Funções, records e variants genéricos podem ser exportados e importados por nome. Os metadados de export contêm parâmetros de tipo, identidade nominal, schemas de payload e dependências transitivas de tipos. A vinculação preserva um único corpo de função genérica e identidades nominais qualificadas pelo módulo. Um `.abc` compilado permanece autocontido e não exige metadados de tipos do código-fonte em runtime.

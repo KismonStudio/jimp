@@ -1,4 +1,4 @@
-# Heap Portatil JIMP v1
+# Heap Portatil AUREON v1
 
 [Versao em ingles](../EN/HEAP.md)
 
@@ -36,4 +36,4 @@ Memoria de registradores e memoria da heap possuem orcamentos separados. Copiar 
 
 ## Inspetor
 
-O inspetor de bytecode mostra instrucoes de heap e todos os operandos codificados. Ele nunca percorre ou exibe referencias de runtime porque arquivos `.jbc` nao podem conter objetos ou handles da heap.
+O inspetor de bytecode mostra instrucoes de heap e todos os operandos codificados. Ele nunca percorre ou exibe referencias de runtime porque arquivos `.abc` nao podem conter objetos ou handles da heap.

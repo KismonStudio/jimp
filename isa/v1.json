@@ -1,6 +1,6 @@
 {
   "$schema": "./schema.json",
-  "name": "jimp-portable-vm",
+  "name": "aureon-portable-vm",
   "formatVersion": {
     "major": 2,
     "minor": 9

@@ -1,4 +1,4 @@
-# JIMP Aggregate Values v1
+# AUREON Aggregate Values v1
 
 [Portuguese version](../PT/AGGREGATES.md)
 
@@ -10,7 +10,7 @@ This document is the normative aggregate-value contract. P7.2 introduced the gen
 
 Arrays use `[T]`, contain one element type, and preserve insertion order. Records are nominal, module-scoped declarations whose identity is the declaring module plus record name.
 
-```jimp
+```aureon
 record Point {
   x: I64,
   y: I64,
@@ -24,7 +24,7 @@ An optional `: Type` annotation is permitted on `let` and `var`. An empty array 
 
 Aggregate updates are expressions and never mutate an existing value:
 
-```jimp
+```aureon
 let changed = values with [0] = 11
 let moved = origin with { x: 4 }
 ```
@@ -69,7 +69,7 @@ An out-of-bounds array read or update is a deterministic runtime failure until t
 
 Valid:
 
-```jimp
+```aureon
 let empty: [String] = []
 let matrix: [[I64]] = [[1, 2], [3, 4]]
 let next = matrix with [0] = [5, 6]
@@ -77,7 +77,7 @@ let next = matrix with [0] = [5, 6]
 
 Rejected:
 
-```jimp
+```aureon
 let unknown = []
 let mixed = [1, "two"]
 matrix[0] = [5, 6]

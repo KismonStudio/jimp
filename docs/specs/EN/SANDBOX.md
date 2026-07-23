@@ -1,4 +1,4 @@
-# JIMP Reference Sandbox v1
+# AUREON Reference Sandbox v1
 
 [Portuguese version](../PT/SANDBOX.md)
 
@@ -8,7 +8,7 @@ These limits define the mandatory resource profile implemented by the official c
 
 | Phase | Limit | Value | Unit | Meaning |
 | --- | --- | ---: | --- | --- |
-| Load | `MAX_MODULE_BYTES` | 16,777,216 | bytes | Maximum encoded .jbc file size. |
+| Load | `MAX_MODULE_BYTES` | 16,777,216 | bytes | Maximum encoded .abc file size. |
 | Load | `MAX_SECTION_COUNT` | 16 | sections | Maximum number of module-directory entries. |
 | Load | `MAX_CONSTANTS` | 65,536 | constants | Maximum number of constant-pool entries. |
 | Load | `MAX_CONSTANT_STRING_BYTES` | 1,048,576 | bytes | Maximum UTF-8 byte length of one string constant. |

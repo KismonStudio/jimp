@@ -12,7 +12,7 @@ use crate::generated::{
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 
-const MAGIC: &[u8; 4] = b"JIMP";
+const MAGIC: &[u8; 4] = b"AURN";
 const HEADER_SIZE: usize = 20;
 const DIRECTORY_ENTRY_SIZE: usize = 12;
 const SECTION_OPTIONAL: u16 = 1;
@@ -1670,7 +1670,7 @@ pub(crate) fn decode_portable_module(bytes: &[u8]) -> Result<PortableModule, Str
     }
     let mut cursor = Cursor::new(bytes, 0);
     if cursor.read_exact(4, "magic number")? != MAGIC {
-        return Err("Invalid JIMP bytecode magic.".into());
+        return Err("Invalid AUREON bytecode magic.".into());
     }
     let major = cursor.read_u16("format major version")?;
     let minor = cursor.read_u16("format minor version")?;

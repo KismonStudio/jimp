@@ -1,10 +1,10 @@
-# Contrato de Módulos-Fonte JIMP v1
+# Contrato de Módulos-Fonte AUREON v1
 
 [Versão em inglês](../EN/MODULES.md)
 
 ## Status
 
-Este documento especifica o contrato implementado de módulos-fonte para imports e exports nomeados de funções, records e variants, incluindo declarações genéricas, resolução do grafo e vinculação estática. A CLI carrega com segurança um grafo acíclico de fontes, valida contratos escalares e agregados exatos, vincula identidades qualificadas por módulo deterministicamente e gera um único arquivo `.jbc` 2.9 autocontido com metadados de debug cientes do módulo.
+Este documento especifica o contrato implementado de módulos-fonte para imports e exports nomeados de funções, records e variants, incluindo declarações genéricas, resolução do grafo e vinculação estática. A CLI carrega com segurança um grafo acíclico de fontes, valida contratos escalares e agregados exatos, vincula identidades qualificadas por módulo deterministicamente e gera um único arquivo `.abc` 2.9 autocontido com metadados de debug cientes do módulo.
 
 Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normativos.
 
@@ -12,15 +12,15 @@ Os termos **deve**, **não deve**, **obrigatório** e **inválido** são normati
 
 Módulos são um conceito do compilador e do vinculador. Eles não são instruções da VM, solicitações ao sistema de arquivos em runtime nem capacidades da Host ABI.
 
-- Um arquivo UTF-8 com extensão `.jimp` define um módulo-fonte.
-- A compilação começa por um módulo de entrada e produz um arquivo `.jbc` autocontido.
+- Um arquivo UTF-8 com extensão `.aur` define um módulo-fonte.
+- A compilação começa por um módulo de entrada e produz um arquivo `.abc` autocontido.
 - Todos os imports de fonte são resolvidos, analisados sintática e semanticamente e vinculados antes da emissão do bytecode.
 - Chamadas importadas são reduzidas à instrução genérica `CALL` existente.
 - Imports de fonte nunca devem se transformar em instruções `HOST_CALL` apenas por usarem a sintaxe `import`.
 - O runtime não pesquisa caminhos de fonte, lê fontes importados, baixa dependências nem executa um carregador dinâmico de módulos.
 - Imports da Host ABI permanecem como o mecanismo separado de capacidades tipadas definido em [VM.md](VM.md).
 
-Esse limite permite executar o mesmo `.jbc` vinculado em hosts que não possuem um sistema de arquivos com os fontes.
+Esse limite permite executar o mesmo `.abc` vinculado em hosts que não possuem um sistema de arquivos com os fontes.
 
 ## Escopo
 
@@ -46,7 +46,7 @@ Adiado:
 - reexports e listas de exports;
 - grafos cíclicos de módulos;
 - pacotes, restrições de versão, registros, URLs e resolução por rede;
-- carregamento de módulos em runtime e vinculação de vários `.jbc`;
+- carregamento de módulos em runtime e vinculação de vários `.abc`;
 - declarações da Host ABI no código-fonte.
 
 Um módulo importado que não seja o de entrada deve conter somente imports e declarações de records, variants e funções. Instruções executáveis são válidas apenas no módulo de entrada. Essa regra evita ordem oculta de inicialização e efeitos observáveis durante o import.
@@ -55,8 +55,8 @@ Um módulo importado que não seja o de entrada deve conter somente imports e de
 
 Imports ocupam uma linha lógica e devem aparecer antes de toda declaração de record, variant, função ou instrução executável, exceto linhas vazias e comentários.
 
-```jimp
-import { add, multiply as mul } from "./math.jimp";
+```aureon
+import { add, multiply as mul } from "./math.aur";
 
 let answer = add(20, 22);
 mul(answer, 2);
@@ -64,7 +64,7 @@ mul(answer, 2);
 
 Exports são escritos diretamente nas declarações de funções, records ou variants:
 
-```jimp
+```aureon
 export function add(left: I64, right: I64): I64 {
   return left + right;
 }
@@ -88,10 +88,10 @@ Quando a sintaxe de módulos for habilitada, `import`, `export`, `from` e `as` s
 
 As formas seguintes são inválidas no contrato de módulos v1:
 
-```jimp
-import "./effects.jimp";
-import * as math from "./math.jimp";
-import math from "./math.jimp";
+```aureon
+import "./effects.aur";
+import * as math from "./math.aur";
+import math from "./math.aur";
 export { add };
 export let value = 1;
 ```
@@ -100,8 +100,8 @@ export let value = 1;
 
 Um item de import nomeia uma função, record ou variant exportado e pode declarar outro nome local com `as`.
 
-```jimp
-import { calculate as calculateTotal } from "./totals.jimp";
+```aureon
+import { calculate as calculateTotal } from "./totals.aur";
 ```
 
 - O nome anterior a `as` é procurado na tabela de exports da dependência.
@@ -115,7 +115,7 @@ import { calculate as calculateTotal } from "./totals.jimp";
 - Importar a mesma declaração exportada com aliases locais distintos é válido.
 - Um item de import que nomeie uma declaração ausente ou privada é inválido.
 
-As chamadas devem corresponder exatamente ao contrato de parâmetros e retorno da função exportada. JIMP não realiza conversão implícita na fronteira entre módulos.
+As chamadas devem corresponder exatamente ao contrato de parâmetros e retorno da função exportada. AUREON não realiza conversão implícita na fronteira entre módulos.
 
 ## Declarações exportadas
 
@@ -140,19 +140,19 @@ As tabelas de exports são metadados de compilação. Elas não expõem ponteiro
 O resolvedor inicial de fontes aceita somente especificadores relativos:
 
 ```text
-./name.jimp
-../shared/name.jimp
+./name.aur
+../shared/name.aur
 ```
 
 Um especificador relativo:
 
 - deve começar com `./` ou `../`;
 - deve usar `/` como separador em todos os sistemas operacionais;
-- deve terminar com a extensão exata `.jimp`;
+- deve terminar com a extensão exata `.aur`;
 - não deve conter caractere NUL, barra invertida, segmento de caminho vazio nem barra final;
-- é interpretado após a decodificação normal dos escapes de strings JIMP;
+- é interpretado após a decodificação normal dos escapes de strings AUREON;
 - não é decodificado como URL e não usa escapes percentuais;
-- não recebe extensões implícitas nem procura por `index.jimp`.
+- não recebe extensões implícitas nem procura por `index.aur`.
 
 Caminhos absolutos, caminhos com unidade, caminhos UNC, URLs `file:`, URLs de rede e nomes simples são especificadores de fonte inválidos.
 
@@ -165,7 +165,7 @@ Toda compilação possui uma raiz de projeto. A CLI oficial usará por padrão o
 Cada arquivo possui duas identidades relacionadas:
 
 1. **Identidade física** é seu caminho canônico no sistema de arquivos após a resolução de links simbólicos. Ela é usada para cache, verificação de contenção e detecção de arquivos duplicados.
-2. **ID portátil do módulo** é o caminho normalizado relativo à raiz do projeto e codificado com `/`, como `lib/math.jimp`. Ele é usado em diagnósticos determinísticos e símbolos do vinculador.
+2. **ID portátil do módulo** é o caminho normalizado relativo à raiz do projeto e codificado com `/`, como `lib/math.aur`. Ele é usado em diagnósticos determinísticos e símbolos do vinculador.
 
 A resolução deve rejeitar:
 
@@ -185,7 +185,7 @@ Para cada import, o resolvedor executa estas etapas em ordem:
 2. Resolvê-lo em relação ao diretório físico do módulo importador.
 3. Normalizar segmentos `.` e `..` sem permitir escape da raiz do projeto.
 4. Resolver links simbólicos e verificar a contenção dentro da raiz real do projeto.
-5. Exigir um arquivo `.jimp` regular e existente.
+5. Exigir um arquivo `.aur` regular e existente.
 6. Derivar seu ID portátil em relação à raiz do projeto.
 7. Reutilizar o módulo analisado quando sua identidade física já estiver no cache.
 8. Analisar imports na ordem do fonte e resolver recursivamente dependências ainda não armazenadas no cache.
@@ -217,13 +217,13 @@ A resolução de nomes ocorre em um namespace de módulo antes da alocação dos
 5. Reduzir chamadas a operandos numéricos de `CALL`.
 6. Emitir uma função de entrada para as instruções executáveis do módulo de entrada.
 
-Funções privadas com o mesmo nome em módulos diferentes não entram em conflito. Nomes visíveis ao vinculador, diagnósticos e futuras identidades de arquivo nos dados de debug devem permanecer qualificados pelo módulo, mesmo que a tabela atual de funções do `.jbc` armazene um nome compacto de implementação.
+Funções privadas com o mesmo nome em módulos diferentes não entram em conflito. Nomes visíveis ao vinculador, diagnósticos e futuras identidades de arquivo nos dados de debug devem permanecer qualificados pelo módulo, mesmo que a tabela atual de funções do `.abc` armazene um nome compacto de implementação.
 
-O bytecode vinculado deve preservar identidade de debug suficiente para distinguir números de linha iguais em módulos-fonte diferentes. A extensão de uma localização de fonte `jimp-error-v1` com um ID portátil do módulo é compatível porque consumidores devem ignorar campos desconhecidos.
+O bytecode vinculado deve preservar identidade de debug suficiente para distinguir números de linha iguais em módulos-fonte diferentes. A extensão de uma localização de fonte `aureon-error-v1` com um ID portátil do módulo é compatível porque consumidores devem ignorar campos desconhecidos.
 
 ## Comportamento de falhas
 
-Falhas de módulos são falhas do compilador e usam `JIMP-1001` com fase `compile`. Os diagnósticos devem identificar o ID portátil do módulo importador e a linha do fonte quando disponíveis.
+Falhas de módulos são falhas do compilador e usam `AUREON-1001` com fase `compile`. Os diagnósticos devem identificar o ID portátil do módulo importador e a linha do fonte quando disponíveis.
 
 Casos obrigatórios de falha incluem:
 
@@ -239,7 +239,7 @@ Casos obrigatórios de falha incluem:
 - contrato incompatível em chamada importada;
 - identidade física ambígua ou conflito em sistema de arquivos que não diferencia maiúsculas e minúsculas.
 
-O compilador não deve emitir `.jbc` quando ocorrer qualquer falha de módulo.
+O compilador não deve emitir `.abc` quando ocorrer qualquer falha de módulo.
 
 ## Extensão da gramática
 
@@ -279,7 +279,7 @@ A implementação de módulos está concluída até o P7.6:
 
 - o parser e o analisador implementarem essa sintaxe e esse modelo de visibilidade;
 - o resolvedor aplicar identidade canônica e contenção na raiz do projeto;
-- programas acíclicos com vários arquivos forem vinculados deterministicamente em um `.jbc`;
+- programas acíclicos com vários arquivos forem vinculados deterministicamente em um `.abc`;
 - chamadas importadas forem executadas por instruções genéricas `CALL`, e valores agregados usarem instruções genéricas de heap no runtime Rust;
 - diagnósticos de fonte distinguirem IDs de módulos e linhas;
 - testes unitários e de integração entre linguagens cobrirem grafos válidos e todas as classes obrigatórias de falhas;

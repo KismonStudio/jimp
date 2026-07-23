@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 function project() {
-  const root = mkdtempSync(join(tmpdir(), "jimp-project-"));
+  const root = mkdtempSync(join(tmpdir(), "aureon-project-"));
   temporaryDirectories.push(root);
   return root;
 }
@@ -44,30 +44,30 @@ function write(root, path, source) {
 
 test("resolves source-order dependencies into a deterministic topological graph", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", [
-    'import { twice } from "./lib/calculate.jimp";',
+  const entry = write(root, "main.aur", [
+    'import { twice } from "./lib/calculate.aur";',
     "if twice(21) == 42 {",
     '  print "linked";',
     "}",
   ].join("\n"));
-  write(root, "lib/calculate.jimp", [
-    'import { add } from "../math.jimp";',
+  write(root, "lib/calculate.aur", [
+    'import { add } from "../math.aur";',
     "export function twice(value: I64): I64 {",
     "  return add(value, value);",
     "}",
   ].join("\n"));
-  write(root, "math.jimp", [
+  write(root, "math.aur", [
     "export function add(left: I64, right: I64): I64 {",
     "  return left + right;",
     "}",
   ].join("\n"));
 
   const graph = await resolveProject(entry);
-  assert.equal(graph.entryId, "main.jimp");
+  assert.equal(graph.entryId, "main.aur");
   assert.deepEqual(graph.modules.map(({ id }) => id), [
-    "math.jimp",
-    "lib/calculate.jimp",
-    "main.jimp",
+    "math.aur",
+    "lib/calculate.aur",
+    "main.aur",
   ]);
 
   const first = await compileResolvedProject(graph);
@@ -78,7 +78,7 @@ test("resolves source-order dependencies into a deterministic topological graph"
   assert.equal(module.functions.length, 3);
   assert.deepEqual(
     [...new Set(module.debug.map(({ moduleId }) => moduleId))],
-    ["main.jimp", "math.jimp", "lib/calculate.jimp"],
+    ["main.aur", "math.aur", "lib/calculate.aur"],
   );
   assert(module.functions[1].instructions.some(({ name }) => name === "RETURN"));
   assert(module.functions[2].instructions.some(({ name, operands }) =>
@@ -86,30 +86,30 @@ test("resolves source-order dependencies into a deterministic topological graph"
   assert(module.functions[0].instructions.some(({ name, operands }) =>
     name === "CALL" && operands.function === 2));
   const inspection = formatInspection(decodeBytecode(first));
-  assert.match(inspection, /@source:math\.jimp:2/);
-  assert.match(inspection, /@source:lib\/calculate\.jimp:3/);
+  assert.match(inspection, /@source:math\.aur:2/);
+  assert.match(inspection, /@source:lib\/calculate\.aur:3/);
 });
 
 test("derives portable IDs from an explicit project root", async () => {
   const root = project();
-  const entry = write(root, "src/main.jimp", "1;");
+  const entry = write(root, "src/main.aur", "1;");
   const graph = await resolveProject(entry, { projectRoot: root });
 
-  assert.equal(graph.entryId, "src/main.jimp");
-  assert.deepEqual(graph.modules.map(({ id }) => id), ["src/main.jimp"]);
+  assert.equal(graph.entryId, "src/main.aur");
+  assert.deepEqual(graph.modules.map(({ id }) => id), ["src/main.aur"]);
 });
 
 test("links nominal records across module and function boundaries", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", [
-    'import { Point, move } from "./model.jimp";',
+  const entry = write(root, "main.aur", [
+    'import { Point, move } from "./model.aur";',
     "let origin = Point { x: 0, y: 0 };",
     "let moved = move(origin);",
     "if moved.x == 4 && origin.x == 0 {",
     '  print "records linked";',
     "}",
   ].join("\n"));
-  write(root, "model.jimp", [
+  write(root, "model.aur", [
     "export record Point {",
     "  x: I64,",
     "  y: I64,",
@@ -129,12 +129,12 @@ test("links nominal records across module and function boundaries", async () => 
 
 test("links exported generic variants and functions without monomorphization", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", [
-    'import { Option, unwrapOr } from "./option.jimp";',
+  const entry = write(root, "main.aur", [
+    'import { Option, unwrapOr } from "./option.aur";',
     "let value: Option<I64> = Option::Some(42);",
     "unwrapOr(value, 0);",
   ].join("\n"));
-  write(root, "option.jimp", [
+  write(root, "option.aur", [
     "export variant Option<T> {",
     "  None,",
     "  Some(value: T),",
@@ -154,7 +154,7 @@ test("links exported generic variants and functions without monomorphization", a
 
 test("resolves standard Option and Result generic variants", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", [
+  const entry = write(root, "main.aur", [
     'import { Option } from "std:option";',
     'import { Result } from "std:result";',
     "let optional: Option<I64> = Option::Some(42);",
@@ -173,11 +173,11 @@ test("canonicalizes a project-root alias before resolving dependencies", async (
   const physicalRoot = project();
   write(
     physicalRoot,
-    "dependency.jimp",
+    "dependency.aur",
     "export function value(): I64 {\n  return 42;\n}",
   );
-  write(physicalRoot, "main.jimp", [
-    'import { value } from "./dependency.jimp";',
+  write(physicalRoot, "main.aur", [
+    'import { value } from "./dependency.aur";',
     "value();",
   ].join("\n"));
   const aliasContainer = project();
@@ -196,44 +196,44 @@ test("canonicalizes a project-root alias before resolving dependencies", async (
     throw error;
   }
 
-  const graph = await resolveProject(join(aliasRoot, "main.jimp"), {
+  const graph = await resolveProject(join(aliasRoot, "main.aur"), {
     projectRoot: aliasRoot,
   });
 
-  assert.equal(graph.entryId, "main.jimp");
+  assert.equal(graph.entryId, "main.aur");
   assert.deepEqual(graph.modules.map(({ id }) => id), [
-    "dependency.jimp",
-    "main.jimp",
+    "dependency.aur",
+    "main.aur",
   ]);
 });
 
 test("rejects unsupported source specifiers before filesystem lookup", () => {
   for (const specifier of [
-    "math.jimp",
-    "/math.jimp",
-    "C:/math.jimp",
-    "file:math.jimp",
-    "https://example.test/math.jimp",
+    "math.aur",
+    "/math.aur",
+    "C:/math.aur",
+    "file:math.aur",
+    "https://example.test/math.aur",
     "./math",
-    "./math.JIMP",
-    "./nested//math.jimp",
-    ".\\math.jimp",
-    "./encoded%2fmath.jimp",
+    "./math.AUR",
+    "./nested//math.aur",
+    ".\\math.aur",
+    "./encoded%2fmath.aur",
     "std:Math/i64",
     "std:math//i64",
-    "std:math/i64.jimp",
+    "std:math/i64.aur",
   ]) {
     assert.throws(
-      () => validateModuleSpecifier(specifier, "main.jimp", 3),
-      /Module "main\.jimp".*line 3/,
+      () => validateModuleSpecifier(specifier, "main.aur", 3),
+      /Module "main\.aur".*line 3/,
     );
   }
-  assert.equal(validateModuleSpecifier("std:math/i64", "main.jimp", 3), "standard");
+  assert.equal(validateModuleSpecifier("std:math/i64", "main.aur", 3), "standard");
 });
 
 test("links used standard-library exports from the embedded catalog", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", [
+  const entry = write(root, "main.aur", [
     'import { absolute, minimum } from "std:math/i64";',
     'import { write, writeLine } from "std:console";',
     "let magnitude = absolute(-5);",
@@ -245,7 +245,7 @@ test("links used standard-library exports from the embedded catalog", async () =
   assert.deepEqual(graph.modules.map(({ id }) => id), [
     "std:math/i64",
     "std:console",
-    "main.jimp",
+    "main.aur",
   ]);
   assert(graph.modules.slice(0, 2).every(({ standard }) => standard));
 
@@ -262,13 +262,13 @@ test("links used standard-library exports from the embedded catalog", async () =
 
 test("rejects unknown standard modules and unsupported catalog majors", async () => {
   const root = project();
-  const unknown = write(root, "unknown.jimp", 'import { value } from "std:unknown";');
+  const unknown = write(root, "unknown.aur", 'import { value } from "std:unknown";');
   await assert.rejects(
     () => compileProject(unknown),
     /Unknown standard-library module "std:unknown"/,
   );
 
-  const known = write(root, "known.jimp", 'import { absolute } from "std:math\/i64";');
+  const known = write(root, "known.aur", 'import { absolute } from "std:math\/i64";');
   await assert.rejects(
     () => compileProject(known, { standardLibraryMajor: 2 }),
     /Unsupported standard-library major version 2/,
@@ -277,7 +277,7 @@ test("rejects unknown standard modules and unsupported catalog majors", async ()
 
 test("selects optional native standard exports only for an explicit target", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", [
+  const entry = write(root, "main.aur", [
     'import { absolute } from "std:math/i64";',
     "absolute(-7);",
   ].join("\n"));
@@ -314,34 +314,34 @@ test("selects optional native standard exports only for an explicit target", asy
 test("rejects root traversal, missing files, invalid UTF-8, and non-regular sources", async () => {
   const root = project();
   const cases = [
-    ["traversal.jimp", 'import { value } from "../outside.jimp";', /escapes the project root/],
-    ["missing.jimp", 'import { value } from "./absent.jimp";', /Cannot resolve source module/],
+    ["traversal.aur", 'import { value } from "../outside.aur";', /escapes the project root/],
+    ["missing.aur", 'import { value } from "./absent.aur";', /Cannot resolve source module/],
   ];
   for (const [name, source, pattern] of cases) {
     const entry = write(root, name, source);
     await assert.rejects(() => compileProject(entry), pattern);
   }
 
-  writeFileSync(join(root, "invalid.jimp"), Buffer.from([0xff, 0xfe]));
-  const invalidEntry = write(root, "invalid-entry.jimp", 'import { value } from "./invalid.jimp";');
+  writeFileSync(join(root, "invalid.aur"), Buffer.from([0xff, 0xfe]));
+  const invalidEntry = write(root, "invalid-entry.aur", 'import { value } from "./invalid.aur";');
   await assert.rejects(() => compileProject(invalidEntry), /not valid UTF-8/);
 
-  mkdirSync(join(root, "directory.jimp"));
-  const directoryEntry = write(root, "directory-entry.jimp", 'import { value } from "./directory.jimp";');
+  mkdirSync(join(root, "directory.aur"));
+  const directoryEntry = write(root, "directory-entry.aur", 'import { value } from "./directory.aur";');
   await assert.rejects(() => compileProject(directoryEntry), /not a regular file|Cannot read source path/);
 });
 
 test("rejects cycles with the portable module path that closes the cycle", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", 'import { fromA } from "./a.jimp";');
-  write(root, "a.jimp", [
-    'import { fromB } from "./b.jimp";',
+  const entry = write(root, "main.aur", 'import { fromA } from "./a.aur";');
+  write(root, "a.aur", [
+    'import { fromB } from "./b.aur";',
     "export function fromA(): I64 {",
     "  return fromB();",
     "}",
   ].join("\n"));
-  write(root, "b.jimp", [
-    'import { fromA } from "./a.jimp";',
+  write(root, "b.aur", [
+    'import { fromA } from "./a.aur";',
     "export function fromB(): I64 {",
     "  return fromA();",
     "}",
@@ -349,13 +349,13 @@ test("rejects cycles with the portable module path that closes the cycle", async
 
   await assert.rejects(
     () => compileProject(entry),
-    /Dependency cycle detected: a\.jimp -> b\.jimp -> a\.jimp/,
+    /Dependency cycle detected: a\.aur -> b\.aur -> a\.aur/,
   );
 });
 
 test("rejects changed snapshots before linking", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", "1;");
+  const entry = write(root, "main.aur", "1;");
   const graph = await resolveProject(entry);
   writeFileSync(entry, "2;");
 
@@ -365,13 +365,13 @@ test("rejects changed snapshots before linking", async () => {
 
 test("rejects missing and private exports with importing-module context", async () => {
   const root = project();
-  const entry = write(root, "main.jimp", 'import { hidden } from "./lib.jimp";\nhidden();');
-  write(root, "lib.jimp", "function hidden(): VOID {\n}");
+  const entry = write(root, "main.aur", 'import { hidden } from "./lib.aur";\nhidden();');
+  write(root, "lib.aur", "function hidden(): VOID {\n}");
   const graph = await resolveProject(entry);
 
   await assert.rejects(
     () => compileResolvedProject(graph),
-    /Module "main\.jimp": Import "hidden".*does not name an exported declaration at line 1/,
+    /Module "main\.aur": Import "hidden".*does not name an exported declaration at line 1/,
   );
 });
 
@@ -380,7 +380,7 @@ test("rejects two portable IDs for one physical file", async (context) => {
   const physicalDirectory = join(root, "physical");
   write(
     root,
-    "physical/target.jimp",
+    "physical/target.aur",
     "export function value(): I64 {\n return 1;\n}",
   );
   try {
@@ -396,9 +396,9 @@ test("rejects two portable IDs for one physical file", async (context) => {
     }
     throw error;
   }
-  const entry = write(root, "main.jimp", [
-    'import { value as direct } from "./physical/target.jimp";',
-    'import { value as aliased } from "./alias/target.jimp";',
+  const entry = write(root, "main.aur", [
+    'import { value as direct } from "./physical/target.aur";',
+    'import { value as aliased } from "./alias/target.aur";',
     "direct() + aliased();",
   ].join("\n"));
 
@@ -413,7 +413,7 @@ test("rejects symbolic-link traversal outside the real project root", async (con
   const outsideRoot = project();
   write(
     outsideRoot,
-    "outside.jimp",
+    "outside.aur",
     "export function value(): I64 {\n return 1;\n}",
   );
   try {
@@ -429,7 +429,7 @@ test("rejects symbolic-link traversal outside the real project root", async (con
     }
     throw error;
   }
-  const entry = write(root, "main.jimp", 'import { value } from "./escape/outside.jimp";');
+  const entry = write(root, "main.aur", 'import { value } from "./escape/outside.aur";');
 
   await assert.rejects(
     () => compileProject(entry),
@@ -443,10 +443,10 @@ test("rejects case-conflicting portable IDs on case-insensitive filesystems", as
     return;
   }
   const root = project();
-  write(root, "target.jimp", "export function value(): I64 {\n return 1;\n}");
-  const entry = write(root, "main.jimp", [
-    'import { value as lower } from "./target.jimp";',
-    'import { value as upper } from "./TARGET.jimp";',
+  write(root, "target.aur", "export function value(): I64 {\n return 1;\n}");
+  const entry = write(root, "main.aur", [
+    'import { value as lower } from "./target.aur";',
+    'import { value as upper } from "./TARGET.aur";',
     "lower() + upper();",
   ].join("\n"));
 

@@ -1,5 +1,5 @@
 {
-  "schema": "jimp-conformance-v1",
+  "schema": "aureon-conformance-v1",
   "suiteVersion": 1,
   "compatibility": {
     "toolchain": "0.1.0",
@@ -8,14 +8,14 @@
     "standardLibraryMajor": 1,
     "hostAbi": 1,
     "targetProfiles": ["portable", "reference-native-i64"],
-    "diagnostics": "jimp-error-v1"
+    "diagnostics": "aureon-error-v1"
   },
   "cases": [
     {
       "id": "language-positive",
       "contract": "language",
       "command": "run",
-      "fixture": "language/positive.jimp",
+      "fixture": "language/positive.aur",
       "repeat": 2,
       "expected": { "status": 0, "stdout": "42\n" }
     },
@@ -23,58 +23,58 @@
       "id": "language-rejection",
       "contract": "language",
       "command": "compile",
-      "fixture": "language/rejection.jimp",
-      "expected": { "status": 1, "error": { "code": "JIMP-1001", "phase": "compile" } }
+      "fixture": "language/rejection.aur",
+      "expected": { "status": 1, "error": { "code": "AUREON-1001", "phase": "compile" } }
     },
     {
       "id": "language-p8-types",
       "contract": "language",
       "command": "run",
-      "fixture": "language/p8-types.jimp",
+      "fixture": "language/p8-types.aur",
       "expected": { "status": 0, "stdout": "p8 ready\n" }
     },
     {
       "id": "language-p8-non-exhaustive",
       "contract": "language",
       "command": "compile",
-      "fixture": "language/p8-non-exhaustive.jimp",
-      "expected": { "status": 1, "error": { "code": "JIMP-1001", "phase": "compile", "messageIncludes": "not exhaustive" } }
+      "fixture": "language/p8-non-exhaustive.aur",
+      "expected": { "status": 1, "error": { "code": "AUREON-1001", "phase": "compile", "messageIncludes": "not exhaustive" } }
     },
     {
       "id": "bytecode-invalid-magic",
       "contract": "bytecode",
       "command": "check",
       "base64": "bm90IGJ5dGVjb2Rl",
-      "expected": { "status": 1, "error": { "code": "JIMP-2001", "phase": "decode" } }
+      "expected": { "status": 1, "error": { "code": "AUREON-2001", "phase": "decode" } }
     },
     {
       "id": "bytecode-malformed-metadata",
       "contract": "bytecode",
       "command": "check",
-      "fixture": "bytecode/minimal.jimp",
+      "fixture": "bytecode/minimal.aur",
       "prepare": "unsupported-format-version",
-      "expected": { "status": 1, "error": { "code": "JIMP-2001", "phase": "decode" } }
+      "expected": { "status": 1, "error": { "code": "AUREON-2001", "phase": "decode" } }
     },
     {
       "id": "host-abi-capability-denial",
       "contract": "host-abi",
       "command": "check",
-      "fixture": "host-abi/denied.jimp",
+      "fixture": "host-abi/denied.aur",
       "prepare": "denied-host-capability",
-      "expected": { "status": 1, "error": { "code": "JIMP-3001", "phase": "resolve" } }
+      "expected": { "status": 1, "error": { "code": "AUREON-3001", "phase": "resolve" } }
     },
     {
       "id": "standard-library-portable",
       "contract": "standard-library",
       "command": "run",
-      "fixture": "standard-library/portable.jimp",
+      "fixture": "standard-library/portable.aur",
       "expected": { "status": 0, "stdout": "stdlib ready\n" }
     },
     {
       "id": "target-profile-native",
       "contract": "target-profile",
       "command": "run",
-      "fixture": "target-profile/native.jimp",
+      "fixture": "target-profile/native.aur",
       "arguments": ["--target-profile=reference-native-i64"],
       "expected": { "status": 0, "stdout": "native ready\n" }
     },
@@ -82,31 +82,31 @@
       "id": "target-profile-mismatch",
       "contract": "target-profile",
       "command": "check",
-      "fixture": "target-profile/native.jimp",
+      "fixture": "target-profile/native.aur",
       "prepare": "native-profile-bytecode",
-      "expected": { "status": 1, "error": { "code": "JIMP-3001", "phase": "resolve" } }
+      "expected": { "status": 1, "error": { "code": "AUREON-3001", "phase": "resolve" } }
     },
     {
       "id": "diagnostic-source-location",
       "contract": "diagnostics",
       "command": "run",
-      "fixture": "diagnostics/division-by-zero.jimp",
-      "expected": { "status": 1, "error": { "code": "JIMP-4001", "phase": "execute", "source": true } }
+      "fixture": "diagnostics/division-by-zero.aur",
+      "expected": { "status": 1, "error": { "code": "AUREON-4001", "phase": "execute", "source": true } }
     },
     {
       "id": "sandbox-call-stack",
       "contract": "sandbox",
       "command": "run",
-      "fixture": "sandbox/recursion.jimp",
-      "expected": { "status": 1, "error": { "code": "JIMP-4001", "phase": "execute", "messageIncludes": "Call stack limit" } }
+      "fixture": "sandbox/recursion.aur",
+      "expected": { "status": 1, "error": { "code": "AUREON-4001", "phase": "execute", "messageIncludes": "Call stack limit" } }
     },
     {
       "id": "runtime-version-mismatch",
       "contract": "compatibility",
       "command": "run",
-      "fixture": "bytecode/minimal.jimp",
+      "fixture": "bytecode/minimal.aur",
       "prepare": "incompatible-runtime",
-      "expected": { "status": 2, "error": { "code": "JIMP-0001", "phase": "usage" } }
+      "expected": { "status": 2, "error": { "code": "AUREON-0001", "phase": "usage" } }
     }
   ]
 }

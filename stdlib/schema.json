@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://jimp.dev/schemas/stdlib-v1.json",
-  "title": "JIMP standard library catalog",
+  "$id": "https://aureon.dev/schemas/stdlib-v1.json",
+  "title": "AUREON standard library catalog",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "version", "fallbackPolicy", "modules"],
   "properties": {
     "$schema": { "type": "string" },
-    "name": { "const": "jimp-standard-library" },
+    "name": { "const": "aureon-standard-library" },
     "version": { "const": 1 },
     "fallbackPolicy": { "$ref": "#/$defs/fallbackPolicy" },
     "modules": {
@@ -25,7 +25,7 @@
           "kind": { "enum": ["portable", "host-bridge", "hybrid"] },
           "source": {
             "type": "string",
-            "pattern": "^src/[a-z][a-z0-9]*(?:/[a-z][a-z0-9]*)*\\.jimp$"
+            "pattern": "^src/[a-z][a-z0-9]*(?:/[a-z][a-z0-9]*)*\\.aur$"
           },
           "description": { "$ref": "#/$defs/localizedText" },
           "exports": {
@@ -91,7 +91,7 @@
         "kind": { "enum": ["portable", "host"] },
         "source": {
           "type": "string",
-          "pattern": "^src/[a-z][a-z0-9]*(?:/[a-z][a-z0-9]*)*\\.jimp$"
+          "pattern": "^src/[a-z][a-z0-9]*(?:/[a-z][a-z0-9]*)*\\.aur$"
         },
         "capability": {
           "type": "string",

@@ -23,7 +23,7 @@ function assertUnique(items, property, label) {
 }
 
 function validateDefinition(definition) {
-  invariant(definition.name === "jimp-portable-vm", "unexpected ISA name");
+  invariant(definition.name === "aureon-portable-vm", "unexpected ISA name");
   invariant(isIntegerInRange(definition.formatVersion?.major, 0xffff), "invalid major version");
   invariant(isIntegerInRange(definition.formatVersion?.minor, 0xffff), "invalid minor version");
   invariant(definition.endianness === "little", "only little-endian is supported");
@@ -183,8 +183,8 @@ function operandSummary(definition, instruction) {
 function generateDocumentation(definition, language) {
   const isEnglish = language === "en";
   const title = isEnglish
-    ? "# JIMP Portable VM v1 — Generated ISA Reference"
-    : "# VM Portátil JIMP v1 — Referência Gerada da ISA";
+    ? "# AUREON Portable VM v1 — Generated ISA Reference"
+    : "# VM Portátil AUREON v1 — Referência Gerada da ISA";
   const alternate = isEnglish
     ? "[Portuguese version](../PT/ISA.md)"
     : "[Versão em inglês](../EN/ISA.md)";
